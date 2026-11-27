@@ -20,7 +20,6 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/enrollment"
-	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
@@ -39,8 +38,9 @@ const notebookTrashDays = 30
 const notebookProgressInterval = 500 * time.Millisecond
 
 type notebookSyncDisk struct {
-	Home    string
-	Folders map[string]notebookSyncFolderDisk
+	Home       string
+	HomeDevice string `json:",omitempty"`
+	Folders    map[string]notebookSyncFolderDisk
 }
 
 type notebookSyncFolderDisk struct {
@@ -53,7 +53,7 @@ type notebookSyncFolderDisk struct {
 }
 
 func (disk notebookSyncDisk) clone() notebookSyncDisk {
-	copied := notebookSyncDisk{Home: disk.Home, Folders: make(map[string]notebookSyncFolderDisk, len(disk.Folders))}
+	copied := notebookSyncDisk{Home: disk.Home, HomeDevice: disk.HomeDevice, Folders: make(map[string]notebookSyncFolderDisk, len(disk.Folders))}
 	for id, entry := range disk.Folders {
 		entry.Completed = maps.Clone(entry.Completed)
 		entry.Profiles = slices.Clone(entry.Profiles)
@@ -83,6 +83,7 @@ type notebookSyncRun struct {
 	streams   map[string]notebookSyncStream
 	engine    *attnsync.Engine
 	home      string
+	isHome    bool
 	folders   map[string]string
 	failed    map[string]string
 	peers     []string
@@ -124,29 +125,58 @@ func notebookDevice(id string) syncprotocol.DeviceID {
 
 func (d *Daemon) notebookSyncDir() string { return filepath.Join(d.dataRoot, "notebook-sync") }
 
-func (d *Daemon) notebookSyncPeers() (string, []string, error) {
-	status := d.enrollmentStatus()
-	if !status.IsHome() {
-		if status.HomeDaemonID != "" {
-			return status.HomeDaemonID, []string{status.HomeDaemonID}, nil
+func (d *Daemon) notebookHome(status enrollment.Status) string {
+	if status.IsHome() {
+		return status.HomeID
+	}
+	return status.CopiedFrom()
+}
+
+func (d *Daemon) notebookHomeDevice(status enrollment.Status) string {
+	if status.AwaitsHomeID() {
+		return status.HomeDaemonID
+	}
+	d.outpost.mu.Lock()
+	bridged := d.outpost.bridgedHomeDaemonID
+	d.outpost.mu.Unlock()
+	if bridged != "" {
+		return bridged
+	}
+	r := &d.notebookSync
+	r.mu.Lock()
+	disk, loaded := r.disk, r.loaded
+	r.mu.Unlock()
+	if !loaded {
+		if data, err := os.ReadFile(filepath.Join(d.notebookSyncDir(), "state.json")); err != nil || json.Unmarshal(data, &disk) != nil {
+			return ""
 		}
-		return status.HomeDaemonID, nil, nil
+	}
+	return disk.HomeDevice
+}
+
+func (d *Daemon) notebookSyncPeers() (home string, isHome bool, peers []string, err error) {
+	status := d.enrollmentStatus()
+	home, isHome = d.notebookHome(status), status.IsHome()
+	if !isHome {
+		if device := d.notebookHomeDevice(status); home != "" && device != "" {
+			peers = []string{device}
+		}
+		return home, false, peers, nil
 	}
 	if !d.outpostsEnabled() {
-		return status.HomeDaemonID, nil, nil
+		return home, true, nil, nil
 	}
 	rows, err := d.store.ListOutposts()
 	if err != nil {
-		return "", nil, err
+		return "", true, nil, err
 	}
-	var peers []string
 	for _, row := range rows {
 		if row.DaemonID != "" {
 			peers = append(peers, row.DaemonID)
 		}
 	}
 	slices.Sort(peers)
-	return status.HomeDaemonID, peers, nil
+	return home, true, peers, nil
 }
 
 func (d *Daemon) configureNotebookSync() {
@@ -179,8 +209,7 @@ func (d *Daemon) configureNotebookSync() {
 
 func (d *Daemon) configureNotebookSyncLocked() (*notebookSyncRun, error) {
 	r := &d.notebookSync
-	home, peers, err := d.notebookSyncPeers()
-	isHome := err == nil && home == d.daemonInstanceID
+	home, isHome, peers, err := d.notebookSyncPeers()
 	var listed []notebookFolder
 	if isHome {
 		listed, err = d.notebookFolders()
@@ -203,6 +232,11 @@ func (d *Daemon) configureNotebookSyncLocked() (*notebookSyncRun, error) {
 	}
 	r.mu.Lock()
 	err = d.loadNotebookSyncDiskLocked(home)
+	if err == nil && !isHome && r.disk.HomeDevice != peers[0] {
+		disk := r.disk.clone()
+		disk.HomeDevice = peers[0]
+		err = d.saveNotebookSyncDiskLocked(disk)
+	}
 	if err == nil && isHome {
 		if err = d.listHomeNotebookFoldersLocked(listed); err == nil {
 			d.setHomeNotebookFoldersLocked(d.stampNotebookFolderEpochsLocked(listed))
@@ -218,7 +252,7 @@ func (d *Daemon) configureNotebookSyncLocked() (*notebookSyncRun, error) {
 		unindexed[id] = entry.Root
 	}
 	if old == nil {
-		run, err := d.startNotebookSync(home, peers, prepared, unindexed)
+		run, err := d.startNotebookSync(home, isHome, peers, prepared, unindexed)
 		if err != nil {
 			return nil, err
 		}
@@ -486,14 +520,14 @@ func (d *Daemon) saveNotebookSyncDiskLocked(disk notebookSyncDisk) error {
 	return nil
 }
 
-func (d *Daemon) startNotebookSync(home string, peers []string, ready, unindexed map[string]string) (*notebookSyncRun, error) {
+func (d *Daemon) startNotebookSync(home string, isHome bool, peers []string, ready, unindexed map[string]string) (*notebookSyncRun, error) {
 	logger := slog.New(slog.NewTextHandler(notebookSyncLog{d}, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	engine, err := attnsync.New(filepath.Join(d.notebookSyncDir(), "index"), d.notebookEngineConfig(peers, ready, unindexed), notebookDevice(d.daemonInstanceID), logger)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(d.life.Context())
-	run := &notebookSyncRun{engine: engine, home: home, folders: ready, failed: map[string]string{}, peers: slices.Clone(peers), cancel: cancel, ctx: ctx, done: make(chan struct{}), snapshots: map[string]map[string]notebookFolderSnapshot{}, remote: map[string]notebookSyncReport{}, conflicts: map[string]map[string]struct{}{}, streams: map[string]notebookSyncStream{}}
+	run := &notebookSyncRun{engine: engine, home: home, isHome: isHome, folders: ready, failed: map[string]string{}, peers: slices.Clone(peers), cancel: cancel, ctx: ctx, done: make(chan struct{}), snapshots: map[string]map[string]notebookFolderSnapshot{}, remote: map[string]notebookSyncReport{}, conflicts: map[string]map[string]struct{}{}, streams: map[string]notebookSyncStream{}}
 	d.notebookSync.mu.Lock()
 	d.notebookSync.run = run
 	d.notebookSync.mu.Unlock()
@@ -718,7 +752,7 @@ func (d *Daemon) notifyNotebookConflict(folder, root, rel string) error {
 }
 
 func (d *Daemon) updateNotebookConflicts(run *notebookSyncRun, folder string, paths []string) {
-	if run.home != d.daemonInstanceID {
+	if !run.isHome {
 		return
 	}
 	r := &d.notebookSync
@@ -1153,7 +1187,7 @@ func (d *Daemon) notebookSyncSettings() (string, string) {
 	if run == nil {
 		return "off", ""
 	}
-	if run.home == d.daemonInstanceID {
+	if run.isHome {
 		result := protocol.OutpostNotebookStateInSync
 		for _, peer := range run.peers {
 			state := d.notebookPeerStateLocked(peer, peer)
@@ -1168,14 +1202,15 @@ func (d *Daemon) notebookSyncSettings() (string, string) {
 		}
 		return string(result), ""
 	}
-	if reason := run.streams[run.home].error; reason != "" {
+	device := run.peers[0]
+	if reason := run.streams[device].error; reason != "" {
 		return "error", reason
 	}
 	if failed := slices.Sorted(maps.Keys(run.failed)); len(failed) != 0 {
 		return "error", r.disk.Folders[failed[0]].Root + ": " + run.failed[failed[0]]
 	}
 	for _, id := range slices.Sorted(maps.Keys(run.folders)) {
-		if reason := run.snapshots[id][run.home].Error; reason != "" {
+		if reason := run.snapshots[id][device].Error; reason != "" {
 			return "error", run.folders[id] + ": " + reason
 		}
 	}
@@ -1194,7 +1229,11 @@ func (d *Daemon) NotebookReady(host, profileID string) error {
 	if err != nil {
 		return err
 	}
-	id := notebookFolderID(d.daemonInstanceID, notebook.FolderKey(root))
+	id, err := d.notebookFolderID(root)
+	if err != nil {
+		return err
+	}
+	home := d.notebookHome(d.enrollmentStatus())
 	r := &d.notebookSync
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1203,7 +1242,7 @@ func (d *Daemon) NotebookReady(host, profileID string) error {
 			return fmt.Errorf("the Notebook folder %s does not sync with %s: %s", root, row.Name, reason)
 		}
 	}
-	if d.loadedNotebookSyncDiskLocked(d.daemonInstanceID).Folders[id].Completed[row.DaemonID] {
+	if d.loadedNotebookSyncDiskLocked(home).Folders[id].Completed[row.DaemonID] {
 		return nil
 	}
 	info := protocol.OutpostNotebook{State: protocol.OutpostNotebookStateFirstSync}
@@ -1228,7 +1267,7 @@ func notebookRemainingWork(info protocol.OutpostNotebook) string {
 }
 
 func (d *Daemon) refreshNotebookConflicts(run *notebookSyncRun) {
-	if run.home != d.daemonInstanceID {
+	if !run.isHome {
 		return
 	}
 	r := &d.notebookSync
@@ -1278,6 +1317,39 @@ func (d *Daemon) publishNotebookSyncSettings() {
 			d.publishFact(FactSettingChanged, setting.NotebookSyncLastError.Key, nil)
 		}
 	})
+}
+
+func (d *Daemon) adoptNotebookSyncHome(from, to string) error {
+	r := &d.notebookSync
+	r.configure.Lock()
+	defer r.configure.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	disk := r.disk
+	if !r.loaded {
+		data, err := os.ReadFile(filepath.Join(d.notebookSyncDir(), "state.json"))
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(data, &disk); err != nil {
+			return err
+		}
+	}
+	if disk.Home != from {
+		return nil
+	}
+	disk = disk.clone()
+	disk.Home = to
+	if from != d.daemonInstanceID && disk.HomeDevice == "" {
+		disk.HomeDevice = from
+	}
+	if run := r.run; run != nil && run.home == from {
+		run.home = to
+	}
+	return d.saveNotebookSyncDiskLocked(disk)
 }
 
 func (d *Daemon) dropNotebookSyncFromOtherHome(home string) error {
@@ -1379,14 +1451,16 @@ func (d *Daemon) seedNotebookFolder(seedID string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	return notebookFolderID(d.daemonInstanceID, notebook.FolderKey(root)), root, nil
+	id, err := d.notebookFolderID(root)
+	return id, root, err
 }
 
 func (d *Daemon) outpostNotebookRoot(status enrollment.Status, profileID string) (string, error) {
+	notebookHome := d.notebookHome(status)
 	r := &d.notebookSync
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	disk := d.loadedNotebookSyncDiskLocked(status.HomeDaemonID)
+	disk := d.loadedNotebookSyncDiskLocked(notebookHome)
 	for _, id := range slices.Sorted(maps.Keys(disk.Folders)) {
 		if entry := disk.Folders[id]; slices.Contains(entry.Profiles, profileID) {
 			return entry.Root, nil
@@ -1394,7 +1468,7 @@ func (d *Daemon) outpostNotebookRoot(status enrollment.Status, profileID string)
 	}
 	home := status.HomeName
 	if home == "" {
-		home = status.HomeDaemonID
+		home = status.CopiedFrom()
 	}
 	return "", fmt.Errorf("%s has not sent the Notebook folder for profile %s yet", home, profileID)
 }
@@ -1404,10 +1478,11 @@ func (d *Daemon) outpostNotebookCopy(folderID string) (string, error) {
 	if status.IsHome() {
 		return "", errors.New("the home keeps no outpost copy of a Notebook folder")
 	}
+	notebookHome := d.notebookHome(status)
 	r := &d.notebookSync
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	entry, ok := d.loadedNotebookSyncDiskLocked(status.HomeDaemonID).Folders[folderID]
+	entry, ok := d.loadedNotebookSyncDiskLocked(notebookHome).Folders[folderID]
 	if !ok || len(entry.Profiles) == 0 {
 		return "", fmt.Errorf("this outpost does not sync Notebook folder %s", folderID)
 	}

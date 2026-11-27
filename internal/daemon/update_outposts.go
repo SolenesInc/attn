@@ -80,7 +80,7 @@ func (d *Daemon) stageOutpost(ctx context.Context, run store.UpdateRun, row stor
 		}
 		return "", err
 	}
-	if err := probe.Enrollment.CheckHome(d.daemonInstanceID); err != nil {
+	if err := probe.Enrollment.CheckHome(d.enrollmentHome()); err != nil {
 		return "", err
 	}
 	if probe.Build != nil && *probe.Build == target && !probe.HostMissing {

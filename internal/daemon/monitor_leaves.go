@@ -223,7 +223,7 @@ func (d *Daemon) monitorTranscriptSession(id protocol.SessionID) *protocol.Sessi
 		return session
 	}
 	records := d.store.SessionRuntimeRecords(id)
-	if records.HomeDaemonID == "" || records.Agent == "" {
+	if records.HomeID == "" || records.Agent == "" {
 		return nil
 	}
 	return &protocol.SessionLedgerEntry{ID: id, Agent: records.Agent}

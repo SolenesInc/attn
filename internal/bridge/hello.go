@@ -10,6 +10,7 @@ type Identity struct {
 	Instance string `json:"instance"`
 	Build    Build  `json:"build"`
 	Home     string `json:"home,omitempty"`
+	HomeID   string `json:"home_id,omitempty"`
 }
 
 type Build struct {

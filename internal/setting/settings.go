@@ -100,7 +100,7 @@ var (
 	NotebookSyncState            = add(&Setting{Key: "notebook_sync_state", Class: Machine, Kind: Computed, Description: "Current Notebook sync state on this machine."})
 	NotebookSyncLastError        = add(&Setting{Key: "notebook_sync_last_error", Class: Machine, Kind: Computed, Description: "Current Notebook sync error and its reason."})
 	OutpostState                 = add(&Setting{Key: "outpost_state", Class: Machine, Kind: Computed, Description: "Whether a home bridge is connected: bridged or off."})
-	OutpostHome                  = add(&Setting{Key: "outpost_home", Class: Machine, Kind: Computed, Description: "Recorded home daemon id. Release it with attn enrollment leave."})
+	OutpostHome                  = add(&Setting{Key: "outpost_home", Class: Machine, Kind: Computed, Description: "Recorded home id. Release it with attn enrollment leave."})
 	UpdateInstallKind            = add(&Setting{Key: "update_install_kind", Class: Machine, Kind: Computed, Description: "How attn was installed on this machine."})
 	UpdateCurrentVersion         = add(&Setting{Key: "update_current_version", Class: Machine, Kind: Computed, Description: "The version of the running build."})
 	UpdateCurrentCommit          = add(&Setting{Key: "update_current_commit", Class: Machine, Kind: Computed, Description: "The commit of the running build."})

@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/bridge/memnet"
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/outpostbuild"
@@ -130,8 +131,8 @@ func (s *wireOutpostSSH) Stage(context.Context, outpostbuild.Binaries, bridge.Bu
 func (s *wireOutpostSSH) Switch(context.Context, outpostbuild.Binaries, bridge.Build, bool) error {
 	return nil
 }
-func (s *wireOutpostSSH) StopDaemon(context.Context) error     { return nil }
-func (s *wireOutpostSSH) Remove(context.Context, string) error { return nil }
+func (s *wireOutpostSSH) StopDaemon(context.Context) error              { return nil }
+func (s *wireOutpostSSH) Remove(context.Context, enrollment.Home) error { return nil }
 
 func UseShippedPasteGap(t testing.TB) {
 	sessionmonitor.SubmitDelay = shippedSessionInputSubmitDelay

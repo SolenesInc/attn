@@ -117,7 +117,7 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 		if agent != nil && agent.AddedTerminal {
 			launching = ""
 		}
-		if err := d.applyOutpostCopyForLaunch(home.Context(), home.Peer().DaemonID, msg.Copy, launching); err != nil {
+		if err := d.applyOutpostCopyForLaunch(home.Context(), home.Peer().HomeID, msg.Copy, launching); err != nil {
 			return struct{}{}, err
 		}
 		if agent == nil || !agent.AddedTerminal {

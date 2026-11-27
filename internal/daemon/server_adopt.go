@@ -86,7 +86,7 @@ func (d *Daemon) adoptOnHome(ctx context.Context, a harness.Adoption) error {
 	if len(res.Copy) == 0 {
 		return nil
 	}
-	if err := d.applyOutpostCopy(conn.Context(), conn.Peer().DaemonID, res.Copy); err != nil {
+	if err := d.applyOutpostCopy(conn.Context(), conn.Peer().HomeID, res.Copy); err != nil {
 		return fmt.Errorf("apply adopted session copy: %w", err)
 	}
 	return nil

@@ -32,7 +32,7 @@ func TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal(t *testing.T) {
 	id := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shell"))
 	app.TypeLine(id, "echo ready-$((1+1))")
 	app.AwaitScreen(id, "ready-2")
-	identity := bridge.Identity{Instance: "default", DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
+	identity := bridge.Identity{Instance: "default", DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", HomeID: "h-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
 	conn, _, err := bridge.Dial(context.Background(), bridge.DialConfig{Conn: bridgeSocket(t, s), Self: identity})
 	if err != nil {
 		t.Fatal(err)

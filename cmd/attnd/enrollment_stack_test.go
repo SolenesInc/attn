@@ -13,11 +13,23 @@ import (
 )
 
 type enrollmentJSON struct {
-	Status       string `json:"status"`
-	DaemonID     string `json:"daemon_id"`
-	HomeDaemonID string `json:"home_daemon_id"`
-	IsHome       bool   `json:"is_home"`
-	Message      string `json:"message"`
+	Status   string `json:"status"`
+	DaemonID string `json:"daemon_id"`
+	Role     string `json:"role"`
+	HomeID   string `json:"home_id"`
+	Replaced string `json:"home_daemon_id"`
+	IsHome   bool   `json:"is_home"`
+	Message  string `json:"message"`
+}
+
+func homeID(t *testing.T, s *testworld.Stack) string {
+	t.Helper()
+	var status enrollmentJSON
+	s.Attn("enrollment", "status", "--json").JSON(t, &status)
+	if !enrollment.ValidHomeID(status.HomeID) {
+		t.Fatalf("enrollment status names no home id: %+v", status)
+	}
+	return status.HomeID
 }
 
 func shortID[ID ~string](session ID) string {
@@ -35,7 +47,7 @@ func requireLines(t *testing.T, what, text string, want ...string) {
 
 func TestAnEnrolledDataFolderNamesItsEnrollmentAndLeaveRestoresIt(t *testing.T) {
 	t.Parallel()
-	const otherHome = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const otherHome = "h-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	s := testworld.NewStack(t)
 	requireLines(t, "enrollment --help", s.Attn("enrollment", "--help").Stdout, "status", "leave")
 
@@ -44,24 +56,24 @@ func TestAnEnrolledDataFolderNamesItsEnrollmentAndLeaveRestoresIt(t *testing.T) 
 
 	var own enrollmentJSON
 	s.Attn("enrollment", "status", "--json").JSON(t, &own)
-	if !own.IsHome || own.DaemonID == "" || own.HomeDaemonID != own.DaemonID {
+	if !own.IsHome || own.Role != "home" || own.DaemonID == "" || !enrollment.ValidHomeID(own.HomeID) {
 		t.Fatalf("a fresh daemon's status = %+v, want its own home", own)
 	}
-	requireLines(t, "status on a home", s.Attn("enrollment", "status").Stdout, own.DaemonID, "enrollment: home")
+	requireLines(t, "status on a home", s.Attn("enrollment", "status").Stdout, own.DaemonID, own.HomeID, "enrollment: home")
 
-	record := `{"home_daemon_id": "` + otherHome + `"}` + "\n"
+	record := `{"role": "outpost", "home_id": "` + otherHome + `", "home_name": "elsewhere"}` + "\n"
 	if err := os.WriteFile(filepath.Join(s.Dir, enrollment.RecordFileName), []byte(record), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	requireLines(t, "status when enrolled to another daemon", s.Attn("enrollment", "status").Stdout,
-		own.DaemonID, "enrollment: enrolled to "+otherHome, "attn enrollment leave")
+		own.DaemonID, "enrollment: enrolled to elsewhere ("+otherHome+")", "attn enrollment leave")
 
 	if left := s.Attn("enrollment", "leave"); left.Code != 0 {
 		t.Fatalf("leave exited %d: %s", left.Code, left.Stderr)
 	}
 	var back enrollmentJSON
 	s.Attn("enrollment", "status", "--json").JSON(t, &back)
-	if !back.IsHome || back.HomeDaemonID != own.DaemonID {
+	if !back.IsHome || back.DaemonID != own.DaemonID || !enrollment.ValidHomeID(back.HomeID) || back.HomeID == otherHome {
 		t.Fatalf("after leave the status = %+v, want its own home again", back)
 	}
 }

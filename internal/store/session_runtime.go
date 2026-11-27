@@ -101,7 +101,7 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 	result, err := s.db.Exec(`INSERT INTO session_runtime (session_id, state, state_since, state_updated_at,
 		turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, turn_requested_at, turn_capture_at, last_model_request_at,
 		agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_metadata, agent_driver_transcript_path, agent_driver_route,
-		branch, is_worktree, main_repo, repository, repository_origin, harness_title, last_seen, pull_requests, conversation_native_id, conversation_transcript_path, home_daemon_id, agent, live, server_completion)
+		branch, is_worktree, main_repo, repository, repository_origin, harness_title, last_seen, pull_requests, conversation_native_id, conversation_transcript_path, home_id, agent, live, server_completion)
 		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, copied_from, agent, ?, ?
 		FROM sessions
 		WHERE id = ? AND closed_at = ''
@@ -113,7 +113,7 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 		agent_driver_transcript_path = excluded.agent_driver_transcript_path, branch = excluded.branch, is_worktree = excluded.is_worktree,
 		main_repo = excluded.main_repo, repository = excluded.repository, repository_origin = excluded.repository_origin, harness_title = excluded.harness_title,
 		last_seen = CASE WHEN excluded.last_seen = '' THEN session_runtime.last_seen ELSE excluded.last_seen END,
-		pull_requests = excluded.pull_requests, home_daemon_id = excluded.home_daemon_id, agent = excluded.agent, live = excluded.live,
+		pull_requests = excluded.pull_requests, home_id = excluded.home_id, agent = excluded.agent, live = excluded.live,
 		conversation_native_id = excluded.conversation_native_id, conversation_transcript_path = excluded.conversation_transcript_path,
 		server_completion = excluded.server_completion`,
 		id, string(state.State), string(protocol.NewTimestamp(state.Since)), string(protocol.NewTimestamp(state.Updated)),
@@ -160,7 +160,7 @@ type SessionRuntimeRecords struct {
 	PendingConversations       string
 	PullRequests               string
 	FileReports                string
-	HomeDaemonID               string
+	HomeID                     string
 	ConversationNativeID       string
 	ConversationTranscriptPath string
 	ServerCompletion           int64
@@ -175,7 +175,7 @@ func (s *Store) SessionRuntimeRecords(id protocol.SessionID) SessionRuntimeRecor
 		return s.runtimeRecords[id]
 	}
 	var records SessionRuntimeRecords
-	if err := s.db.QueryRow(`SELECT pending_conversations, pull_requests, file_reports, home_daemon_id, agent, live, conversation_native_id, conversation_transcript_path, server_completion FROM session_runtime WHERE session_id = ?`, id).Scan(&records.PendingConversations, &records.PullRequests, &records.FileReports, &records.HomeDaemonID, &records.Agent, &records.Live, &records.ConversationNativeID, &records.ConversationTranscriptPath, &records.ServerCompletion); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := s.db.QueryRow(`SELECT pending_conversations, pull_requests, file_reports, home_id, agent, live, conversation_native_id, conversation_transcript_path, server_completion FROM session_runtime WHERE session_id = ?`, id).Scan(&records.PendingConversations, &records.PullRequests, &records.FileReports, &records.HomeID, &records.Agent, &records.Live, &records.ConversationNativeID, &records.ConversationTranscriptPath, &records.ServerCompletion); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		log.Printf("[store] session %s runtime records: %v", id, err)
 	}
 	return records
@@ -215,7 +215,7 @@ func (s *Store) SaveSessionPendingConversations(pending map[protocol.SessionID]s
 	}
 	defer tx.Rollback()
 	for id, chain := range pending {
-		if _, err := tx.Exec(`INSERT INTO session_runtime(session_id, pending_conversations, home_daemon_id) VALUES (?, ?, COALESCE((SELECT copied_from FROM sessions WHERE id = ?), '')) ON CONFLICT(session_id) DO UPDATE SET pending_conversations = excluded.pending_conversations`, id, chain, id); err != nil {
+		if _, err := tx.Exec(`INSERT INTO session_runtime(session_id, pending_conversations, home_id) VALUES (?, ?, COALESCE((SELECT copied_from FROM sessions WHERE id = ?), '')) ON CONFLICT(session_id) DO UPDATE SET pending_conversations = excluded.pending_conversations`, id, chain, id); err != nil {
 			return err
 		}
 	}
@@ -335,7 +335,7 @@ func (s *Store) saveServerFeedColumn(id protocol.SessionID, column string, value
 		s.runtimeRecords[id] = records
 		return
 	}
-	if _, err := s.db.Exec(`INSERT INTO session_runtime(session_id, `+column+`, home_daemon_id) VALUES (?, ?, COALESCE((SELECT copied_from FROM sessions WHERE id = ?), '')) ON CONFLICT(session_id) DO UPDATE SET `+column+` = excluded.`+column, id, value, id); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO session_runtime(session_id, `+column+`, home_id) VALUES (?, ?, COALESCE((SELECT copied_from FROM sessions WHERE id = ?), '')) ON CONFLICT(session_id) DO UPDATE SET `+column+` = excluded.`+column, id, value, id); err != nil {
 		log.Printf("[store] save session %s %s: %v", id, column, err)
 	}
 }

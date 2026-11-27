@@ -162,7 +162,7 @@ func (d *Daemon) prepareOutpost(ctx context.Context, row store.Outpost, push *ou
 		}
 		return nil, &bridge.Refusal{Reason: "platform", Detail: err.Error()}
 	}
-	if err := probe.Enrollment.CheckHome(d.daemonInstanceID); err != nil {
+	if err := probe.Enrollment.CheckHome(d.enrollmentHome()); err != nil {
 		return nil, &bridge.Refusal{Reason: "home", Detail: err.Error()}
 	}
 	different := probe.Build == nil || *probe.Build != d.bridgeIdentity().Build

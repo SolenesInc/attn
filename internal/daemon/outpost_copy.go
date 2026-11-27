@@ -117,7 +117,7 @@ func (d *Daemon) outpostHandlers() bridge.Handlers {
 		bridgeCallCopy: func(home *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("applyCopy", func() {
 				bridge.Answer(incoming, func(_ context.Context, request []byte) (any, error) {
-					return d.applyCopyCall(home.Context(), home.Peer().DaemonID, request)
+					return d.applyCopyCall(home.Context(), home.Peer().HomeID, request)
 				})
 			}) {
 				_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
@@ -204,11 +204,14 @@ func (d *Daemon) dropStaleCopy() error {
 	if err != nil {
 		return err
 	}
-	home := status.HomeDaemonID
-	if status.IsHome() {
-		home = ""
+	if status.Adopting() {
+		if err := d.adoptHomeID(status); err != nil {
+			return err
+		}
+		status = d.enrollmentStatus()
 	}
-	if conn := d.homeBridge(); conn != nil && conn.Peer().DaemonID != home {
+	home := status.CopiedFrom()
+	if conn := d.homeBridge(); conn != nil && (home == "" || conn.Peer().HomeID != home) {
 		_ = conn.Close()
 	}
 	if err := d.store.DropCopyNotFrom(home); err != nil {
@@ -221,7 +224,7 @@ func (d *Daemon) dropStaleCopy() error {
 	for profile, agent := range released {
 		d.life.Go("linkReleasedAfterEnrollment", func() { d.released(agent, profile) })
 	}
-	if err := d.dropNotebookSyncFromOtherHome(status.HomeDaemonID); err != nil {
+	if err := d.dropNotebookSyncFromOtherHome(d.notebookHome(status)); err != nil {
 		return err
 	}
 	d.configureNotebookSync()

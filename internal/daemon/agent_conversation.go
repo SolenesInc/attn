@@ -250,7 +250,7 @@ func (d *Daemon) replayPendingConversations() {
 		launch := d.monitorLaunch(shown)
 		launch.PendingConversations = pending
 		conversation := d.store.GetSessionConversation(id)
-		if saved := d.store.SessionRuntimeRecords(id); saved.HomeDaemonID != "" {
+		if saved := d.store.SessionRuntimeRecords(id); saved.HomeID != "" {
 			conversation.NativeID, conversation.TranscriptPath = saved.ConversationNativeID, saved.ConversationTranscriptPath
 		}
 		launch.Conversation = sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath}

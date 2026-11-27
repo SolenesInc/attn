@@ -126,20 +126,23 @@ func (c *Client) Switch(ctx context.Context, binaries outpostbuild.Binaries, bui
 	return c.Stream(ctx, command, strings.NewReader(""), func(string) {})
 }
 
-func (c *Client) Remove(ctx context.Context, home string) error {
+func (c *Client) Remove(ctx context.Context, home enrollment.Home) error {
 	if err := c.control(ctx, "check"); err != nil {
 		return err
 	}
-	out, err := c.Run(ctx, c.binaryPath()+` enrollment leave --json --home `+home)
+	out, err := c.Run(ctx, c.binaryPath()+` enrollment status --json`)
 	if err != nil {
 		return err
 	}
-	var left enrollment.Result
-	if err := json.Unmarshal(out, &left); err != nil {
-		return fmt.Errorf("enrollment leave printed %q: %w", out, err)
+	var status enrollment.Status
+	if err := json.Unmarshal(out, &status); err != nil {
+		return fmt.Errorf("enrollment status printed %q: %w", out, err)
 	}
-	if left.Status == "kept" {
+	if status.CheckHome(home) != nil {
 		return nil
+	}
+	if _, err := c.Run(ctx, c.binaryPath()+` enrollment leave --json`); err != nil {
+		return err
 	}
 	return c.StopDaemon(ctx)
 }

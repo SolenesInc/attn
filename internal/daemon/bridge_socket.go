@@ -23,19 +23,20 @@ type outpostListener struct {
 }
 
 type outpostRuntime struct {
-	mu         sync.Mutex
-	enrollment enrollment.Status
-	listener   *outpostListener
-	state      string
-	lastError  string
-	errorKind  string
-	listen     func(string, string) (net.Listener, error)
+	mu                  sync.Mutex
+	enrollment          enrollment.Status
+	bridgedHomeDaemonID string
+	listener            *outpostListener
+	state               string
+	lastError           string
+	errorKind           string
+	listen              func(string, string) (net.Listener, error)
 }
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {
 	name, _ := os.Hostname()
 	home, _ := os.UserHomeDir()
-	return bridge.Identity{Name: name, Instance: config.InstanceLabel(), DaemonID: d.daemonInstanceID, Home: home, Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
+	return bridge.Identity{Name: name, Instance: config.InstanceLabel(), DaemonID: d.daemonInstanceID, Home: home, HomeID: d.enrollmentStatus().HomeID, Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
 }
 
 func (d *Daemon) startBridgeSocket() error {
@@ -64,11 +65,14 @@ func (d *Daemon) startBridgeSocket() error {
 		Admit: func(home bridge.Identity) *bridge.Refusal {
 			before := d.settingValues()
 			r.mu.Lock()
-			status, err := enrollment.RecordHome(d.dataRoot, home.DaemonID, home.Name)
+			status, err := enrollment.RecordHome(d.dataRoot, enrollment.Home{ID: home.HomeID, DaemonID: home.DaemonID, Name: home.Name})
 			if err == nil {
-				r.enrollment = status
+				r.enrollment, r.bridgedHomeDaemonID = status, home.DaemonID
 			}
 			r.mu.Unlock()
+			if err == nil && status.Adopting() {
+				err = d.adoptHomeID(status)
+			}
 			if err != nil {
 				return &bridge.Refusal{Reason: "home", Detail: err.Error()}
 			}
@@ -203,8 +207,8 @@ func (d *Daemon) outpostSettings() (state, home, lastError string) {
 	r := &d.outpost
 	r.mu.Lock()
 	state, lastError = r.state, r.lastError
-	if !r.enrollment.IsHome() {
-		home = r.enrollment.HomeDaemonID
+	if r.enrollment.IsOutpost() {
+		home = r.enrollment.CopiedFrom()
 	}
 	r.mu.Unlock()
 	if state == "" {

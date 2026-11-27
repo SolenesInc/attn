@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -46,7 +47,7 @@ type outpostRemote interface {
 	Stage(context.Context, outpostbuild.Binaries, bridge.Build, func(string)) error
 	Switch(context.Context, outpostbuild.Binaries, bridge.Build, bool) error
 	StopDaemon(context.Context) error
-	Remove(context.Context, string) error
+	Remove(context.Context, enrollment.Home) error
 	InstallPath() string
 	MasterCommand() []string
 }

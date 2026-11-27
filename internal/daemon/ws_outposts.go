@@ -90,7 +90,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		r.mu.Unlock()
 		if !duplicate {
 			ctx, cancel := context.WithTimeout(d.life.Context(), bridge.AnswerWithin)
-			if err := remote.Remove(ctx, d.daemonInstanceID); err != nil {
+			if err := remote.Remove(ctx, d.enrollmentHome()); err != nil {
 				instance := config.InstanceLabel()
 				path := remote.InstallPath()
 				removeError = fmt.Errorf("removed %s from this home, but could not stop it over ssh: %v; its daemon and shells may still be running; on %s run ATTN_INSTANCE=%s %s enrollment leave && ATTN_INSTANCE=%s %s daemon stop", row.Name, err, row.Destination, instance, path, instance, path)

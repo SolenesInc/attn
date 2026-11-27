@@ -18,7 +18,7 @@ import (
 
 func (d *Daemon) copiedSession(id protocol.SessionID) bool {
 	_, copied, _ := d.store.SessionHost(id)
-	return copied || d.store.SessionRuntimeRecords(id).HomeDaemonID != ""
+	return copied || d.store.SessionRuntimeRecords(id).HomeID != ""
 }
 
 func (d *Daemon) homeHandlers(host string) bridge.Handlers {

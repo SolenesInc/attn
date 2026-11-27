@@ -37,11 +37,7 @@ func (d *Daemon) analyticsEnabled() bool {
 }
 
 func (d *Daemon) analyticsCopySource() string {
-	status := d.enrollmentStatus()
-	if status.IsHome() {
-		return ""
-	}
-	return status.HomeDaemonID
+	return d.enrollmentStatus().CopiedFrom()
 }
 
 func (d *Daemon) analyticsSecret() ([]byte, error) {

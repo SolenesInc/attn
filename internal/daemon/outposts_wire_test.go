@@ -23,6 +23,7 @@ import (
 	"github.com/victorarias/attn/internal/bridge/memnet"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -384,9 +385,9 @@ type refusingInstallSSH struct {
 	failure          error
 }
 
-func (r *refusingInstallSSH) EnsureMaster(context.Context) error   { return nil }
-func (r *refusingInstallSSH) ExitMaster(context.Context) error     { return nil }
-func (r *refusingInstallSSH) Remove(context.Context, string) error { return nil }
+func (r *refusingInstallSSH) EnsureMaster(context.Context) error            { return nil }
+func (r *refusingInstallSSH) ExitMaster(context.Context) error              { return nil }
+func (r *refusingInstallSSH) Remove(context.Context, enrollment.Home) error { return nil }
 func (r *refusingInstallSSH) Probe(ctx context.Context) (outpostssh.Probe, error) {
 	r.probes++
 	if r.probing != nil {

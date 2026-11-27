@@ -295,14 +295,14 @@ func (s *Store) StartCopyOrder() {
 	s.copiedSessionSeq = make(map[string]int)
 }
 
-// DropCopyNotFrom forgets every row copied here from a daemon other than home, and every closed copied row,
+// DropCopyNotFrom forgets every row copied here from a home other than home, and every closed copied row,
 // so the terminals they bound are pruned. An empty home drops every copy.
 func (s *Store) DropCopyNotFrom(home string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var removed []protocol.SessionID
 	err := transactWritingCopies(context.Background(), s.db, func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT session_id FROM session_runtime WHERE home_daemon_id != '' AND home_daemon_id != ?
+		rows, err := tx.Query(`SELECT session_id FROM session_runtime WHERE home_id != '' AND home_id != ?
 			UNION SELECT id FROM sessions WHERE copied_from != '' AND (copied_from != ? OR closed_at != '')`, home, home)
 		if err != nil {
 			return err
@@ -320,7 +320,7 @@ func (s *Store) DropCopyNotFrom(home string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`DELETE FROM session_runtime WHERE home_daemon_id != '' AND home_daemon_id != ?`, home); err != nil {
+		if _, err := tx.Exec(`DELETE FROM session_runtime WHERE home_id != '' AND home_id != ?`, home); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(`DELETE FROM session_runtime WHERE session_id IN (SELECT id FROM sessions WHERE copied_from != '' AND (copied_from != ? OR closed_at != ''))`, home); err != nil {
@@ -345,11 +345,33 @@ func (s *Store) DropCopyNotFrom(home string) error {
 	return nil
 }
 
+// AdoptCopySource stores the copies held under the daemon id from as copies of the home with id to.
+func (s *Store) AdoptCopySource(from, to string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	err := transactWritingCopies(context.Background(), s.db, func(tx *sql.Tx) error {
+		for _, update := range []string{
+			`UPDATE sessions SET copied_from = ? WHERE copied_from = ?`,
+			`UPDATE settings SET copied_from = ? WHERE copied_from = ?`,
+			`UPDATE session_runtime SET home_id = ? WHERE home_id = ?`,
+		} {
+			if _, err := tx.Exec(update, to, from); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return s.reloadSettingsLocked()
+}
+
 func deleteCopiedSessions(tx *sql.Tx, where string, args ...any) error {
 	selected := `SELECT id FROM sessions WHERE ` + where
 	for _, table := range append([]string{"terminal_bindings"}, sessionOwnedTables...) {
 		if table == "session_runtime" {
-			if _, err := tx.Exec(`UPDATE session_runtime SET home_daemon_id = (SELECT copied_from FROM sessions WHERE id = session_id) WHERE session_id IN (`+selected+`)`, args...); err != nil {
+			if _, err := tx.Exec(`UPDATE session_runtime SET home_id = (SELECT copied_from FROM sessions WHERE id = session_id) WHERE session_id IN (`+selected+`)`, args...); err != nil {
 				return err
 			}
 			continue

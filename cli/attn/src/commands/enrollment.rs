@@ -15,14 +15,15 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 const HELP: &str = r#"usage: attn enrollment <command>
 
 An outpost's data folder is enrolled to the home it first accepts a bridge
-from, and the outpost refuses bridges from any other home.
+from, and the outpost refuses bridges from any other home. A home has an id of
+its own, apart from the id of the daemon that runs it.
 
 commands:
   status [--json]
-        show this daemon's id and whether its data folder is enrolled to
-        another daemon.
+        show this daemon's id, and whether its data folder is a home or an
+        outpost enrolled to another home.
 
-  leave [--home <daemon-id>] [--json]
+  leave [--home <home-id>] [--json]
         release the enrollment so the data folder is its own again. The
         daemon closes the bridge from the old home and stops the terminals it
         ran for it: right away when it is running, otherwise when it next
@@ -68,25 +69,39 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
 }
 
+const ROLE_HOME: &str = "home";
+const ROLE_OUTPOST: &str = "outpost";
+
 #[derive(Default)]
 struct Status {
     daemon_id: String,
-    home_daemon_id: String,
+    record: Record,
 }
 
 impl Status {
     fn is_home(&self) -> bool {
-        !self.daemon_id.is_empty() && self.daemon_id == self.home_daemon_id
+        self.record.role == ROLE_HOME
+    }
+
+    fn home_label(&self) -> String {
+        let id = if self.record.home_id.is_empty() {
+            &self.record.home_daemon_id
+        } else {
+            &self.record.home_id
+        };
+        if self.record.home_name.is_empty() {
+            id.clone()
+        } else {
+            format!("{} ({id})", self.record.home_name)
+        }
     }
 
     fn describe(&self) -> String {
-        if self.is_home() {
-            return "home".to_string();
+        match self.record.role.as_str() {
+            ROLE_HOME => "home".to_string(),
+            ROLE_OUTPOST => format!("enrolled to {}", self.home_label()),
+            _ => "unknown".to_string(),
         }
-        if self.home_daemon_id.trim().is_empty() {
-            return "unknown".to_string();
-        }
-        format!("enrolled to {}", self.home_daemon_id)
     }
 }
 
@@ -106,20 +121,48 @@ impl LoadError {
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 struct Record {
-    #[serde(default)]
-    home_daemon_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    role: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    home_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     home_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    home_daemon_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     recorded_at: String,
 }
 
-fn valid_daemon_id(id: &str) -> bool {
+fn valid_id(id: &str, prefix: &str) -> bool {
     id.len() == DAEMON_ID_LENGTH
-        && id.starts_with("d-")
+        && id.starts_with(prefix)
         && id[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn valid_daemon_id(id: &str) -> bool {
+    valid_id(id, "d-")
+}
+
+fn valid_home_id(id: &str) -> bool {
+    valid_id(id, "h-")
+}
+
+const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+
+fn new_home_id() -> Result<String, String> {
+    use std::io::Read as _;
+    let mut bytes = [0u8; 16];
+    File::open("/dev/urandom")
+        .and_then(|mut random| random.read_exact(&mut bytes))
+        .map_err(|error| format!("generate home id: {}", os_error_text(&error)))?;
+    let mut id = String::from("h-");
+    for byte in bytes {
+        id.push(HEX_DIGITS[usize::from(byte >> 4)] as char);
+        id.push(HEX_DIGITS[usize::from(byte & 0x0f)] as char);
+    }
+    Ok(id)
 }
 
 fn read_daemon_id(root: &str) -> Result<String, LoadError> {
@@ -141,7 +184,7 @@ fn read_daemon_id(root: &str) -> Result<String, LoadError> {
     }
 }
 
-fn read_record(path: &str) -> Result<Record, LoadError> {
+fn read_record(path: &str, daemon_id: &str) -> Result<Record, LoadError> {
     let data = match fs::read(path) {
         Ok(data) => data,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Err(LoadError::NoRecord),
@@ -152,35 +195,64 @@ fn read_record(path: &str) -> Result<Record, LoadError> {
             )));
         }
     };
-    let record: Record = serde_json::from_slice(&data)
+    let mut record: Record = serde_json::from_slice(&data)
         .map_err(|error| LoadError::Other(format!("parse enrollment record {path}: {error}")))?;
-    if !valid_daemon_id(&record.home_daemon_id) {
+    if !record.home_daemon_id.is_empty() && !valid_daemon_id(&record.home_daemon_id) {
         return Err(LoadError::Other(format!(
             "enrollment record {path} names an invalid home daemon id {}",
             quote(record.home_daemon_id.as_bytes())
         )));
     }
+    let invalid_home_id = || {
+        LoadError::Other(format!(
+            "enrollment record {path} names an invalid home id {}",
+            quote(record.home_id.as_bytes())
+        ))
+    };
+    match record.role.as_str() {
+        "" => {
+            if record.home_daemon_id.is_empty() || !record.home_id.is_empty() {
+                return Err(LoadError::Other(format!(
+                    "enrollment record {path} has no role"
+                )));
+            }
+            if record.home_daemon_id == daemon_id {
+                record.role = ROLE_HOME.to_string();
+                record.home_daemon_id.clear();
+                record.home_name.clear();
+            } else {
+                record.role = ROLE_OUTPOST.to_string();
+            }
+        }
+        ROLE_HOME => {
+            if !record.home_id.is_empty() && !valid_home_id(&record.home_id) {
+                return Err(invalid_home_id());
+            }
+        }
+        ROLE_OUTPOST => {
+            if !valid_home_id(&record.home_id) {
+                return Err(invalid_home_id());
+            }
+        }
+        role => {
+            return Err(LoadError::Other(format!(
+                "enrollment record {path} has unknown role {}",
+                quote(role.as_bytes())
+            )));
+        }
+    }
     Ok(record)
 }
 
-fn load(root: &str) -> Result<Status, (Status, LoadError)> {
+fn load(root: &str) -> Result<Status, (String, LoadError)> {
     let daemon_id = match read_daemon_id(root) {
         Ok(id) => id,
         Err(LoadError::NoDaemonId) => String::new(),
-        Err(error) => return Err((Status::default(), error)),
+        Err(error) => return Err((String::new(), error)),
     };
-    match read_record(&join(root, RECORD_FILE)) {
-        Ok(record) => Ok(Status {
-            daemon_id,
-            home_daemon_id: record.home_daemon_id,
-        }),
-        Err(error) => Err((
-            Status {
-                daemon_id,
-                home_daemon_id: String::new(),
-            },
-            error,
-        )),
+    match read_record(&join(root, RECORD_FILE), &daemon_id) {
+        Ok(record) => Ok(Status { daemon_id, record }),
+        Err(error) => Err((daemon_id, error)),
     }
 }
 
@@ -193,8 +265,14 @@ struct StatusError<'a> {
 #[derive(Serialize)]
 struct StatusJson<'a> {
     daemon_id: &'a str,
-    enrollment: String,
+    role: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    home_id: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    home_name: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
     home_daemon_id: &'a str,
+    enrollment: String,
     is_home: bool,
 }
 
@@ -221,7 +299,7 @@ fn status(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         Err((partial, error)) => {
             if json_output {
                 print_encoded(&StatusError {
-                    daemon_id: &partial.daemon_id,
+                    daemon_id: &partial,
                     error: error.text(),
                 });
             } else {
@@ -238,8 +316,11 @@ fn status(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     if json_output {
         print_encoded(&StatusJson {
             daemon_id: &status.daemon_id,
+            role: &status.record.role,
+            home_id: &status.record.home_id,
+            home_name: &status.record.home_name,
+            home_daemon_id: &status.record.home_daemon_id,
             enrollment: status.describe(),
-            home_daemon_id: &status.home_daemon_id,
             is_home: status.is_home(),
         });
         return Ok(());
@@ -249,9 +330,14 @@ fn status(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         status.daemon_id,
         status.describe()
     );
+    if !status.record.home_id.is_empty() {
+        out.push_str("home id:    ");
+        out.push_str(&status.record.home_id);
+        out.push('\n');
+    }
     if !status.is_home() {
         out.push_str(
-            "\nThis data folder is enrolled to another daemon; run `attn enrollment leave` to release it.\n",
+            "\nThis data folder is enrolled to another home; run `attn enrollment leave` to release it.\n",
         );
     }
     print_stdout(&out);
@@ -262,14 +348,9 @@ fn status(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
 struct LeaveResult {
     status: &'static str,
     daemon_id: String,
-    home_daemon_id: String,
+    home_id: String,
     #[serde(skip_serializing_if = "String::is_empty")]
-    home_name: String,
-    #[serde(
-        rename = "previous_home_daemon_id",
-        skip_serializing_if = "String::is_empty"
-    )]
-    previous_home: String,
+    previous_home_id: String,
     message: String,
 }
 
@@ -277,39 +358,48 @@ fn leave_record(root: &str, home: &str) -> Result<LeaveResult, LoadError> {
     let daemon_id = read_daemon_id(root)?;
     let record_path = join(root, RECORD_FILE);
     let _lock = lock(&record_path).map_err(LoadError::Other)?;
-    let (previous, home_name) = match read_record(&record_path) {
-        Ok(record) => (record.home_daemon_id, record.home_name),
-        Err(LoadError::NoRecord) => (String::new(), String::new()),
+    let current = match read_record(&record_path, &daemon_id) {
+        Ok(record) => Status {
+            daemon_id: daemon_id.clone(),
+            record,
+        },
+        Err(LoadError::NoRecord) => Status::default(),
         Err(error) => return Err(error),
     };
-    if !home.is_empty() && !previous.is_empty() && previous != daemon_id && previous != home {
-        return Ok(LeaveResult {
-            status: "kept",
-            message: format!("enrolled to home {previous}, not {home}; kept the enrollment"),
-            home_daemon_id: previous,
-            daemon_id,
-            home_name,
-            previous_home: String::new(),
-        });
-    }
-    if previous == daemon_id {
+    if current.is_home() {
         return Ok(LeaveResult {
             status: "unchanged",
-            home_daemon_id: daemon_id.clone(),
+            home_id: current.record.home_id,
             daemon_id,
-            home_name: String::new(),
-            previous_home: String::new(),
-            message: "not enrolled to another daemon".to_string(),
+            previous_home_id: String::new(),
+            message: "not enrolled to another home".to_string(),
         });
     }
-    write_record(&record_path, &daemon_id).map_err(LoadError::Other)?;
+    let previous = if current.record.home_id.is_empty() {
+        current.record.home_daemon_id.clone()
+    } else {
+        current.record.home_id.clone()
+    };
+    if !home.is_empty() && !previous.is_empty() && previous != home {
+        return Ok(LeaveResult {
+            status: "kept",
+            message: format!(
+                "enrolled to home {}, not {home}; kept the enrollment",
+                current.home_label()
+            ),
+            home_id: previous,
+            daemon_id,
+            previous_home_id: String::new(),
+        });
+    }
+    let home_id = new_home_id().map_err(LoadError::Other)?;
+    write_record(&record_path, &home_id).map_err(LoadError::Other)?;
     Ok(LeaveResult {
         status: "left",
-        home_daemon_id: daemon_id.clone(),
+        home_id,
         daemon_id,
-        home_name: String::new(),
-        previous_home: previous,
-        message: "no longer enrolled to another daemon".to_string(),
+        previous_home_id: previous,
+        message: "no longer enrolled to another home".to_string(),
     })
 }
 
@@ -345,11 +435,12 @@ fn lock(path: &str) -> Result<File, String> {
     Ok(file)
 }
 
-fn write_record(path: &str, home_daemon_id: &str) -> Result<(), String> {
+fn write_record(path: &str, home_id: &str) -> Result<(), String> {
     let record = Record {
-        home_daemon_id: home_daemon_id.to_string(),
-        home_name: String::new(),
+        role: ROLE_HOME.to_string(),
+        home_id: home_id.to_string(),
         recorded_at: Time::now_utc().format(RFC3339),
+        ..Record::default()
     };
     let compact =
         json::encode(&record).map_err(|error| format!("encode enrollment record: {error}"))?;
@@ -386,15 +477,15 @@ fn leave(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
             Flag {
                 name: "home",
                 default: FlagDefault::String(""),
-                usage: "release only an enrollment to this home daemon id",
+                usage: "release only an enrollment to this home id",
             },
         ],
     );
     parse_or_exit(run, &mut flags, args)?;
     let home = flags.string("home").to_string();
-    if !home.is_empty() && !valid_daemon_id(&home) {
+    if !home.is_empty() && !valid_home_id(&home) && !valid_daemon_id(&home) {
         eprintln!(
-            "enrollment leave: --home {} is not a daemon id; attn enrollment status on the home prints its id",
+            "enrollment leave: --home {} is not a home id; attn enrollment status on the home prints its id",
             quote(home.as_bytes())
         );
         return Err(Stop(2));

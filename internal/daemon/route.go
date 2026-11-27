@@ -151,7 +151,7 @@ func (d *Daemon) homeUnreachable(name string) error {
 func (d *Daemon) homeConn(status enrollment.Status) (*bridge.Conn, string, error) {
 	name := status.HomeName
 	if name == "" {
-		name = status.HomeDaemonID
+		name = status.CopiedFrom()
 	}
 	if conn := d.homeBridge(); conn != nil {
 		return conn, name, nil

@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type notebookFolder struct {
@@ -51,18 +52,39 @@ func (d *Daemon) notebookFolders() ([]notebookFolder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return notebookFoldersOf(d.daemonInstanceID, notebooks), nil
+	roots := make([]string, len(notebooks))
+	for i, nb := range notebooks {
+		roots[i] = nb.path
+	}
+	keys, err := d.notebookFolderKeys(roots...)
+	if err != nil {
+		return nil, err
+	}
+	return notebookFoldersOf(keys, notebooks), nil
 }
 
-func notebookFolderID(home, key string) string { return "notebook-" + home + "-" + key }
+func (d *Daemon) notebookFolderKeys(roots ...string) (map[string]store.NotebookFolderKey, error) {
+	return d.store.NotebookFolderKeys(roots, func(root string) store.NotebookFolderKey {
+		key := notebook.FolderKey(root)
+		return store.NotebookFolderKey{ID: "notebook-" + d.daemonInstanceID + "-" + key, Key: key}
+	})
+}
 
-func notebookFoldersOf(home string, notebooks []profileNotebook) []notebookFolder {
+func (d *Daemon) notebookFolderID(root string) (string, error) {
+	keys, err := d.notebookFolderKeys(root)
+	if err != nil {
+		return "", err
+	}
+	return keys[root].ID, nil
+}
+
+func notebookFoldersOf(keys map[string]store.NotebookFolderKey, notebooks []profileNotebook) []notebookFolder {
 	byPath := map[string]*notebookFolder{}
 	for _, nb := range notebooks {
 		folder := byPath[nb.path]
 		if folder == nil {
-			key := notebook.FolderKey(nb.path)
-			folder = &notebookFolder{ID: notebookFolderID(home, key), Key: key, Name: notebook.CopyName(nb.path), HomePath: nb.path}
+			key := keys[nb.path]
+			folder = &notebookFolder{ID: key.ID, Key: key.Key, Name: notebook.CopyName(nb.path), HomePath: nb.path}
 			byPath[nb.path] = folder
 		}
 		folder.Profiles = append(folder.Profiles, nb.profileID)
@@ -267,7 +289,7 @@ func (d *Daemon) receiveNotebookFolders(_ context.Context, msg protocol.Notebook
 	}
 	r := &d.notebookSync
 	r.configure.Lock()
-	err = d.storeOutpostNotebookFoldersLocked(status.HomeDaemonID, base, msg.Folders)
+	err = d.storeOutpostNotebookFoldersLocked(d.notebookHome(status), base, msg.Folders)
 	r.configure.Unlock()
 	if err != nil {
 		return struct{}{}, err
@@ -286,7 +308,7 @@ func (d *Daemon) storeOutpostNotebookFoldersLocked(home, base string, folders []
 	disk := r.disk.clone()
 	listed := map[string]bool{}
 	for _, folder := range folders {
-		if folder.ID != notebookFolderID(home, folder.Key) || len(folder.Key) != 8 || strings.Trim(folder.Key, "0123456789abcdef") != "" || folder.Name == "" || notebook.CopyName(folder.Name) != folder.Name {
+		if !strings.HasPrefix(folder.ID, "notebook-") || !strings.HasSuffix(folder.ID, "-"+folder.Key) || len(folder.Key) != 8 || strings.Trim(folder.Key, "0123456789abcdef") != "" || folder.Name == "" || notebook.CopyName(folder.Name) != folder.Name {
 			return fmt.Errorf("the home sent a malformed Notebook folder %q", folder.ID)
 		}
 		listed[folder.ID] = true

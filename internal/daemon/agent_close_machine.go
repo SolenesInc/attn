@@ -56,7 +56,7 @@ func (d *Daemon) closeAgentMachine(_ context.Context, msg protocol.AgentLaunchCl
 	case "committed":
 		if len(msg.Copy) > 0 {
 			if home := d.homeBridge(); home != nil {
-				if err := d.applyOutpostCopy(home.Context(), home.Peer().DaemonID, msg.Copy); err != nil {
+				if err := d.applyOutpostCopy(home.Context(), home.Peer().HomeID, msg.Copy); err != nil {
 					d.logf("apply closed session copy for %s: %v", msg.SessionID, err)
 				}
 			}

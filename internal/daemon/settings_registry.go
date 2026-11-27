@@ -24,7 +24,7 @@ const (
 func (d *Daemon) setting(s *setting.Setting) string {
 	if s.Class == setting.Home {
 		if status := d.enrollmentStatus(); !status.IsHome() {
-			return s.WithDefault(d.store.CopiedSetting(s.Key, status.HomeDaemonID))
+			return s.WithDefault(d.store.CopiedSetting(s.Key, status.CopiedFrom()))
 		}
 	}
 	return s.WithDefault(d.store.GetSetting(s.Key))
@@ -312,7 +312,7 @@ func (d *Daemon) storedSettingValues() map[string]string {
 			delete(values, key)
 		}
 	}
-	for key, value := range d.store.CopiedSettings(status.HomeDaemonID) {
+	for key, value := range d.store.CopiedSettings(status.CopiedFrom()) {
 		values[key] = value
 	}
 	return values

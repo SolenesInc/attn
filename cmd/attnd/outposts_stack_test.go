@@ -109,7 +109,7 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 	q := enableOutposts(t, second)
 	q.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "taken", Destination: address})
 	taken := outpostState(q, "taken", protocol.OutpostStateRefused)
-	for _, word := range []string{"paired to home", protocol.Deref(p.Initial.DaemonInstanceID), protocol.Deref(q.Initial.DaemonInstanceID), "attn enrollment leave"} {
+	for _, word := range []string{"paired to home", homeID(t, home), homeID(t, second), "attn enrollment leave"} {
 		if !strings.Contains(protocol.Deref(taken.LastError), word) {
 			t.Fatalf("refusal omits %q: %+v", word, taken)
 		}
@@ -119,7 +119,7 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 	}
 	q.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: taken.ID})
 	testworld.Await[protocol.OutpostsUpdatedMessage](q, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
-	requireStdout(t, remote.Attn("enrollment", "status"), "enrolled to "+protocol.Deref(p.Initial.DaemonInstanceID))
+	requireStdout(t, remote.Attn("enrollment", "status"), "enrolled to ", homeID(t, home))
 	p.TypeLine(shell, "echo $$ > "+pidPath+"; echo after-$((2+2))")
 	p.AwaitScreen(shell, "after-4")
 	after, err := os.ReadFile(pidPath)
@@ -337,7 +337,7 @@ func TestOutpostsAddressAliasDoesNotReplaceTheWorkingBridge(t *testing.T) {
 	testworld.AwaitSince[protocol.OutpostsUpdatedMessage](p, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		return len(m.Outposts) == 1 && m.Outposts[0].ID == first.ID
 	})
-	requireStdout(t, remote.Attn("enrollment", "status"), protocol.Deref(p.Initial.DaemonInstanceID))
+	requireStdout(t, remote.Attn("enrollment", "status"), homeID(t, home))
 	p.TypeLine(shell, "echo alias-survived-$alias_token")
 	p.AwaitScreen(shell, "alias-survived-kept")
 	for _, row := range home.App().Initial.Outposts {
