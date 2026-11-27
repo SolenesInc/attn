@@ -1,9 +1,14 @@
 //! The panel beside the question in the full-screen Asks: the seeds, markdown files and, on
-//! macOS, web pages an ask names, each in a tab, read without leaving the ask.
+//! macOS, web pages an ask names, read without leaving the ask, and the terminals its commands
+//! open, each in a tab.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use attn_protocol::{TileDocumentReadMessage, TileDocumentReadResultMessage};
+use attn_client::Facts;
+use attn_protocol::{
+    DesktopShowSessionMessage, SessionPlacement, SpawnSessionMessage, TerminalBinding,
+    TileDocumentReadMessage, TileDocumentReadResultMessage, UnregisterMessage,
+};
 use attn_ui::blocks::{Inline, Prose, Sheet};
 use attn_ui::system::{Button, IconSize, Look, Size, icon_button};
 use attn_ui::{Tokens, glyph};
@@ -24,6 +29,8 @@ pub(crate) enum Reference {
     },
     /// An http or https page, shown in the panel's own web page.
     Web(String),
+    /// A shell the ask holds, by its session.
+    Terminal(String),
 }
 
 /// One ask's panel: its tabs in the order they opened, and the one it shows.
@@ -31,6 +38,16 @@ pub(crate) enum Reference {
 pub(crate) struct Panel {
     pub(crate) tabs: Vec<Reference>,
     pub(crate) shown: usize,
+    /// The terminal it shows holds the keyboard, until the Asks chord hands it back.
+    pub(crate) keys: bool,
+    /// The shell each of the ask's commands opened, by the command's place among them.
+    commands: HashMap<usize, String>,
+}
+
+/// A shell spawned into an ask that no binding shows yet.
+enum Spawn {
+    Starting,
+    Refused(String),
 }
 
 /// A markdown file's text as its machine last answered.
@@ -46,6 +63,9 @@ pub(crate) struct Panels {
     by_ask: HashMap<String, Panel>,
     reads: HashMap<(Option<String>, String), Read>,
     answers: u64,
+    spawns: HashMap<String, Spawn>,
+    /// The shells closed or moved out of their ask's panel, until no ask holds them.
+    let_go: HashSet<String>,
 }
 
 impl Panels {
@@ -53,10 +73,55 @@ impl Panels {
         self.by_ask.get(ask).filter(|p| !p.tabs.is_empty())
     }
 
-    /// Forgets the panels of asks no longer listed, and what no tab reads any more.
-    pub(crate) fn keep(&mut self, listed: &[String]) {
+    /// Forgets the panels of asks no longer listed, and what no tab reads any more, and keeps a
+    /// tab for each shell a listed ask holds, so a restarted app shows them again.
+    pub(crate) fn keep(&mut self, listed: &[String], held: &[TerminalBinding]) {
         self.by_ask.retain(|ask, _| listed.contains(ask));
+        self.follow_terminals(listed, held);
         self.forget_unread();
+    }
+
+    fn follow_terminals(&mut self, listed: &[String], held: &[TerminalBinding]) {
+        let Panels {
+            by_ask,
+            spawns,
+            let_go,
+            ..
+        } = self;
+        let_go.retain(|session| held.iter().any(|b| b.session_id == *session));
+        for binding in held {
+            let Some(ask) = binding.ask_id.as_ref().filter(|ask| listed.contains(ask)) else {
+                continue;
+            };
+            spawns.remove(&binding.session_id);
+            if let_go.contains(&binding.session_id) {
+                continue;
+            }
+            let panel = by_ask.entry(ask.clone()).or_default();
+            let tab = Reference::Terminal(binding.session_id.clone());
+            if !panel.tabs.contains(&tab) {
+                panel.tabs.push(tab);
+            }
+        }
+        for (ask, panel) in by_ask.iter_mut() {
+            let holds = |session: &String| {
+                held.iter()
+                    .any(|b| b.session_id == *session && b.ask_id.as_ref() == Some(ask))
+            };
+            let shown = panel.shown().cloned();
+            panel.tabs.retain(|tab| match tab {
+                Reference::Terminal(session) => {
+                    !let_go.contains(session) && (holds(session) || spawns.contains_key(session))
+                }
+                Reference::Seed(_) | Reference::Markdown { .. } | Reference::Web(_) => true,
+            });
+            panel.shown = shown
+                .and_then(|shown| panel.tabs.iter().position(|tab| *tab == shown))
+                .unwrap_or_else(|| panel.shown.min(panel.tabs.len().saturating_sub(1)));
+            let tabs = &panel.tabs;
+            (panel.commands)
+                .retain(|_, session| tabs.contains(&Reference::Terminal(session.clone())));
+        }
     }
 
     fn forget_unread(&mut self) {
@@ -64,7 +129,7 @@ impl Panels {
             .flat_map(|p| p.tabs.iter())
             .filter_map(|tab| match tab {
                 Reference::Markdown { host, path } => Some((host.clone(), path.clone())),
-                Reference::Seed(_) | Reference::Web(_) => None,
+                Reference::Seed(_) | Reference::Web(_) | Reference::Terminal(_) => None,
             })
             .collect();
         self.reads.retain(|file, _| read.contains(file));
@@ -88,7 +153,7 @@ pub(crate) fn shown_seed(state: &State) -> Option<String> {
     let panels = &state.window.asks.panels;
     match panels.of(&shown_ask(state)?)?.shown()? {
         Reference::Seed(id) => Some(id.clone()),
-        Reference::Markdown { .. } | Reference::Web(_) => None,
+        Reference::Markdown { .. } | Reference::Web(_) | Reference::Terminal(_) => None,
     }
 }
 
@@ -115,7 +180,7 @@ pub(crate) fn shown_web(state: &State) -> Option<String> {
     let panels = &state.window.asks.panels;
     match panels.of(&shown_ask(state)?)?.shown()? {
         Reference::Web(url) => Some(url.clone()),
-        Reference::Seed(_) | Reference::Markdown { .. } => None,
+        Reference::Seed(_) | Reference::Markdown { .. } | Reference::Terminal(_) => None,
     }
 }
 
@@ -148,8 +213,180 @@ pub(crate) fn open(state: &mut State, reference: Reference, tx: &mut Tx) {
     match reference {
         Reference::Markdown { host, path } => read(state, host, path, tx),
         Reference::Seed(_) => crate::garden::follow(state, tx),
-        Reference::Web(_) => {}
+        Reference::Web(_) | Reference::Terminal(_) => {}
     }
+}
+
+/// The terminal that runs shell `session`, by the binding its ask holds it with.
+fn runtime_of<'f>(facts: &'f Facts, session: &str) -> Option<&'f str> {
+    (facts.ask_terminals.iter())
+        .find(|b| b.session_id == session)
+        .map(|b| b.terminal_id.as_str())
+}
+
+/// Opens command `n` of ask `ask_id` in a terminal the ask holds, on the machine and in the
+/// folder the command names, with its text typed and not run, and gives that terminal the
+/// keyboard. A command it already opened shows its terminal again.
+pub(crate) fn open_command(state: &mut State, ask_id: &str, n: usize, tx: &mut Tx) {
+    let Some(ask) = state.facts.asks.iter().find(|a| a.id == ask_id) else {
+        return;
+    };
+    let Some(command) = super::commands::of(ask).into_iter().nth(n) else {
+        return;
+    };
+    let profile_id = state.facts.profiles.selected.clone();
+    let panels = &mut state.window.asks.panels;
+    let panel = panels.by_ask.entry(ask_id.to_owned()).or_default();
+    let opened = (panel.commands.get(&n))
+        .map(|session| Reference::Terminal(session.clone()))
+        .and_then(|tab| panel.tabs.iter().position(|t| *t == tab));
+    panel.keys = true;
+    tx.focus(TERMINAL, false);
+    if let Some(at) = opened {
+        panel.shown = at;
+        return;
+    }
+    let session = uuid::Uuid::new_v4().to_string();
+    panel.commands.insert(n, session.clone());
+    panel.tabs.push(Reference::Terminal(session.clone()));
+    panel.shown = panel.tabs.len() - 1;
+    panels.spawns.insert(session.clone(), Spawn::Starting);
+    let spawn = SpawnSessionMessage {
+        id: session.clone(),
+        agent: "shell".into(),
+        host: command.host,
+        cwd: command.cwd,
+        typed: Some(command.text),
+        placement: Some(SessionPlacement {
+            ask_id: Some(ask_id.to_owned()),
+            ..SessionPlacement::default()
+        }),
+        cols: 80,
+        rows: 24,
+        profile_id,
+        ..SpawnSessionMessage::new()
+    };
+    state.ask_as(
+        session.clone(),
+        &spawn,
+        move |state: &mut State, answer, _: &mut Tx| {
+            if let Err(why) = answer.outcome() {
+                (state.window.asks.panels.spawns).insert(session, Spawn::Refused(why));
+            }
+        },
+        tx,
+    );
+}
+
+/// The terminal the panel of the ask on screen shows while it holds the keyboard.
+pub(crate) fn keys_terminal(state: &State) -> Option<String> {
+    let panel = state.window.asks.panels.of(&shown_ask(state)?)?;
+    let Reference::Terminal(session) = panel.shown().filter(|_| panel.keys)? else {
+        return None;
+    };
+    runtime_of(&state.facts, session).map(str::to_owned)
+}
+
+/// Gives the keyboard to the terminal the panel shows, as a press in it does.
+fn take_keys(state: &mut State, tx: &mut Tx) {
+    let Some(ask) = shown_ask(state) else {
+        return;
+    };
+    if let Some(panel) = state.window.asks.panels.by_ask.get_mut(&ask) {
+        panel.keys = true;
+        tx.focus(TERMINAL, false);
+    }
+}
+
+/// The person moved the keyboard into the question, so the panel's terminal no longer holds it.
+pub(crate) fn let_keys_go(state: &mut State) {
+    let Some(ask) = shown_ask(state) else {
+        return;
+    };
+    if let Some(panel) = state.window.asks.panels.by_ask.get_mut(&ask) {
+        panel.keys = false;
+    }
+}
+
+/// The panel's terminal gives the keyboard back to the question; false when it did not hold it.
+pub(crate) fn hand_back(state: &mut State, tx: &mut Tx) -> bool {
+    let Some(ask) = shown_ask(state) else {
+        return false;
+    };
+    let Some(panel) = state.window.asks.panels.by_ask.get_mut(&ask) else {
+        return false;
+    };
+    if !std::mem::take(&mut panel.keys) {
+        return false;
+    }
+    state.window.asks.take_keyboard = true;
+    super::follow(state, tx);
+    true
+}
+
+/// The terminals every listed ask holds, which the window keeps attached while Asks is open.
+pub(crate) fn drawn_terminals<'f>(
+    state: &State,
+    facts: &'f Facts,
+) -> Vec<crate::terminal::Drawn<'f>> {
+    if !super::is_open(state) {
+        return Vec::new();
+    }
+    (facts.ask_terminals.iter())
+        .map(|b| crate::terminal::Drawn {
+            runtime: &b.terminal_id,
+            session: &b.session_id,
+            kind: "shell",
+        })
+        .collect()
+}
+
+/// Whether a command still runs in a terminal `ask` holds, which sending the answer stops.
+pub(crate) fn runs_command(state: &State, ask: &str) -> bool {
+    (state.facts.ask_terminals.iter())
+        .filter(|b| b.ask_id.as_deref() == Some(ask))
+        .any(|b| state.terminals.runs_command(&b.terminal_id))
+}
+
+/// Lets go of the shell the panel of the ask on screen shows, so its tab goes at once: the
+/// ask's binding to it ends once the daemon closes it or a tile takes it.
+fn let_go_shown(state: &mut State) -> Option<String> {
+    let ask = shown_ask(state)?;
+    let panels = &mut state.window.asks.panels;
+    let panel = panels.by_ask.get_mut(&ask)?;
+    let Some(Reference::Terminal(session)) = panel.shown().cloned() else {
+        return None;
+    };
+    panel.tabs.remove(panel.shown);
+    panel.shown = panel.shown.min(panel.tabs.len().saturating_sub(1));
+    panels.spawns.remove(&session);
+    panels.let_go.insert(session.clone());
+    Some(session)
+}
+
+/// Moves the shell the panel shows to a tile beside the asking agent's, or on the current
+/// desktop, where it outlives the ask.
+pub(crate) fn move_to_desktop(state: &mut State, tx: &mut Tx) {
+    let Some(session) = let_go_shown(state) else {
+        return;
+    };
+    let session_id = session.clone();
+    state.ask(
+        |request_id| DesktopShowSessionMessage {
+            request_id,
+            session_id,
+            ..DesktopShowSessionMessage::new()
+        },
+        move |state: &mut State, answer, tx: &mut Tx| {
+            if let Err(why) = answer.outcome() {
+                state.window.asks.panels.let_go.remove(&session);
+                state
+                    .window
+                    .notify(format!("Could not move that terminal: {why}"), tx);
+            }
+        },
+        tx,
+    );
 }
 
 /// Opens seed `id` in the panel, as a link to it in the panel's own pages does.
@@ -211,17 +448,33 @@ pub(crate) fn step(state: &mut State, by: isize, tx: &mut Tx) -> bool {
         return false;
     }
     panel.shown = (panel.shown as isize + by).rem_euclid(count) as usize;
-    if let Some(Reference::Markdown { host, path }) = panel.shown().cloned() {
-        read(state, host, path, tx);
-    } else {
-        crate::garden::follow(state, tx);
+    match panel.shown().cloned() {
+        Some(Reference::Markdown { host, path }) => read(state, host, path, tx),
+        Some(Reference::Terminal(_)) => {}
+        _ => crate::garden::follow(state, tx),
     }
     true
 }
 
-/// Closes the tab the panel of the ask on screen shows, showing the one after it; false when
-/// it has none.
+/// Closes the tab the panel of the ask on screen shows, showing the one after it, and ends the
+/// shell a terminal tab shows; false when it has none.
 pub(crate) fn close_tab(state: &mut State, tx: &mut Tx) -> bool {
+    if let Some(session) = let_go_shown(state) {
+        if state
+            .daemon
+            .send(&UnregisterMessage {
+                id: session,
+                ..UnregisterMessage::new()
+            })
+            .is_err()
+        {
+            state.window.notify(
+                "Could not end that terminal: not connected to the daemon".into(),
+                tx,
+            );
+        }
+        return true;
+    }
     let Some(ask) = shown_ask(state) else {
         return false;
     };
@@ -245,7 +498,7 @@ fn tab_key(at: usize) -> String {
 }
 
 /// The panel of `ask`, or none while it has no tab open.
-pub(crate) fn view(state: &State, ask: &str, t: &Tokens) -> Option<El> {
+pub(crate) fn view(state: &State, ask: &str, scale: f32, t: &Tokens) -> Option<El> {
     let panel = state.window.asks.panels.of(ask)?;
     let shown = panel.shown()?;
     let machines = crate::machine::Machines::of(&state.facts);
@@ -280,6 +533,22 @@ pub(crate) fn view(state: &State, ask: &str, t: &Tokens) -> Option<El> {
     .build(t);
     let sheet = Sheet::new(PANEL, "References").head(tabs).close(close);
     let sheet = match shown {
+        Reference::Terminal(session) => match runtime_of(&state.facts, session) {
+            Some(runtime) => sheet.fill(terminal(state, (runtime, session), panel.keys, scale, t)),
+            None => {
+                let said = match state.window.asks.panels.spawns.get(session) {
+                    Some(Spawn::Refused(why)) => format!("Could not open the terminal: {why}"),
+                    Some(Spawn::Starting) | None => "Starting a shell…".to_owned(),
+                };
+                sheet.fill(
+                    col()
+                        .w_full()
+                        .grow(1.0)
+                        .min_h(0.0)
+                        .child(holding_keys(Prose::empty("asks.panel.note", said).el(t))),
+                )
+            }
+        },
         Reference::Seed(id) => sheet.fill(crate::garden::panel_body(
             id,
             &crate::garden::TileReads::of(state),
@@ -326,6 +595,83 @@ pub(crate) fn view(state: &State, ask: &str, t: &Tokens) -> Option<El> {
     )
 }
 
+/// The shell `session` runs in `runtime`, drawn in the panel, its only view, with the way out to
+/// a desktop under it.
+fn terminal(
+    state: &State,
+    (runtime, session): (&str, &str),
+    keys: bool,
+    scale: f32,
+    t: &Tokens,
+) -> El {
+    let place = (state.facts.sessions.iter())
+        .find(|s| s.id == session)
+        .map(|s| {
+            let machines = crate::machine::Machines::of(&state.facts);
+            format!(
+                "{} · {}",
+                machines.name(s.host.as_deref().filter(|h| !h.is_empty())),
+                s.directory
+            )
+        })
+        .unwrap_or_default();
+    let bar = Inline::loose()
+        .key("asks.panel.terminal.bar")
+        .w_full()
+        .child(
+            attn_ui::system::words(place, attn_ui::system::Type::Mono, t.text_tertiary)
+                .key("asks.panel.terminal.place")
+                .min_w(0.0)
+                .shrink()
+                .truncate(),
+        )
+        .child(El::from(
+            Button::new("Move to desktop")
+                .size(Size::Compact)
+                .look(Look::Quiet)
+                .on_press_tx(move_to_desktop)
+                .build(t)
+                .key(MOVE),
+        ));
+    col()
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .child(
+            holding_keys(crate::desktop::ask_terminal(
+                state,
+                (runtime, session),
+                keys,
+                scale,
+                t,
+            ))
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0),
+        )
+        .child(bar)
+}
+
+/// The element that holds the keyboard for the panel's terminal. The Asks sheet keeps focus
+/// inside itself, so the shell takes the keyboard by being focused, from its first frame on.
+fn holding_keys(shown: El) -> El {
+    col()
+        .key(TERMINAL)
+        .role("group")
+        .label("Terminal")
+        .focusable(true)
+        .no_focus_ring()
+        .on_key(|state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx| {
+            crate::keys::on_key(state, ev, tx) || !matches!(ev.key, rune::Key::Modifier { .. })
+        })
+        .on_press_within(take_keys)
+        .child(shown)
+}
+
+pub(crate) const TERMINAL: &str = "asks.panel.terminal";
+
+pub(crate) const MOVE: &str = "asks.panel.move";
+
 fn show_tab(state: &mut State, at: usize, tx: &mut Tx) {
     let Some(ask) = shown_ask(state) else {
         return;
@@ -349,6 +695,21 @@ fn tab_name(state: &State, machines: &crate::machine::Machines, tab: &Reference)
             })
             .filter(|title| !title.is_empty())
             .unwrap_or_else(|| id.clone()),
+        Reference::Terminal(session) => (state.facts.sessions.iter())
+            .find(|s| s.id == *session)
+            .map(|s| {
+                let folder = s.directory.trim_end_matches('/');
+                let folder = folder
+                    .rsplit('/')
+                    .next()
+                    .filter(|f| !f.is_empty())
+                    .unwrap_or("/");
+                match machines.away(s.host.as_deref().filter(|h| !h.is_empty())) {
+                    Some(machine) => format!("{folder} · {machine}"),
+                    None => folder.to_owned(),
+                }
+            })
+            .unwrap_or_else(|| "Terminal".to_owned()),
         Reference::Markdown { host, path } => {
             let name = path.rsplit('/').next().unwrap_or(path).to_owned();
             match machines.away(host.as_deref()) {

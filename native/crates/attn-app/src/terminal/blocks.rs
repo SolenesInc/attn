@@ -34,12 +34,22 @@ pub(crate) enum Part {
 }
 
 impl Terminals {
+    /// Whether a command the shell in terminal `id` started is still running.
+    pub(crate) fn runs_command(&self, id: &str) -> bool {
+        (self.panes.get(id))
+            .and_then(|term| term.blocks.pending())
+            .is_some_and(|block| block.output.is_some())
+    }
+
     /// Takes the command steps the shell reported in the output just written.
     pub(super) fn read_prompts(term: &mut Term) {
+        let running = |term: &Term| term.blocks.pending().is_some_and(|b| b.output.is_some());
+        let was = running(term);
         for event in term.vt.take_prompt_events() {
             let vt = &mut term.vt;
             term.blocks.apply(event.step, event.at, |at| again(vt, at));
         }
+        term.command_changed |= was != running(term);
     }
 
     /// The blocks the daemon kept for a restored screen, on the screen's rows, in place of any

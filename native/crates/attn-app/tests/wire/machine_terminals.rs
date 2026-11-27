@@ -322,6 +322,29 @@ fn when_the_home_is_lost_this_machines_terminals_stay_live_and_the_homes_wait() 
 }
 
 #[test]
+fn before_the_home_answers_the_cold_row_leaves_out_a_shell_an_ask_holds() {
+    let mut here = laptop_state(
+        vec![shell("here", None), shell("asked", None)],
+        &[("here", "rl")],
+    );
+    here.terminal_bindings
+        .get_or_insert_default()
+        .push(TerminalBinding {
+            ask_id: Some("a-1".into()),
+            session_id: "asked".into(),
+            terminal_id: "ra".into(),
+        });
+    let (world, _answering, _dir) = start_cold(home_state(), here);
+    assert_eq!(tiles(&world, "rl"), 1, "{}", world.screen());
+    assert_eq!(
+        tiles(&world, "ra"),
+        0,
+        "an ask holds that shell, not a tile\n{}",
+        world.screen()
+    );
+}
+
+#[test]
 fn before_the_home_answers_this_machines_terminals_are_live_in_one_row_the_home_replaces() {
     let (mut world, answering, _dir) = start_cold(
         home_state(),

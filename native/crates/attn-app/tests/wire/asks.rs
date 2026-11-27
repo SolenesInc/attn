@@ -172,7 +172,11 @@ fn start_with(asks: Vec<Ask>, sessions: Vec<Session>, settings: &[(&str, &str)])
     start_on(one_desktop(sessions), asks, settings)
 }
 
-fn start_on(mut state: InitialStateMessage, asks: Vec<Ask>, settings: &[(&str, &str)]) -> World {
+pub(super) fn start_on(
+    mut state: InitialStateMessage,
+    asks: Vec<Ask>,
+    settings: &[(&str, &str)],
+) -> World {
     state.asks = Some(asks);
     state.settings = Some(
         settings
@@ -219,7 +223,7 @@ fn focused(world: &World) -> Option<String> {
     world.screen().focused().and_then(|n| n.key)
 }
 
-fn letter(world: &mut World, c: &str) {
+pub(super) fn letter(world: &mut World, c: &str) {
     let c = c.to_owned();
     world.gesture(|app| {
         app.key(KeyEvent {
@@ -242,7 +246,7 @@ fn send_key(world: &mut World) {
     world.gesture(|app| app.press("mod+enter"));
 }
 
-fn click(world: &mut World, key: &str) {
+pub(super) fn click(world: &mut World, key: &str) {
     let key = key.to_owned();
     world.gesture(|app| app.click(Target::key(key)));
 }
@@ -298,7 +302,7 @@ pub(super) fn has(world: &World, key: &str) -> bool {
     world.screen().find(Target::key(key)).is_some()
 }
 
-fn name(world: &World, key: &str) -> String {
+pub(super) fn name(world: &World, key: &str) -> String {
     world
         .screen()
         .get(Target::key(key))

@@ -97,7 +97,7 @@ pub(crate) fn view(mut facts: Facts, last: &LastProfile) -> Facts {
             let binding = machine
                 .terminals
                 .iter()
-                .find(|b| b.session_id == session.id)?;
+                .find(|b| b.session_id == session.id && b.ask_id.is_none())?;
             Some(DesktopPane {
                 desktop_id: ROW.to_owned(),
                 kind: if session.agent == "shell" {

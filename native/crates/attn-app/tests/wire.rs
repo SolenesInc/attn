@@ -152,6 +152,7 @@ mod wire {
     mod app_actions;
     mod ask_drafts;
     mod ask_files;
+    mod ask_terminals;
     mod asks;
     mod automation;
     mod automations;

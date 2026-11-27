@@ -32,6 +32,7 @@ mod terminal_menu;
 mod tile_look;
 pub(crate) mod usage;
 mod view;
+pub(crate) use view::ask_terminal;
 mod windows;
 
 use std::collections::HashMap;
@@ -547,13 +548,19 @@ pub(crate) fn drawn_terminals<'f>(
         .collect()
 }
 
-/// Every terminal a desktop holds, drawn in this window or not.
+/// Every terminal a desktop or an ask holds, drawn in this window or not.
 pub(crate) fn held_terminals(facts: &Facts) -> impl Iterator<Item = crate::terminal::Drawn<'_>> {
+    let in_asks = facts.ask_terminals.iter().map(|b| crate::terminal::Drawn {
+        runtime: &b.terminal_id,
+        session: &b.session_id,
+        kind: "shell",
+    });
     facts
         .desktops
         .iter()
         .flat_map(|desktop| desktop.panes.iter())
         .map(drawn)
+        .chain(in_asks)
 }
 
 fn drawn(pane: &attn_protocol::DesktopPane) -> crate::terminal::Drawn<'_> {

@@ -107,6 +107,8 @@ pub struct Facts {
     pub garden: Arc<Garden>,
     /// The selected profile's open asks, then the ones answered in the last day.
     pub asks: Arc<Vec<Ask>>,
+    /// The terminals those asks hold in place of a pane, as the home last bound them.
+    pub ask_terminals: Arc<Vec<TerminalBinding>>,
     /// What the daemon warned of at the last handshake, such as terminals it could not
     /// recover.
     pub warnings: Arc<Vec<DaemonWarning>>,
@@ -635,6 +637,27 @@ impl Store {
         self.change_machine(|machine| machine.update_run = Some(Arc::new(run)));
     }
 
+    pub(crate) fn set_ask_terminals(&self, bindings: Vec<TerminalBinding>) {
+        let held = held_by_asks(bindings);
+        self.change(|facts| {
+            let same = |a: &TerminalBinding, b: &TerminalBinding| {
+                (&a.terminal_id, &a.session_id, &a.ask_id)
+                    == (&b.terminal_id, &b.session_id, &b.ask_id)
+            };
+            if facts.ask_terminals.len() == held.len()
+                && facts
+                    .ask_terminals
+                    .iter()
+                    .zip(&held)
+                    .all(|(a, b)| same(a, b))
+            {
+                return Slices::NONE;
+            }
+            facts.ask_terminals = Arc::new(held);
+            Slices::ASKS
+        });
+    }
+
     pub(crate) fn set_machine_terminals(&self, terminals: Vec<TerminalBinding>) {
         self.change_machine(|machine| machine.terminals = Arc::new(terminals));
     }
@@ -698,6 +721,8 @@ impl Store {
                 full_push: facts.garden.full_push + 1,
             });
             facts.asks = Arc::new(state.asks.unwrap_or_default());
+            facts.ask_terminals =
+                Arc::new(held_by_asks(state.terminal_bindings.unwrap_or_default()));
             facts.warnings = Arc::new(state.warnings.unwrap_or_default());
             facts.vents = Arc::new(state.vents.unwrap_or_default());
             facts.update_run = Arc::new(state.update_run);
@@ -1091,6 +1116,7 @@ impl Store {
             if profiles.selected != profile.id {
                 profiles.selected = profile.id.clone();
                 facts.asks = Arc::default();
+                facts.ask_terminals = Arc::default();
                 facts.vents = Arc::default();
                 changed |= Slices::ASKS | Slices::VENTS;
             }
@@ -1203,4 +1229,11 @@ fn holds_tile(desktops: &[Desktop], key: &TileKey) -> bool {
         .find(|d| d.id == key.desktop)
         .and_then(Desktop::tree)
         .is_some_and(|tree| tree.has_leaf(&key.tile))
+}
+
+fn held_by_asks(bindings: Vec<TerminalBinding>) -> Vec<TerminalBinding> {
+    bindings
+        .into_iter()
+        .filter(|b| b.ask_id.is_some())
+        .collect()
 }

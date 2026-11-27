@@ -288,6 +288,8 @@ struct Term {
     pointer: Pointer,
     view: selection::View,
     blocks: blocks::TermBlocks,
+    /// A command started or ended since the window last drained.
+    command_changed: bool,
     placements: attn_term::kitty::Placements,
     /// How far back the view was scrolled when the window last drew it.
     scrolled_back: u32,
@@ -480,6 +482,7 @@ impl Term {
             pointer: Pointer::default(),
             view: selection::View::default(),
             blocks: Default::default(),
+            command_changed: false,
             placements: Default::default(),
             scrolled_back: 0,
             synchronizing_since: None,
@@ -897,8 +900,9 @@ impl Terminals {
     }
 
     /// Takes what the link heard since the last frame, `typing` being the terminal keys type
-    /// into. Output changes nothing in the view beyond an open find bar's count: true when that
-    /// count changed, or a snapshot arrived.
+    /// into. Output changes nothing in the view beyond an open find bar's count and whether a
+    /// command runs: true when that count changed, a command started or ended, or a snapshot
+    /// arrived.
     pub(crate) fn drain(&mut self, typing: Option<&str>, tx: &mut Tx) -> bool {
         let events = self.inbox.take();
         let heard = !events.is_empty();
@@ -939,7 +943,10 @@ impl Terminals {
             }
         }
         self.speak_quiet_output(typing, tx);
-        recounted | pictured
+        let commands_changed = (self.panes.values_mut()).fold(false, |changed, term| {
+            std::mem::take(&mut term.command_changed) | changed
+        });
+        recounted | pictured | commands_changed
     }
 
     /// Whether the window takes `event`, which came from link `from`: a terminal's stream comes

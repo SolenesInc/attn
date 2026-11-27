@@ -13,6 +13,7 @@ use attn_ui::{Frame, Tokens, glyph};
 use rune::{El, Image, Key, KeyEvent, Side, SurfaceFit, Tx, col, row};
 use rune_kit::{Markdown, TextArea, TextInput};
 
+use super::commands::Piece;
 use super::inline::Line;
 use super::{Chip, Item, Kind, Lists, Stop, attach, mentions, questions};
 use crate::State;
@@ -111,7 +112,7 @@ fn send_chord() -> &'static str {
 
 /// The sheet over the window: the rail of the asks it lists beside the one it shows, with the
 /// questions to answer.
-pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
+pub(crate) fn sheet(state: &State, t: &Tokens, scale: f32) -> El {
     let lists = Lists::of(&state.facts, state.window.now_ms);
     let live = lists.live.len();
     let replied = lists.replied.len();
@@ -146,7 +147,7 @@ pub(crate) fn sheet(state: &State, t: &Tokens) -> El {
     );
     let beside_panel = shown
         .as_deref()
-        .and_then(|id| super::panel::view(state, id, t));
+        .and_then(|id| super::panel::view(state, id, scale, t));
     let beside = match beside_panel {
         Some(_) => wide >= RAIL_W + QUESTION_W + PANEL_LEAST,
         None => wide >= BESIDE_LEAST,
@@ -495,6 +496,93 @@ impl<'a> Prose<'a> {
     }
 }
 
+/// Part `at` of `ask`, its markdown `source`, with each command it offers drawn above the way
+/// to open it and the machine and folder it runs in; `commands` counts the ask's commands so far.
+fn pieces(
+    state: &State,
+    ask: &Ask,
+    at: usize,
+    source: &str,
+    prose: &Prose<'_>,
+    commands: &mut usize,
+) -> Vec<El> {
+    let machines = crate::machine::Machines::of(&state.facts);
+    let t = prose.t;
+    let place = |i: usize| match i {
+        0 => format!("asks.part.{at}"),
+        i => format!("asks.part.{at}.{i}"),
+    };
+    (super::commands::pieces(ask, source).into_iter().enumerate())
+        .map(|(i, piece)| match piece {
+            Piece::Prose(text) => prose.markdown(&place(i), text),
+            Piece::Command(command, block) => {
+                let n = *commands;
+                *commands += 1;
+                let bar = command_bar(ask, n, &command, &machines, t);
+                let bar = match prose.measure {
+                    Some(points) => bar.w_full().max_w(points).self_center(),
+                    None => bar,
+                };
+                col()
+                    .key(command_key(n))
+                    .role("group")
+                    .label("Command")
+                    .w_full()
+                    .child(prose.markdown(&place(i), block))
+                    .child(bar)
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn command_key(n: usize) -> String {
+    format!("asks.command.{n}")
+}
+
+pub(crate) fn open_command_key(n: usize) -> String {
+    format!("asks.command.{n}.open")
+}
+
+/// Under command `n` of `ask`: Open in terminal while the ask is open, and where it runs.
+fn command_bar(
+    ask: &Ask,
+    n: usize,
+    command: &super::commands::Command,
+    machines: &crate::machine::Machines<'_>,
+    t: &Tokens,
+) -> El {
+    let place = format!(
+        "{} · {}",
+        machines.name(command.host.as_deref()),
+        command.cwd
+    );
+    let open = ask.reply.is_none().then(|| {
+        let id = ask.id.clone();
+        let button = Button::new("Open in terminal")
+            .size(Size::Compact)
+            .look(Look::Quiet)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                super::panel::open_command(state, &id, n, tx)
+            });
+        let button = match n {
+            0 => button.trailing(keycaps(["t"], t)),
+            _ => button,
+        };
+        El::from(button.build(t).key(open_command_key(n)))
+    });
+    Inline::loose()
+        .key(format!("asks.command.{n}.bar"))
+        .children(open)
+        .child(
+            words(place.clone(), Type::Mono, t.text_tertiary)
+                .key(format!("asks.command.{n}.place"))
+                .label(place)
+                .min_w(0.0)
+                .shrink()
+                .truncate(),
+        )
+}
+
 /// The files the ask's links name, on the machines the daemon placed them on.
 fn placed_files(machines: &crate::machine::Machines, ask: &Ask) -> Vec<links::Placed> {
     ask.references
@@ -677,6 +765,7 @@ fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> 
     let draft = state.window.asks.drafts.get(&ask.id);
     let reply_answers = ask.reply.as_ref().map(|r| r.answers.as_slice());
     let mut index = 0;
+    let mut commands = 0;
     for (at, part) in ask.parts.iter().enumerate() {
         blocks.push(match &part.question {
             Some(question) => {
@@ -716,9 +805,13 @@ fn article(state: &State, item: &Item<'_>, measure: Option<f32>, t: &Tokens) -> 
                             None => said,
                         }
                     }))
-                    .child(prose.markdown(
-                        &format!("asks.part.{at}"),
+                    .children(pieces(
+                        state,
+                        ask,
+                        at,
                         part.markdown.as_deref().unwrap_or_default(),
+                        &prose,
+                        &mut commands,
                     )),
             )
             .wide(),
@@ -1607,12 +1700,13 @@ fn footer(state: &State, item: &Item<'_>, several: bool, t: &Tokens) -> Block {
                 .get(&ask.id)
                 .is_some_and(|d| d.sends_after_upload.is_some());
             let sendable = sendable && !waiting;
-            let said = if sending || waiting {
-                "Sending…"
-            } else if item.to_chief {
-                "Send to Chief"
-            } else {
-                "Send"
+            let stops = super::panel::runs_command(state, &ask.id);
+            let said = match (sending || waiting, item.to_chief, stops) {
+                (true, ..) => "Sending…",
+                (false, true, false) => "Send to Chief",
+                (false, true, true) => "Send to Chief and stop",
+                (false, false, false) => "Send",
+                (false, false, true) => "Send and stop",
             };
             El::from(
                 Button::new(said)
@@ -1773,9 +1867,11 @@ fn toggle_replied(state: &mut State, tx: &mut Tx) {
 /// The sheet's keys while it or a control in it holds focus: ⌘↩ sends from anywhere in it;
 /// the arrows and the letters act only outside a text field.
 fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if super::panel::keys_terminal(state).is_some() {
+        return false;
+    }
     let m = ev.mods;
-    if ev.key == Key::Enter && (m.cmd || m.ctrl) {
-        super::send(state, tx);
+    if panel_key(state, ev, tx) {
         return true;
     }
     if ev.key == Key::Escape {
@@ -1784,20 +1880,6 @@ fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
     if ev.key == Key::Tab && !(m.cmd || m.ctrl || m.alt) {
         return super::tab(state, if m.shift { -1 } else { 1 }, tx);
-    }
-    let pressed = |spec: &str| {
-        rune::Chord::parse(spec)
-            .into_iter()
-            .any(|chord| chord.matches_tx_on(ev, tx, rune::Platform::current()))
-    };
-    if pressed(NEXT_TAB) {
-        return super::panel::step(state, 1, tx);
-    }
-    if pressed(PREVIOUS_TAB) {
-        return super::panel::step(state, -1, tx);
-    }
-    if pressed(close_tab_chord()) {
-        return super::panel::close_tab(state, tx);
     }
     if tx.in_text_field() || m.cmd || m.ctrl || m.alt {
         return false;
@@ -1846,9 +1928,37 @@ fn sheet_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             Some(seed) => super::panel::open_seed(state, &seed, tx),
             None => return false,
         },
+        "t" => match &ask {
+            Some(ask) if ask.reply.is_none() && !super::commands::of(ask).is_empty() => {
+                super::panel::open_command(state, &ask.id, 0, tx)
+            }
+            _ => return false,
+        },
         _ => return false,
     }
     true
+}
+
+/// The keys Asks takes wherever the keyboard is in it, its panel's terminal too: send, and
+/// the panel's tab chords.
+pub(crate) fn panel_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    let m = ev.mods;
+    if ev.key == Key::Enter && (m.cmd || m.ctrl) {
+        super::send(state, tx);
+        return true;
+    }
+    let pressed = |spec: &str| {
+        rune::Chord::parse(spec)
+            .into_iter()
+            .any(|chord| chord.matches_tx_on(ev, tx, rune::Platform::current()))
+    };
+    if pressed(NEXT_TAB) {
+        return super::panel::step(state, 1, tx);
+    }
+    if pressed(PREVIOUS_TAB) {
+        return super::panel::step(state, -1, tx);
+    }
+    pressed(close_tab_chord()) && super::panel::close_tab(state, tx)
 }
 
 /// The `?` an agent's row carries for its open asks, with their number past one.

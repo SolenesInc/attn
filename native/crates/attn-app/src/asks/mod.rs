@@ -1,4 +1,5 @@
 mod attach;
+pub(crate) mod commands;
 pub(crate) mod inline;
 mod mentions;
 pub(crate) mod motion;
@@ -20,7 +21,9 @@ use crate::shell::Layer;
 use crate::sidebar::queue;
 
 pub(crate) use saving::poll as save_drafts;
-pub(crate) use view::{ChipLevel, chip, chip_widths, marker, preview, sheet, title_button};
+pub(crate) use view::{
+    ChipLevel, chip, chip_widths, marker, panel_key, preview, sheet, title_button,
+};
 
 pub(crate) const SETTING: &str = "asks_enabled";
 pub(crate) const SHEET: &str = "asks.sheet";
@@ -149,6 +152,10 @@ pub(crate) fn paste_into_field(
 
 /// A file or image pasted while no field holds the keyboard attaches where attach_target says.
 pub(crate) fn paste_on_sheet(state: &mut State, content: &rune::ClipboardContent, tx: &mut Tx) {
+    if tx.focused() == Some(panel::TERMINAL) {
+        crate::keys::on_paste(state, content, tx);
+        return;
+    }
     paste(state, content, attach::Into::Sheet, tx);
 }
 
@@ -1079,7 +1086,8 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         .asks
         .follow_ups
         .retain(|id, _| listed.contains(id));
-    state.window.asks.panels.keep(&listed);
+    let held = state.facts.ask_terminals.clone();
+    state.window.asks.panels.keep(&listed, &held);
     saving::restore(state);
     motion::sync(state, tx);
     if !is_open(state) {

@@ -747,6 +747,11 @@ impl Task {
                 self.store.apply_initial_state(state);
                 None
             }
+            "terminal_bindings_updated" => {
+                let message: TerminalBindingsUpdatedMessage = parse(&header.event, text)?;
+                self.store.set_ask_terminals(message.terminal_bindings);
+                None
+            }
             "desktop_tile_content" => {
                 self.store.set_tile_content(parse(&header.event, text)?);
                 None

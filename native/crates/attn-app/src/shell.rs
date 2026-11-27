@@ -664,11 +664,17 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
     if !bands {
         return root;
     }
-    crate::markdown::with_image_preview(root, layers(state, &t), state, cx.is_reduced_motion(), &t)
-        .children(crate::hints::words_layers(state, &t))
-        .children(crate::markdown::annotating::layers(state, cx, &t))
-        .children(crate::markdown::sending::layers(state, cx, &t))
-        .children(crate::callouts::layers(state, cx, &t))
+    crate::markdown::with_image_preview(
+        root,
+        layers(state, &t, cx.env().scale),
+        state,
+        cx.is_reduced_motion(),
+        &t,
+    )
+    .children(crate::hints::words_layers(state, &t))
+    .children(crate::markdown::annotating::layers(state, cx, &t))
+    .children(crate::markdown::sending::layers(state, cx, &t))
+    .children(crate::callouts::layers(state, cx, &t))
 }
 
 /// The least height the bands leave the work under them: a tile's header, 41, and four
@@ -919,9 +925,9 @@ impl Window {
     }
 }
 
-fn layers(state: &State, t: &Tokens) -> Vec<El> {
+fn layers(state: &State, t: &Tokens, scale: f32) -> Vec<El> {
     let window = &state.window;
-    let mut layers = over_tiles(state, t);
+    let mut layers = over_tiles(state, t, scale);
     if let Some(leader) = &window.leader {
         layers.push(floating_status(
             "leader",
@@ -951,7 +957,12 @@ pub(crate) struct Covered {
 }
 
 pub(crate) fn covered(state: &State) -> Covered {
-    let layers = over_tiles(state, &crate::color_scheme(&state.facts.settings).dark.ui).len();
+    let layers = over_tiles(
+        state,
+        &crate::color_scheme(&state.facts.settings).dark.ui,
+        1.0,
+    )
+    .len();
     let callout = state.window.callout.is_some();
     let asks_sheet = usize::from(crate::asks::is_open(state));
     Covered {
@@ -960,7 +971,7 @@ pub(crate) fn covered(state: &State) -> Covered {
     }
 }
 
-fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
+fn over_tiles(state: &State, t: &Tokens, scale: f32) -> Vec<El> {
     let window = &state.window;
     let mut layers: Vec<El> = crate::garden::frame_layer(state, t).into_iter().collect();
     crate::garden::overlay(state, t, &mut layers);
@@ -983,7 +994,7 @@ fn over_tiles(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::Notebook) => layers.push(crate::notebook::fullscreen(state, t)),
         Some(Layer::Crew) => crate::crew::overlays(state, t, &mut layers),
         Some(Layer::SharedCodex) => crate::harness::codex::confirm(state, t, &mut layers),
-        Some(Layer::Asks) => layers.push(crate::asks::sheet(state, t)),
+        Some(Layer::Asks) => layers.push(crate::asks::sheet(state, t, scale)),
         Some(Layer::BannerDetails(band, shown)) => {
             banner_details(state, band, shown, t, &mut layers)
         }

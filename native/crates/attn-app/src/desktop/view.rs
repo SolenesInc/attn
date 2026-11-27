@@ -1782,6 +1782,36 @@ fn ime_caret(terminals: &Terminals, runtime_id: &str, theme: &TerminalColors) ->
     )
 }
 
+/// The terminal an ask holds, drawn in the Asks panel, which no tile holds.
+pub(crate) fn ask_terminal(
+    state: &State,
+    (runtime, session): (&str, &str),
+    held: bool,
+    scale: f32,
+    t: &Tokens,
+) -> El {
+    let colors = crate::color_scheme(&state.facts.settings)
+        .colors(t.dark)
+        .terminal;
+    let caret = held
+        .then(|| ime_caret(&state.terminals, runtime, &colors))
+        .flatten();
+    let pointing_link =
+        state.terminals.pointing_link() == Some(runtime) || state.terminals.pointing_mark(runtime);
+    let nowhere = Holder {
+        desktop: String::new(),
+        pane: String::new(),
+    };
+    terminal_slot(
+        (runtime, session),
+        ("Terminal", held),
+        nowhere,
+        caret,
+        pointing_link,
+        (&colors, scale),
+    )
+}
+
 /// Where a terminal draws: the renderer finds it by its mark, and its laid-out size is the
 /// size the terminal asks its PTY for. While it holds the keyboard it holds the input method's
 /// `caret`.
