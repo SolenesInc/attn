@@ -379,6 +379,8 @@ pub struct HomeUnreachable {
     /// How the daemon's dial to the home stands: `dialing`, `refused`, or `off`.
     pub dial: String,
     pub reason: Option<String>,
+    /// What the home refused this machine for, such as `build`, while the dial is `refused`.
+    pub refusal: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

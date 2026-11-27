@@ -213,7 +213,25 @@ func (d *Daemon) homeUnreachableMessage(refused error) protocol.HomeUnreachableM
 	if lastError != "" {
 		message.Reason = protocol.Ptr(lastError)
 	}
+	if refusal := d.homeRefusal(); refused == nil && state == "refused" && refusal != "" {
+		message.Refusal = protocol.Ptr(refusal)
+	}
 	return message
+}
+
+func (d *Daemon) homeRefusal() string {
+	r := &d.outpost
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.refusal
+}
+
+func refusalReason(err error) string {
+	var refusal *bridge.Refusal
+	if errors.As(err, &refusal) {
+		return refusal.Reason
+	}
+	return ""
 }
 
 func (d *Daemon) redialHome() {

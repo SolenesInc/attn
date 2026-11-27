@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "db20a8d5cc9e";
+pub const PROTOCOL_VERSION: &str = "ae117d3d2d05";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -6027,6 +6027,8 @@ pub struct HomeUnreachableMessage {
     pub home: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<String>,
     pub state: String,
 }
 

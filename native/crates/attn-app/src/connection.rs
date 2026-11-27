@@ -34,6 +34,9 @@ pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
 /// The message the banner shows: why the daemon is not answering.
 pub(crate) fn identity(state: &State) -> Option<String> {
     if let Some(away) = lost_home(state) {
+        if update_explains(state, away) {
+            return None;
+        }
         return Some(format!("{}|{}|{:?}", away.home, away.dial, away.reason));
     }
     start_failed(state).map(|why| why.unwrap_or_default().to_owned())
@@ -53,8 +56,21 @@ fn start_failed(state: &State) -> Option<Option<&str>> {
     }
 }
 
+/// Whether the home refused this machine's build while the update band says so in the user's
+/// words and offers the fix, so this band would only repeat it with the daemons' ids.
+fn update_explains(state: &State, away: &HomeUnreachable) -> bool {
+    refused_for_build(away) && crate::update_run::shows_home_update(state)
+}
+
+fn refused_for_build(away: &HomeUnreachable) -> bool {
+    away.dial == "refused" && away.refusal.as_deref() == Some("build")
+}
+
 pub(crate) fn said(state: &State) -> Option<Banner> {
     if let Some(away) = lost_home(state) {
+        if update_explains(state, away) {
+            return None;
+        }
         let status = match away.reason.as_deref() {
             Some(reason) if away.dial == "refused" => {
                 format!("{} refused this machine: {reason}", away.home)
@@ -161,6 +177,7 @@ pub(crate) fn home_unreachable(
     rollback_failed: Option<&str>,
 ) -> El {
     let title = format!("Can’t reach {}", away.home);
+    let says = run.and_then(update_run::home_says);
     let detail = match (away.dial.as_str(), away.reason.as_deref()) {
         ("refused", Some(reason)) => format!("{} refused this machine: {reason}", away.home),
         (_, Some(reason)) => format!("{reason}. Dialing again."),
@@ -173,19 +190,24 @@ pub(crate) fn home_unreachable(
         .on_press(retry_home)
         .build(t)
         .key("connection.home-unreachable.retry");
+    let detail = (!refused_for_build(away) || says.is_none()).then_some(detail);
+    let label = match &detail {
+        Some(detail) => format!("{title}. {detail}"),
+        None => title.clone(),
+    };
     let mut screen = Stack::tight()
         .key("connection.home-unreachable")
         .role("alert")
-        .label(format!("{title}. {detail}"))
+        .label(label)
         .max_w(520.0)
         .child(words(title, Type::Heading, t.text_primary))
-        .child(
+        .children(detail.map(|detail| {
             words(detail, Type::Body, t.text_secondary)
                 .wrap()
-                .selectable(true),
-        )
+                .selectable(true)
+        }))
         .child(El::from(retry));
-    if let Some(says) = run.and_then(update_run::home_says) {
+    if let Some(says) = says {
         screen = screen.child(
             words(says.head, Type::Body, t.text_primary)
                 .key("connection.home-unreachable.update")

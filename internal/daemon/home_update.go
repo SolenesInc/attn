@@ -190,7 +190,7 @@ func (d *Daemon) homeRefusedByBuild(destination string, home bridge.Identity, re
 		if updates {
 			d.recordHomeDifference(home, true, action)
 		}
-		return fmt.Errorf("%s runs build %s, newer than this machine's %s; update this machine: %s", home.Name, home.Build, self, cmp.Or(action, rebuildFromWorktree))
+		return &bridge.Refusal{Peer: &home, Reason: "build", Detail: fmt.Sprintf("%s runs build %s, newer than this machine's %s; update this machine: %s", home.Name, home.Build, self, cmp.Or(action, rebuildFromWorktree))}
 	case updates:
 		d.recordHomeDifference(home, false, "")
 	}

@@ -146,8 +146,9 @@ update of that outpost fails, names that machine and installs nothing.
 Once the home is back, the app shows the home's run in the banner and
 **Settings → Updates**: a row for the home, one for the machine and one for each
 outpost, each with its own action. While the home refuses the machine's build,
-the app shows **Can't reach** with the reason, the machine's update of the home
-and its action, and `attn update status` on the machine prints the same rows.
+the app names both builds and offers the machine's update of the home with its
+action, in one band over the desk, or on **Can't reach** when the app has no
+desk to show. `attn update status` on the machine prints the same rows.
 A failed row names one reason with its cause:
 
 | Reason | Meaning |

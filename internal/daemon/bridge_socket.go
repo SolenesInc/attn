@@ -30,6 +30,7 @@ type outpostRuntime struct {
 	state       string
 	lastError   string
 	errorKind   string
+	refusal     string
 	listen      func(string, string) (net.Listener, error)
 	dial        *homeDial
 	changed     chan struct{}
@@ -185,9 +186,10 @@ func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.C
 	errorChanged, before := false, r.lastError
 	if state == "bridged" {
 		errorChanged = r.lastError != ""
-		r.lastError, r.errorKind = "", ""
+		r.lastError, r.errorKind, r.refusal = "", "", ""
 	} else if err != nil {
 		r.lastError = err.Error()
+		r.refusal = refusalReason(err)
 		kind := bridge.ErrorKind(err)
 		errorChanged = kind != r.errorKind
 		r.errorKind = kind

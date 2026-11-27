@@ -5306,9 +5306,10 @@ model OutpostsUpdatedMessage { event: "outposts_updated"; outposts: OutpostInfo[
 
 // What an outpost answers an app's client_hello with, instead of relaying the app to its home, while it cannot reach
 // the home. home is the home's name; state is this machine's dial: dialing, refused or off when the home dials it.
-// The outpost keeps the connection open and closes it once that state or its reason changes, or after retry_home,
-// so the app connects again.
-model HomeUnreachableMessage { event: "home_unreachable"; home: string; state: string; reason?: string; }
+// refusal is what the home refused this machine for while state is refused, such as build when they run different
+// builds. The outpost keeps the connection open and closes it once that state or its reason changes, or after
+// retry_home, so the app connects again.
+model HomeUnreachableMessage { event: "home_unreachable"; home: string; state: string; reason?: string; refusal?: string; }
 
 model PluginsUpdatedMessage {
   event: "plugins_updated";

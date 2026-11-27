@@ -318,6 +318,11 @@ fn shown(state: &State) -> Option<&UpdateRun> {
     (closed.as_deref() != Some(run.id.as_str())).then_some(run)
 }
 
+/// Whether the band shows this machine's update of its home.
+pub(crate) fn shows_home_update(state: &State) -> bool {
+    shown(state).and_then(home_says).is_some()
+}
+
 /// Counts down while the shown run has ended well.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     let due = shown(state)

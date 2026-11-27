@@ -2592,6 +2592,69 @@ fn home_unreachable(dark: bool) {
     snap(&mut world, "home-unreachable", dark);
 }
 
+/// The app on a machine whose home refuses its newer build, with a shell of its own on the desk:
+/// the update band alone says so, offering Update, with no band repeating it in daemon ids.
+fn home_refused_build(dark: bool) {
+    let home = scripted();
+    home.on("client_hello", |_| {
+        json!({
+            "event": "home_unreachable", "home": "oma", "state": "refused", "refusal": "build",
+            "reason": "daemon d-d2820b7d runs build 0.16.1 (source git:a25a05a, protocol e4f7a94); daemon d-6ec1676f runs build 0.16.0 (source git:9f0c1e2, protocol 77b0d3a)",
+        })
+    });
+    let mut initial: InitialStateMessage = serde_json::from_value(json!({
+        "event": "initial_state",
+        "protocol_version": attn_protocol::PROTOCOL_VERSION,
+        "daemon_instance_id": "laptop-daemon",
+        "update_run": {
+            "id": "h1", "install_kind": "home", "phase": "failed", "log_path": "/tmp/h1.log",
+            "target_build": "0.16.1 (source git:a25a05a, protocol e4f7a94)",
+            "requesters": [], "outposts": [
+                {"id": "home", "name": "oma", "role": "home", "state": "done", "build": "0.16.0 (source git:9f0c1e2, protocol 77b0d3a)"},
+                {"id": "laptop-id", "name": "laptop", "role": "app_machine", "state": "skipped",
+                 "build": "0.16.1 (source git:a25a05a, protocol e4f7a94)", "detail": "oma runs another build", "action": "Update"},
+            ],
+        },
+    }))
+    .expect("an initial state");
+    initial.sessions = Some(vec![attn_protocol::Session {
+        id: "here".into(),
+        label: "here".into(),
+        agent: "shell".into(),
+        state: "idle".into(),
+        directory: "/tmp/here".into(),
+        profile_id: "work".into(),
+        ..attn_protocol::Session::default()
+    }]);
+    initial.terminal_bindings = Some(vec![attn_protocol::TerminalBinding {
+        ask_id: None,
+        session_id: "here".into(),
+        terminal_id: "rl".into(),
+    }]);
+    let machine = Daemon::of_this_machine(&home).state(initial);
+    let dir = tempfile::tempdir().expect("a folder for the app's data");
+    drop(World::start_with_data_dir(
+        scripted().state(InitialStateMessage {
+            protocol_version: Some(attn_protocol::PROTOCOL_VERSION.into()),
+            selected_profile_id: Some("work".into()),
+            profiles: Some(vec![attn_protocol::Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                ..attn_protocol::Profile::default()
+            }]),
+            ..InitialStateMessage::new()
+        }),
+        dir.path().to_path_buf(),
+    ));
+    let mut world = World::start_relaying_in(
+        home.relaying_to("laptop-id", "oma"),
+        machine,
+        window(),
+        dir.path().to_path_buf(),
+    );
+    snap(&mut world, "home-refused-build", dark);
+}
+
 /// The app on a machine whose home runs on oma: the terminal's tile names oma, and Open in
 /// editor says the folder is there instead of opening one here.
 fn remote_home_desktop(dark: bool) {
@@ -9460,6 +9523,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         });
         scene("daemon_refused", || daemon_refused(dark));
         scene("home_unreachable", || home_unreachable(dark));
+        scene("home_refused_build", || home_refused_build(dark));
         scene("remote_home_desktop", || remote_home_desktop(dark));
         scene("remote_home_launcher", || remote_home_launcher(dark));
         scene("remote_home_folder_chooser", || {

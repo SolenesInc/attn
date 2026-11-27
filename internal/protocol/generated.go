@@ -6651,6 +6651,9 @@ type HomeUnreachableMessage struct {
 	// Reason corresponds to the JSON schema field "reason".
 	Reason *string `json:"reason,omitempty,omitzero"`
 
+	// Refusal corresponds to the JSON schema field "refusal".
+	Refusal *string `json:"refusal,omitempty,omitzero"`
+
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
 }

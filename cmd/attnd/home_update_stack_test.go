@@ -353,6 +353,7 @@ func TestAnAppMachineWhoseBuildDidNotChangeStartsNoUpdateOfAHomeAhead(t *testing
 			}
 			requireSameFile(t, "the home's attn", w.ssh.InstallPath(w.home), next)
 			requireStdout(t, second.Attn("update", "status"), "(behind)", action)
+			requireRefusedForBuild(t, second)
 		})
 	}
 }
@@ -378,7 +379,17 @@ func TestAnAppMachineInstallingABuildWhileItsHomeRunsAnUnsharedBuildStartsNoUpda
 		t.Fatalf("an app machine whose home runs a build they never shared: %+v %+v", app, home)
 	}
 	requireSameFile(t, "the home's attn", w.ssh.InstallPath(w.home), other)
+	requireRefusedForBuild(t, w.laptop)
 	t.Log(protocol.Deref(run.Outcome))
+}
+
+// requireRefusedForBuild checks that an app on s, whose home refuses s's build, is told the refusal is for the build,
+// which the app's update band explains.
+func requireRefusedForBuild(t *testing.T, s *testworld.Stack) {
+	t.Helper()
+	if told := lastHomeUnreachable(t, awaitHomeDial(t, s, "refused")); protocol.Deref(told.Refusal) != "build" {
+		t.Fatalf("home_unreachable while the home refuses this machine's build: %+v (%s)", told, protocol.Deref(told.Reason))
+	}
 }
 
 func TestAFleetRunCutByTheNextSwitchOfTheHomeDoesNotStandInForTheNextOne(t *testing.T) {

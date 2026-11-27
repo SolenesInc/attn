@@ -993,6 +993,7 @@ impl Task {
                         home: told.home,
                         dial: told.state,
                         reason: told.reason,
+                        refusal: told.refusal,
                     }));
                 None
             }

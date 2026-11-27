@@ -569,10 +569,13 @@ fn a_home_lost_on_a_desktop_with_tiles_leaves_no_shelf_to_click() {
     );
 }
 
-/// The app on a machine whose home answers \`dial\` and refuses it, with this machine's daemon
+const BUILD_REFUSAL: &str = "daemon d-d2820b7d runs build 0.16.1 (source git:a25a05a, protocol e4f7a94); daemon d-6ec1676f runs build 0.16.0 (source git:9f0c1e2, protocol 77b0d3a)";
+
+/// The app on a machine whose home answers \`dial\` and refuses it for \`refusal\`, with this machine's daemon
 /// keeping a home update run in \`phase\` with \`rows\`, and a shell of its own when \`terminal\`.
 fn away_with(
     dial: &str,
+    refusal: Option<&'static str>,
     phase: &str,
     rows: serde_json::Value,
     terminal: bool,
@@ -580,7 +583,7 @@ fn away_with(
     let home = Daemon::scripted();
     let dial = dial.to_owned();
     home.on("client_hello", move |_| {
-        serde_json::json!({"event": "home_unreachable", "home": "oma", "state": dial, "reason": "build differs"})
+        serde_json::json!({"event": "home_unreachable", "home": "oma", "state": dial, "reason": BUILD_REFUSAL, "refusal": refusal})
     });
     let mut initial: InitialStateMessage = serde_json::from_value(serde_json::json!({
         "event": "initial_state",
@@ -638,7 +641,7 @@ fn away_with(
 }
 
 fn away_with_machine_run(rows: serde_json::Value) -> World {
-    away_with("refused", "failed", rows, false).0
+    away_with("refused", None, "failed", rows, false).0
 }
 
 fn unreachable_home_rows() -> serde_json::Value {
@@ -701,7 +704,7 @@ fn an_app_machine_on_a_release_behind_its_home_opens_the_release_from_cant_reach
 
 #[test]
 fn a_machine_showing_its_own_terminals_while_its_home_refuses_it_bands_its_failed_update() {
-    let (mut world, _data) = away_with("refused", "failed", unreachable_home_rows(), true);
+    let (mut world, _data) = away_with("refused", None, "failed", unreachable_home_rows(), true);
     assert!(home_unreachable(&world).is_none(), "{}", world.screen());
     assert_eq!(
         named_key(&world, "update-run.text").as_deref(),
@@ -714,10 +717,133 @@ fn a_machine_showing_its_own_terminals_while_its_home_refuses_it_bands_its_faile
     assert_eq!(machine.sent_of("start_update").len(), 1);
 }
 
+/// The run this machine's daemon keeps while its home refuses its build: the home answered, and
+/// this machine offers Update.
+fn build_difference_rows() -> serde_json::Value {
+    serde_json::json!([
+        {"id": "home", "name": "oma", "role": "home", "state": "done", "build": "0.16.0 (source git:0.16.0, protocol p)"},
+        {"id": "laptop-id", "name": "laptop", "role": "app_machine", "state": "skipped", "build": "0.16.1 (source git:0.16.1, protocol p)",
+         "detail": "oma runs another build", "action": "Update"},
+    ])
+}
+
+#[test]
+fn a_home_that_refuses_this_machine_s_build_shows_the_update_band_alone() {
+    let (mut world, _data) = away_with(
+        "refused",
+        Some("build"),
+        "failed",
+        build_difference_rows(),
+        true,
+    );
+    let screen = world.screen();
+    assert!(
+        screen.find(Target::key("connection")).is_none()
+            && !screen.to_string().contains("d-d2820b7d"),
+        "no band repeats the refusal with the daemons' ids:\n{screen}"
+    );
+    assert_eq!(
+        named_key(&world, "update-run.text").as_deref(),
+        Some("oma runs another build."),
+        "{screen}"
+    );
+    assert_eq!(
+        named_key(&world, "update-run.note").as_deref(),
+        Some("oma 0.16.0 · this Mac 0.16.1")
+    );
+    world.gesture(|app| app.click(Target::key("update-run.action")));
+    let machine = world.machine.as_ref().expect("this machine's daemon");
+    assert_eq!(machine.sent_of("start_update").len(), 1);
+
+    world.gesture(|app| app.click(Target::key("update-run.dismiss")));
+    assert!(
+        named_key(&world, "connection.home-lost")
+            .is_some_and(|said| said.contains("oma refused this machine: daemon d-d2820b7d")),
+        "with the update band dismissed, the refusal says why the home is away:\n{}",
+        world.screen()
+    );
+}
+
+#[test]
+fn a_home_that_refuses_this_machine_for_another_reason_keeps_its_band_beside_the_update() {
+    let (world, _data) = away_with(
+        "refused",
+        Some("removed"),
+        "failed",
+        build_difference_rows(),
+        true,
+    );
+    assert!(
+        named_key(&world, "connection.home-lost").is_some()
+            && named_key(&world, "update-run.text").is_some(),
+        "{}",
+        world.screen()
+    );
+}
+
+#[test]
+fn a_home_that_refuses_this_machine_s_build_without_an_update_to_show_keeps_its_band() {
+    let (world, _data) = away_with(
+        "refused",
+        Some("build"),
+        "done",
+        build_difference_rows(),
+        true,
+    );
+    assert!(
+        named_key(&world, "connection.home-lost")
+            .is_some_and(|said| said.contains("refused this machine")),
+        "with no update to show, the refusal alone says why:\n{}",
+        world.screen()
+    );
+}
+
+#[test]
+fn a_home_that_refuses_this_machine_s_build_keeps_its_band_beside_a_run_that_does_not_name_the_home()
+ {
+    let (world, _data) = away_with(
+        "refused",
+        Some("build"),
+        "failed",
+        serde_json::json!([
+            {"id": "laptop-id", "name": "laptop", "role": "app_machine", "state": "done", "build": "0.16.1 (source git:0.16.1, protocol p)"},
+        ]),
+        true,
+    );
+    assert!(
+        named_key(&world, "connection.home-lost")
+            .is_some_and(|said| said.contains("refused this machine")),
+        "{}",
+        world.screen()
+    );
+}
+
+#[test]
+fn cant_reach_a_home_that_refuses_this_machine_s_build_says_it_once() {
+    let (world, _) = away_with(
+        "refused",
+        Some("build"),
+        "failed",
+        build_difference_rows(),
+        false,
+    );
+    let alert = home_unreachable(&world).expect("the window says the home is unreachable");
+    assert!(
+        !world.screen().to_string().contains("d-d2820b7d"),
+        "{alert}\n{}",
+        world.screen()
+    );
+    assert_eq!(
+        named_key(&world, "connection.home-unreachable.update").as_deref(),
+        Some("oma runs another build.")
+    );
+}
+
 #[test]
 fn a_home_that_is_only_offline_shows_no_update_the_machine_finished_before() {
     let (world, _) = away_with(
         "dialing",
+        None,
         "done",
         serde_json::json!([
             {"id": "home", "name": "oma", "role": "home", "state": "done", "build": "0.16.1 (source git:0.16.1, protocol p)"},
