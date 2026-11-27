@@ -6,6 +6,7 @@ use attn_client::Desktop;
 use attn_protocol::{DesktopMoveLeafMessage, DesktopSetWantedColsMessage, SetSettingMessage};
 use attn_ui::blocks::{
     self, Card, CountSide, Inline, MemberState, Place, ShelfCount, ShelfEntry, ShelfMember,
+    ShelfRow,
 };
 use attn_ui::system::{IconSize, Size, Type, icon_button, words};
 use attn_ui::{Glyph, Tokens};
@@ -76,29 +77,9 @@ struct Entry {
     /// A tile in the column just arrived on the shelf: when its flash ends, as `f64` bits.
     arrival: Option<u64>,
     leaves: Vec<String>,
-    drawn: ShelfEntry,
-    name_px: f32,
-    folded: bool,
 }
 
-impl Entry {
-    fn needs_user(&self) -> bool {
-        self.drawn.members().iter().any(ShelfMember::needs_user)
-    }
-
-    /// The columns on screen, and the current one wherever it stands.
-    fn never_folds(&self) -> bool {
-        self.drawn.place() != Place::OffScreen
-    }
-
-    fn width(&self) -> f32 {
-        self.drawn.width(self.name_px)
-    }
-
-    fn least_width(&self) -> f32 {
-        self.drawn.width(0.0)
-    }
-}
+type Laid = blocks::Laid<Entry>;
 
 fn state_of(session: &attn_protocol::Session) -> Option<MemberState> {
     if session.agent == crate::harness::catalog::TERMINAL {
@@ -199,7 +180,7 @@ fn entry(
     flashing: &[(&str, u64)],
     column: &Column,
     (active, on_screen): (&str, bool),
-) -> Entry {
+) -> (Entry, ShelfEntry) {
     let members: Vec<ShelfMember> = column
         .leaf_ids
         .iter()
@@ -224,8 +205,7 @@ fn entry(
         .filter_map(|pane| facts.sessions.iter().find(|s| s.id == pane.session_id))
         .filter(|s| !crate::asks::of_session(facts, s).is_empty())
         .count();
-    let drawn = ShelfEntry::new(members, shown, place, asking);
-    Entry {
+    let entry = Entry {
         key: column.first().to_owned(),
         go,
         label: label(&titles),
@@ -234,85 +214,8 @@ fn entry(
             .find(|(leaf, _)| column.leaf_ids.iter().any(|l| l == leaf))
             .map(|(_, until)| *until),
         leaves: column.leaf_ids.clone(),
-        name_px: drawn.name_width(),
-        drawn,
-        folded: false,
-    }
-}
-
-fn folded(entries: &[Entry]) -> Vec<&Entry> {
-    entries.iter().filter(|e| e.folded).collect()
-}
-
-/// The count on `side` of the columns `held` in it, with at most `marks` of the members that need the
-/// user.
-fn counted(side: CountSide, held: &[&Entry], marks: usize) -> Option<ShelfCount> {
-    let needing: Vec<ShelfMember> = held
-        .iter()
-        .flat_map(|e| e.drawn.members())
-        .filter(|m| m.needs_user())
-        .cloned()
-        .collect();
-    (!held.is_empty()).then(|| ShelfCount {
-        side,
-        columns: held.len(),
-        needs_user: !needing.is_empty(),
-        marks: needing.into_iter().take(marks).collect(),
-    })
-}
-
-/// The room `count` takes and the gap to its neighbour.
-fn count_width(count: Option<&ShelfCount>) -> f32 {
-    count.map_or(0.0, |c| c.width() + blocks::Shelf::gap())
-}
-
-/// The room `items` and the shelf's ends take, each item after the first with its gap.
-fn shelf_width(items: impl Iterator<Item = f32>) -> f32 {
-    items.map(|w| w + blocks::Shelf::gap()).sum::<f32>() - blocks::Shelf::gap()
-        + blocks::Shelf::START
-        + blocks::Shelf::END
-}
-
-/// The width each name is cut to so that all of them and the current one fit `room`: the others
-/// evenly, the current one only once they have none.
-fn cut_names(shown: &mut [&mut Entry], room: f32) {
-    let least: f32 = shown.iter().map(|e| e.least_width()).sum();
-    let gaps = blocks::Shelf::gap() * shown.len().saturating_sub(1) as f32;
-    let spare = room - least - gaps;
-    let wanted = |e: &Entry| e.width() - e.least_width();
-    let current = |e: &Entry| e.drawn.place() == Place::Current;
-    let kept: f32 = shown.iter().filter(|e| current(e)).map(|e| wanted(e)).sum();
-    let mut others: Vec<f32> = shown
-        .iter()
-        .filter(|e| !current(e))
-        .map(|e| wanted(e))
-        .collect();
-    others.sort_by(f32::total_cmp);
-    let mut left = spare - kept;
-    let mut share = f32::INFINITY;
-    for (i, want) in others.iter().enumerate() {
-        let even = left / (others.len() - i) as f32;
-        if *want > even {
-            share = even.max(0.0);
-            break;
-        }
-        left -= want;
-    }
-    for e in shown.iter_mut().filter(|e| !current(e)) {
-        if wanted(e) > share {
-            e.name_px = e.drawn.name_within(share);
-        }
-    }
-    let taken: f32 = shown
-        .iter()
-        .filter(|e| !current(e))
-        .map(|e| wanted(e))
-        .sum();
-    for e in shown.iter_mut().filter(|e| current(e)) {
-        if wanted(e) > spare - taken {
-            e.name_px = e.drawn.name_within((spare - taken).max(0.0));
-        }
-    }
+    };
+    (entry, ShelfEntry::new(members, shown, place, asking))
 }
 
 /// A desktop's shelf as this window lays it out: an entry per column of its row, and the entries
@@ -321,11 +224,7 @@ pub(crate) struct Shelf {
     pub desktop: String,
     /// The overview shows this desktop over the current one.
     previewed: bool,
-    before: Vec<Entry>,
-    screen: Vec<Entry>,
-    after: Vec<Entry>,
-    /// How many marks a count shows at most.
-    marks: usize,
+    row: ShelfRow<Entry>,
 }
 
 /// A place on the shelf a tile can be dropped beside: an entry by either half, or a count for its
@@ -385,7 +284,7 @@ impl Shelf {
         let active = super::overview::open(state)
             .and_then(|o| o.at().leaf.as_deref())
             .unwrap_or(&desktop.active_pane_id);
-        let entries = |columns: &[Column], on_screen: bool| -> Vec<Entry> {
+        let entries = |columns: &[Column], on_screen: bool| -> Vec<(Entry, ShelfEntry)> {
             let stands = (active, on_screen);
             columns
                 .iter()
@@ -402,190 +301,68 @@ impl Shelf {
                 })
                 .collect()
         };
-        let (before, screen, after) = (
+        let row = ShelfRow::fit(
             entries(&plan.before, false),
             entries(&plan.screen, true),
             entries(&plan.after, false),
+            desk.shelf_px.unwrap_or(f32::INFINITY),
         );
-        let mut shelf = Shelf {
+        Some(Shelf {
             desktop: desktop.id.clone(),
             previewed: facts.current_desktop().is_none_or(|d| d.id != desktop.id),
-            before,
-            screen,
-            after,
-            marks: usize::MAX,
-        };
-        shelf.fit(desk.shelf_px.unwrap_or(f32::INFINITY));
-        Some(shelf)
-    }
-
-    /// The width of the entries that never fold without their names and of both counts without
-    /// marks, under which the shelf overflows its slot.
-    fn least_px(&self) -> f32 {
-        let bare = |side: CountSide, columns: usize| {
-            (columns > 0).then(|| ShelfCount {
-                side,
-                columns,
-                needs_user: true,
-                marks: vec![],
-            })
-        };
-        let least = shelf_width(
-            self.before
-                .iter()
-                .chain(&self.screen)
-                .chain(&self.after)
-                .filter(|e| e.never_folds())
-                .map(Entry::least_width),
-        ) + count_width(bare(CountSide::Before, self.before.len()).as_ref())
-            + count_width(bare(CountSide::After, self.after.len()).as_ref());
-        least.ceil()
-    }
-
-    /// Folds the entries off screen that `room` cannot hold, the farthest from the screen first
-    /// and the ones that need the user last. A row that still does not fit gives up the counts'
-    /// marks, then the names on screen.
-    fn fit(&mut self, room: f32) {
-        while self.width() > room {
-            let Some(next) = self.next_to_fold() else {
-                break;
-            };
-            next.folded = true;
-        }
-        self.marks = [CountSide::Before, CountSide::After]
-            .into_iter()
-            .filter_map(|side| self.count(side))
-            .map(|count| count.marks.len())
-            .max()
-            .unwrap_or(0);
-        while self.marks > 0 && self.width() > room {
-            self.marks -= 1;
-        }
-        let over = self.width() - room;
-        if over > 0.0 {
-            let mut kept: Vec<&mut Entry> = self
-                .before
-                .iter_mut()
-                .chain(&mut self.screen)
-                .chain(&mut self.after)
-                .filter(|e| e.never_folds())
-                .collect();
-            let shown = shelf_width(kept.iter().map(|e| e.width()));
-            let ends = blocks::Shelf::START + blocks::Shelf::END;
-            cut_names(&mut kept, shown - ends - over);
-        }
-    }
-
-    fn count(&self, side: CountSide) -> Option<ShelfCount> {
-        counted(side, &self.folded(side), self.marks)
-    }
-
-    fn next_to_fold(&mut self) -> Option<&mut Entry> {
-        let distance = self.before.len();
-        let before = self
-            .before
-            .iter_mut()
-            .enumerate()
-            .map(|(i, e)| (distance - i, e));
-        let after = self.after.iter_mut().enumerate().map(|(i, e)| (i + 1, e));
-        before
-            .chain(after)
-            .filter(|(_, e)| !e.folded && !e.never_folds())
-            .max_by(|(a, x), (b, y)| {
-                (!x.needs_user())
-                    .cmp(&!y.needs_user())
-                    .then(a.cmp(b))
-                    .then(x.width().total_cmp(&y.width()))
-            })
-            .map(|(_, e)| e)
-    }
-
-    fn shown(&self) -> impl Iterator<Item = &Entry> {
-        self.before
-            .iter()
-            .chain(&self.screen)
-            .chain(&self.after)
-            .filter(|e| !e.folded)
-    }
-
-    fn width(&self) -> f32 {
-        shelf_width(self.shown().map(Entry::width))
-            + count_width(self.count(CountSide::Before).as_ref())
-            + count_width(self.count(CountSide::After).as_ref())
-    }
-
-    /// Where the frame starts and how wide it stands: around the entries on screen.
-    fn framed(&self) -> (f32, f32) {
-        let gap = blocks::Shelf::gap();
-        let start = blocks::Shelf::START
-            + count_width(self.count(CountSide::Before).as_ref())
-            + self
-                .before
-                .iter()
-                .filter(|e| !e.folded)
-                .map(|e| e.width() + gap)
-                .sum::<f32>();
-        let width = self.screen.iter().map(|e| e.width() + gap).sum::<f32>() - gap;
-        let reach = blocks::Shelf::FRAME_REACH;
-        (start - reach, width + 2.0 * reach)
-    }
-
-    fn folded(&self, side: CountSide) -> Vec<&Entry> {
-        folded(match side {
-            CountSide::Before => &self.before,
-            CountSide::After => &self.after,
+            row,
         })
     }
 
     /// Whether `leaf` is off screen, by its entry or in a count.
     pub(crate) fn holds(&self, leaf: &str) -> bool {
-        self.before
-            .iter()
-            .chain(&self.after)
-            .any(|c| c.leaves.iter().any(|l| l == leaf))
+        (self.row.before.iter())
+            .chain(&self.row.after)
+            .any(|c| c.of.leaves.iter().any(|l| l == leaf))
     }
 
     /// What dragging the entry of `column` picks up.
     pub(crate) fn entry_source(&self, column: &str) -> Option<Source> {
-        let entry = self
-            .before
-            .iter()
-            .chain(&self.after)
-            .find(|e| e.key == column)?;
+        let entry = (self.row.before.iter())
+            .chain(&self.row.after)
+            .find(|e| e.of.key == column)?;
         Some(Source::Entry {
             desktop: self.desktop.clone(),
-            column: entry.key.clone(),
-            leaf: entry.go.clone(),
-            label: entry.label.clone(),
+            column: entry.of.key.clone(),
+            leaf: entry.of.go.clone(),
+            label: entry.of.label.clone(),
         })
     }
 
     /// Where a dragged tile can land on the shelf, in the order the shelf shows them.
     pub(crate) fn anchors(&self) -> Vec<Anchor> {
-        let entry = |e: &Entry| Anchor {
-            element: entry_key(&e.key),
-            column: e.key.clone(),
+        let entry = |e: &Laid| Anchor {
+            element: entry_key(&e.of.key),
+            column: e.of.key.clone(),
             edge: None,
         };
-        let count = |side: CountSide, outermost: Option<&Entry>| {
-            let outermost = outermost.filter(|_| !self.folded(side).is_empty())?;
+        let count = |side: CountSide, outermost: Option<&Laid>| {
+            let outermost = outermost.filter(|_| !self.row.folded(side).is_empty())?;
             Some(Anchor {
                 element: count_key(side).to_owned(),
-                column: outermost.key.clone(),
+                column: outermost.of.key.clone(),
                 edge: Some(edge_of(side)),
             })
         };
-        let kept = |entries: &[Entry]| -> Vec<Anchor> {
+        let kept = |entries: &[Laid]| -> Vec<Anchor> {
             entries.iter().filter(|e| !e.folded).map(entry).collect()
         };
-        count(CountSide::Before, self.before.first())
+        let row = &self.row;
+        count(CountSide::Before, row.before.first())
             .into_iter()
-            .chain(kept(&self.before))
-            .chain(kept(&self.after))
-            .chain(count(CountSide::After, self.after.last()))
+            .chain(kept(&row.before))
+            .chain(kept(&row.after))
+            .chain(count(CountSide::After, row.after.last()))
             .collect()
     }
 }
+
+const FRAME: &str = "shelf.frame";
 
 fn entry_key(column: &str) -> String {
     format!("shelf.entry.{column}")
@@ -611,8 +388,8 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
     };
     let desk = &state.window.desk;
     let id = &shelf.desktop;
-    let (x, width) = shelf.framed();
-    let frame = blocks::Shelf::frame(x, width, t)
+    let (x, width) = shelf.row.framed();
+    let frame = blocks::Shelf::frame(FRAME, x, width, t)
         .on_pointer_move_local(|state: &mut State, _, tx: &mut Tx| {
             let hover = &mut state.window.desk.width_control;
             if hover.frame || tx.pointer_held() {
@@ -630,11 +407,11 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
     let marked = |key: &str| drop.filter(|(marked, _)| *marked == key).map(|(_, e)| e);
     let count = |side: CountSide| {
         let marked = marked(count_key(side));
-        shelf.count(side).map(|c| count(&c, marked, t))
+        shelf.row.count(side).map(|c| count(&c, marked, t))
     };
-    let entries = shelf.shown().map(|e| match e.drawn.place() {
+    let entries = shelf.row.shown().map(|e| match e.drawn.place() {
         Place::OffScreen => {
-            let drop = marked(&entry_key(&e.key));
+            let drop = marked(&entry_key(&e.of.key));
             off_screen(e, id, shelf.previewed, drop, t)
         }
         Place::OnScreen => on_screen(e, id, t),
@@ -646,7 +423,7 @@ fn view(state: &State, shelf: Option<Shelf>, t: &Tokens) -> Option<El> {
             .label("Shelf")
             .on_layout_tx(|state: &mut State, rect, tx: &mut Tx| record(state, "shelf", rect, tx))
             .child(frame)
-            .child(blocks::Shelf::frame_edge(x, width, t))
+            .child(blocks::Shelf::frame_edge(FRAME, x, width, t))
             .children(count(CountSide::Before))
             .children(entries)
             .children(count(CountSide::After)),
@@ -689,7 +466,7 @@ pub(crate) fn slot(state: &State, t: &Tokens) -> El {
     row()
         .key("shelf.slot")
         .grow(1.0)
-        .min_w(shelf.as_ref().map_or(0.0, |s| s.least_px()))
+        .min_w(shelf.as_ref().map_or(0.0, |s| s.row.least_px()))
         .h_full()
         .items_center()
         .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
@@ -702,7 +479,7 @@ pub(crate) fn slot(state: &State, t: &Tokens) -> El {
         .children(view(state, shelf, t))
 }
 
-fn said(entry: &Entry) -> String {
+fn said(entry: &Laid) -> String {
     let place = match entry.drawn.place() {
         Place::OffScreen => None,
         Place::OnScreen => Some("on screen"),
@@ -711,45 +488,45 @@ fn said(entry: &Entry) -> String {
     place
         .into_iter()
         .chain(entry.needs_user().then_some("needs you"))
-        .chain(entry.arrival.map(|_| "arrived"))
+        .chain(entry.of.arrival.map(|_| "arrived"))
         .collect::<Vec<_>>()
         .join(", ")
 }
 
-fn drawn(entry: &Entry, t: &Tokens) -> El {
-    let key = entry_key(&entry.key);
-    let flash = entry.arrival.map(|until| flash_ring(&key, until, t));
+fn drawn(entry: &Laid, t: &Tokens) -> El {
+    let key = entry_key(&entry.of.key);
+    let flash = entry.of.arrival.map(|until| flash_ring(&key, until, t));
     entry
         .drawn
-        .build(&key, &entry.label, entry.name_px, t)
+        .build(&key, &entry.of.label, entry.name_px, t)
         .a11y_value(said(entry))
         .children(flash)
 }
 
 /// The entry of a column on screen, which shows its tile.
-fn on_screen(entry: &Entry, desktop: &str, t: &Tokens) -> El {
-    let (desktop, leaf) = (desktop.to_owned(), entry.go.clone());
+fn on_screen(entry: &Laid, desktop: &str, t: &Tokens) -> El {
+    let (desktop, leaf) = (desktop.to_owned(), entry.of.go.clone());
     drawn(entry, t).on_press_tx(move |state: &mut State, tx: &mut Tx| {
         crate::sidebar::open_tile(state, &desktop, &leaf, tx)
     })
 }
 
 /// The current entry, which opens the overview and closes an open one.
-fn current(entry: &Entry, t: &Tokens) -> El {
+fn current(entry: &Laid, t: &Tokens) -> El {
     drawn(entry, t).on_press_tx(super::overview::toggle)
 }
 
 /// The entry of a column off screen. The pointer resting on it peeks at the tile it goes to, or
 /// at the one whose dot it rests on, unless its desktop is previewed.
-fn off_screen(entry: &Entry, desktop: &str, previewed: bool, drop: Option<Edge>, t: &Tokens) -> El {
-    let recorded = entry_key(&entry.key);
+fn off_screen(entry: &Laid, desktop: &str, previewed: bool, drop: Option<Edge>, t: &Tokens) -> El {
+    let recorded = entry_key(&entry.of.key);
     let drawn = drawn(entry, t).on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
         record(state, &recorded, rect, tx)
     });
     if previewed {
         return drop_bar(drawn, drop, t);
     }
-    let stack = (entry.drawn.clone(), entry.leaves.clone());
+    let stack = (entry.drawn.clone(), entry.of.leaves.clone());
     let drawn = peeks(drawn, entry, desktop, move |p: PointerEvent| {
         let (drawn, leaves) = &stack;
         drawn.dot_at(p.x, p.y).map(|i| leaves[i].clone())
@@ -761,12 +538,16 @@ fn off_screen(entry: &Entry, desktop: &str, previewed: bool, drop: Option<Edge>,
 /// the pointer, else at the one the entry goes to.
 fn peeks(
     el: El,
-    entry: &Entry,
+    entry: &Laid,
     desktop: &str,
     pointed: impl Fn(PointerEvent) -> Option<String> + 'static,
 ) -> El {
-    let moved = (desktop.to_owned(), entry.go.clone(), entry.key.clone());
-    let left = entry.key.clone();
+    let moved = (
+        desktop.to_owned(),
+        entry.of.go.clone(),
+        entry.of.key.clone(),
+    );
+    let left = entry.of.key.clone();
     el.on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
         if !inside {
             super::peek::leave_entry(state, &left, tx);
@@ -830,10 +611,14 @@ pub(crate) fn width_control_layer(state: &State, t: &Tokens) -> Option<El> {
         return None;
     }
     let shelf = Shelf::of(state).filter(|s| !s.previewed)?;
-    let leading = shelf.before.is_empty();
+    let leading = shelf.row.before.is_empty();
     let control = raised(
         "shelf.width.anchor",
-        width_control(shelf.screen.len(), Desk::narrowest_cols(&state.facts), t),
+        width_control(
+            shelf.row.screen.len(),
+            Desk::narrowest_cols(&state.facts),
+            t,
+        ),
         t,
     );
     Some(
@@ -844,7 +629,7 @@ pub(crate) fn width_control_layer(state: &State, t: &Tokens) -> Option<El> {
                 state.window.desk.width_control.control = inside
             })
             .anchored(
-                "shelf.frame",
+                FRAME,
                 rune::Side::Bottom,
                 if leading {
                     rune::Align::Start

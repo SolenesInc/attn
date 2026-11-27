@@ -9,7 +9,9 @@ use attn_protocol::{
     DesktopShowSessionMessage, SessionPlacement, SpawnSessionMessage, TerminalBinding,
     TileDocumentReadMessage, TileDocumentReadResultMessage, UnregisterMessage,
 };
-use attn_ui::blocks::{Inline, Prose, Sheet};
+use attn_ui::blocks::{
+    CountSide, Inline, MemberState, Place, Prose, Sheet, Shelf, ShelfEntry, ShelfMember, ShelfRow,
+};
 use attn_ui::system::{Button, IconSize, Look, Size, icon_button};
 use attn_ui::{Tokens, glyph};
 use rune::{El, ScrollSpec, Tx, col, memo};
@@ -67,6 +69,8 @@ pub(crate) struct Panels {
     /// The shells closed or moved out of their ask's panel, until no ask holds them.
     let_go: HashSet<String>,
     drawing: Option<String>,
+    /// How wide the tab strip stands, which its tabs fit.
+    strip_px: Option<f32>,
 }
 
 impl Panels {
@@ -524,30 +528,115 @@ fn tab_key(at: usize) -> String {
     format!("asks.panel.tab.{at}")
 }
 
+const TABS: &str = "asks.panel.tabs";
+const SHELF: &str = "asks.panel.shelf";
+const FRAME: &str = "asks.panel.frame";
+
+fn count_key(side: CountSide) -> &'static str {
+    match side {
+        CountSide::Before => "asks.panel.count.before",
+        CountSide::After => "asks.panel.count.after",
+    }
+}
+
+/// The panel's tabs drawn as the desktop's shelf draws its entries: the tab shown as the current
+/// entry in the frame, the others beside it, and those the strip has no room for folded into a
+/// count at their end.
+fn strip(state: &State, panel: &Panel, machines: &crate::machine::Machines, t: &Tokens) -> El {
+    let mut entries: Vec<(usize, ShelfEntry)> = (panel.tabs.iter().enumerate())
+        .map(|(at, tab)| {
+            let member = ShelfMember {
+                name: tab_name(state, machines, tab),
+                icon: icon_of(tab).into(),
+                state: state_of(state, tab),
+            };
+            let place = if at == panel.shown {
+                Place::Current
+            } else {
+                Place::OffScreen
+            };
+            (at, ShelfEntry::new(vec![member], 0, place, 0))
+        })
+        .collect();
+    let after = entries.split_off(panel.shown + 1);
+    let screen = entries.split_off(panel.shown);
+    let room = state.window.asks.panels.strip_px.unwrap_or(f32::INFINITY);
+    let row = ShelfRow::fit(entries, screen, after, room);
+    let (x, width) = row.framed();
+    let count = |side: CountSide| {
+        let nearest = match side {
+            CountSide::Before => row.folded(side).last().map(|e| e.of),
+            CountSide::After => row.folded(side).first().map(|e| e.of),
+        };
+        row.count(side).zip(nearest).map(|(count, at)| {
+            let label = format!("{} more this way", count.columns);
+            count
+                .build(count_key(side), label, t)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| show_tab(state, at, tx))
+        })
+    };
+    let entries = row.shown().map(|e| {
+        let at = e.of;
+        let member = &e.drawn.members()[0];
+        let current = e.drawn.place() == Place::Current;
+        let said = (current.then_some("current"))
+            .into_iter()
+            .chain((member.state == Some(MemberState::Working)).then_some("running a command"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let drawn = (e.drawn.build(&tab_key(at), &member.name, e.name_px, t)).a11y_value(said);
+        if current {
+            drawn
+        } else {
+            drawn.on_press_tx(move |state: &mut State, tx: &mut Tx| show_tab(state, at, tx))
+        }
+    });
+    let shelf = Shelf::row(SHELF)
+        .role("navigation")
+        .label("Open references")
+        .child(Shelf::frame(FRAME, x, width, t))
+        .child(Shelf::frame_edge(FRAME, x, width, t))
+        .children(count(CountSide::Before))
+        .children(entries)
+        .children(count(CountSide::After));
+    rune::row()
+        .key(TABS)
+        .items_center()
+        .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
+            let strip = &mut state.window.asks.panels.strip_px;
+            if *strip == Some(w) {
+                tx.live_only();
+                return;
+            }
+            *strip = Some(w);
+        })
+        .child(shelf)
+}
+
+fn icon_of(tab: &Reference) -> &'static rune::Icon {
+    match tab {
+        Reference::Seed(_) => &attn_ui::icon::GARDEN,
+        Reference::Markdown { .. } => &attn_ui::icon::MARKDOWN,
+        Reference::Web(_) => &attn_ui::icon::BROWSER,
+        Reference::Terminal(_) => &attn_ui::icon::TERMINAL,
+    }
+}
+
+/// A terminal tab works while a command runs in its shell; other tabs have no state.
+fn state_of(state: &State, tab: &Reference) -> Option<MemberState> {
+    let Reference::Terminal(session) = tab else {
+        return None;
+    };
+    let runtime = runtime_of(&state.facts, session)?;
+    (state.terminals.runs_command(runtime)).then_some(MemberState::Working)
+}
+
 /// The panel of `ask`, or none while it has no tab open.
 pub(crate) fn view(state: &State, ask: &str, scale: f32, t: &Tokens) -> Option<El> {
     let panel = state.window.asks.panels.of(ask)?;
     let shown = panel.shown()?;
     let machines = crate::machine::Machines::of(&state.facts);
-    let tabs = Inline::tight()
-        .key("asks.panel.tabs")
-        .role("navigation")
-        .label("Open references")
-        .min_w(0.0)
-        .shrink()
-        .children(panel.tabs.iter().enumerate().map(|(at, tab)| {
-            let said = tab_name(state, &machines, tab);
-            let on = at == panel.shown;
-            El::from(
-                Button::new(said)
-                    .size(Size::Compact)
-                    .look(if on { Look::Plain } else { Look::Quiet })
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| show_tab(state, at, tx))
-                    .build(t)
-                    .key(tab_key(at)),
-            )
-            .a11y_value(if on { "pressed" } else { "" })
-        }));
+    let tabs = strip(state, panel, &machines, t);
     let close = icon_button(
         "asks.panel.close-tab",
         "Close this tab",

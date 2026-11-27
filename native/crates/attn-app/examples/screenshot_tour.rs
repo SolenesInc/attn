@@ -13,7 +13,7 @@ use attn_app::screen::Screens;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     ActorView, AgentCatalogResult, AgentCatalogResultMessage, Ask, AskChoice, AskPart, AskQuestion,
-    AutomationDefinitionResultMessage, AutomationDefinitionSummary,
+    AskReference, AutomationDefinitionResultMessage, AutomationDefinitionSummary,
     AutomationDefinitionsResultMessage, AutomationProvenance, AutomationRunSummary,
     AutomationRunsResultMessage, AutomationSchedulePreviewResultMessage,
     BrowseDirectoryResultMessage, BusConsumerStatus, BusStatusResultMessage,
@@ -35,8 +35,8 @@ use attn_protocol::{
     SessionAnnotationsGetResultMessage, SessionAnnotationsSaveResultMessage, SessionLedgerEntry,
     SessionListResult, SessionListResultMessage, SessionMessage, SessionMessagesGetResultMessage,
     SessionPullRequest, SessionReopen, SessionReopenResultMessage, SessionUsage, SessionUsageModel,
-    SharedCodexBlocker, SharedCodexState, UpdateChangedMessage, UpdateOutpostProgress, UpdateRun,
-    Worktree, WorktreeListResult, WorktreeListResultEvent,
+    SharedCodexBlocker, SharedCodexState, TerminalBinding, UpdateChangedMessage,
+    UpdateOutpostProgress, UpdateRun, Worktree, WorktreeListResult, WorktreeListResultEvent,
 };
 use attn_term::{FONT_SIZE, Metrics};
 use attn_testkit::tree::{below, pane, row};
@@ -6026,6 +6026,108 @@ fn asks_preview(dark: bool) {
     snap(&mut world, "asks-preview", dark);
 }
 
+/// The panel's tabs under the title bar's shelf: a shell that runs a command, shown, then a seed
+/// and markdown files; with `many`, more files than the strip holds, folded at both ends.
+fn asks_panel_tabs(dark: bool, many: bool) {
+    let mut state = initial(
+        dark,
+        document_tile("m", "/repo/plan.md"),
+        vec![seed("s-shop", "Ship the shop checks", "growing", None)],
+    );
+    let mut files = vec!["release-notes.md", "plan.md"];
+    if many {
+        files.extend([
+            "north-wing.md",
+            "south-wing.md",
+            "cellar.md",
+            "attic.md",
+            "garage.md",
+        ]);
+    }
+    let links: Vec<String> = files.iter().map(|f| format!("[{f}]({f})")).collect();
+    state.asks = Some(vec![Ask {
+        id: "a-shop".into(),
+        session_id: "s0".into(),
+        subject: "Ship the shop".into(),
+        base_dir: "/repo".into(),
+        seed_id: Some("s-shop".into()),
+        created_at: "2026-11-17T09:00:00Z".into(),
+        parts: vec![
+            AskPart {
+                markdown: Some(format!("Read {} before you choose.", links.join(", "))),
+                ..AskPart::default()
+            },
+            AskPart {
+                question: Some(AskQuestion {
+                    key: "q1".into(),
+                    kind: "text".into(),
+                    prompt: "Ship it today?".into(),
+                    ..AskQuestion::default()
+                }),
+                ..AskPart::default()
+            },
+        ],
+        references: Some(
+            files
+                .iter()
+                .map(|f| AskReference {
+                    kind: "file".into(),
+                    text: (*f).into(),
+                    host: None,
+                    path: format!("/repo/{f}"),
+                    line: 1,
+                })
+                .collect(),
+        ),
+        ..Ask::default()
+    }]);
+    state.sessions.get_or_insert_default().push(Session {
+        id: "shell-shop".into(),
+        label: "shell-shop".into(),
+        agent: "shell".into(),
+        state: "idle".into(),
+        directory: SHOP.into(),
+        profile_id: PROFILE.into(),
+        ..Session::default()
+    });
+    state.terminal_bindings = Some(vec![TerminalBinding {
+        ask_id: Some("a-shop".into()),
+        session_id: "shell-shop".into(),
+        terminal_id: "rt-shop".into(),
+    }]);
+    let mut world = start(scripted().state(state));
+    press(&mut world, Action::DockAsks);
+    let mut frame = vec![0x01, b"rt-shop".len() as u8];
+    frame.extend_from_slice(b"rt-shop");
+    frame.extend_from_slice(&1u32.to_be_bytes());
+    frame.extend_from_slice(
+        b"\x1b]133;A\x07$ \x1b]133;B\x07make check\r\n\x1b]133;C\x07running\r\n",
+    );
+    world.daemon.emit_frame(frame);
+    world.settle();
+    click(&mut world, Target::key("asks.open-seed"));
+    for f in &files {
+        world.gesture(|app| app.click(Target::key(*f)));
+    }
+    let (step, times) = if many {
+        ("mod+shift+[", 4)
+    } else {
+        ("mod+shift+]", 1)
+    };
+    for _ in 0..times {
+        world.gesture(|app| app.press(step));
+    }
+    snap(
+        &mut world,
+        if many {
+            "asks-panel-tabs-folded"
+        } else {
+            "asks-panel-tabs"
+        },
+        dark,
+    );
+}
+
 fn notebook(dark: bool) {
     let mut world = with_document(dark);
     world
@@ -9621,6 +9723,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         });
         scene("asks_preview", || asks_preview(dark));
         scene("asks_labels", || asks_labels(dark));
+        scene("asks_panel_tabs", || asks_panel_tabs(dark, false));
+        scene("asks_panel_tabs", || asks_panel_tabs(dark, true));
         scene("notebook", || notebook(dark));
         scene("notebook_tree", || notebook_tree(dark));
         scene("review_keys", || review_keys(dark));

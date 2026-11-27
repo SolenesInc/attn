@@ -223,7 +223,11 @@ fn a_command_opens_in_a_terminal_the_ask_holds_where_its_block_names_typed_and_h
 }
 
 #[test]
-fn the_send_button_reads_send_and_stop_while_a_command_runs_in_an_ask_terminal() {
+fn the_send_button_reads_send_and_stop_and_the_tab_works_while_a_command_runs_in_an_ask_terminal() {
+    let tab = |world: &World| {
+        let tab = world.screen().get(Target::key("asks.panel.tab.0"));
+        (tab.role, tab.value.unwrap_or_default())
+    };
     let mut world = start(far_state());
     open_sheet(&mut world);
     letter(&mut world, "t");
@@ -235,6 +239,7 @@ fn the_send_button_reads_send_and_stop_while_a_command_runs_in_an_ask_terminal()
         name(&world, "asks.send")
     );
     assert!(!name(&world, "asks.send").contains("stop"));
+    assert_eq!(tab(&world), ("button".into(), "current".into()));
 
     world.daemon.emit_frame(output_frame_to(
         "rt-1",
@@ -247,6 +252,7 @@ fn the_send_button_reads_send_and_stop_while_a_command_runs_in_an_ask_terminal()
         "{}",
         name(&world, "asks.send")
     );
+    assert_eq!(tab(&world).1, "current, running a command");
 
     world.daemon.emit_frame(output_frame_to(
         "rt-1",
@@ -259,6 +265,7 @@ fn the_send_button_reads_send_and_stop_while_a_command_runs_in_an_ask_terminal()
         "{}",
         name(&world, "asks.send")
     );
+    assert_eq!(tab(&world).1, "current");
 }
 
 #[test]

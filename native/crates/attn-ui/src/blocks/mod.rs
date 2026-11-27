@@ -48,6 +48,7 @@ mod section;
 mod setting_row;
 mod sheet;
 mod shelf;
+mod shelf_row;
 mod surface;
 mod table;
 mod tabs;
@@ -111,6 +112,7 @@ pub use sheet::Sheet;
 pub use shelf::{
     CountSide, MemberState, Place, Shelf, ShelfCount, ShelfEntry, ShelfMember, state_mark,
 };
+pub use shelf_row::{Laid, ShelfRow};
 
 /// `blocks` one under another, spaced by what they are, for a surface that is not a page.
 pub(crate) fn stacked(blocks: Vec<Block>) -> rune::El {

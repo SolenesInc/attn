@@ -190,8 +190,8 @@ fn shelf(s: &Desk, cx: &mut Cx<Desk>) -> El {
     let reach = Shelf::FRAME_REACH;
     let (frame_x, frame_width) = (framed.0 - reach, framed.1 - framed.0 + 2.0 * reach);
     let row = Shelf::row("shelf.row")
-        .child(Shelf::frame(frame_x, frame_width, &t))
-        .child(Shelf::frame_edge(frame_x, frame_width, &t))
+        .child(Shelf::frame("shelf.frame", frame_x, frame_width, &t))
+        .child(Shelf::frame_edge("shelf.frame", frame_x, frame_width, &t))
         .child(
             before
                 .build("shelf.count", "2 more this way", &t)

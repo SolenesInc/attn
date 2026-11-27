@@ -680,14 +680,14 @@ impl Shelf {
         ENTRY_GAP.pt()
     }
 
-    /// The ground of the entries on screen, `width` wide from `x`.
-    pub fn frame(x: f32, width: f32, t: &Tokens) -> El {
-        framing("shelf.frame", x, width).fill(t.bg_elevated)
+    /// The ground of the entries on screen, keyed `key`, `width` wide from `x`.
+    pub fn frame(key: &str, x: f32, width: f32, t: &Tokens) -> El {
+        framing(key, x, width).fill(t.bg_elevated)
     }
 
     /// The edge of [`Shelf::frame`], drawn over the entry or the count beside it.
-    pub fn frame_edge(x: f32, width: f32, t: &Tokens) -> El {
-        framing("shelf.frame.edge", x, width)
+    pub fn frame_edge(key: &str, x: f32, width: f32, t: &Tokens) -> El {
+        framing(&format!("{key}.edge"), x, width)
             .border(1.0, t.border)
             .paint_order(1)
             .inert()

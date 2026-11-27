@@ -343,8 +343,8 @@ fn shelf_board(t: &Tokens, _: &mut Cx<Tokens>) -> El {
             });
         let framed = (place != Place::OffScreen).then(|| {
             [
-                Shelf::frame(0.0, 1390.0, t),
-                Shelf::frame_edge(0.0, 1390.0, t),
+                Shelf::frame("shelf.frame", 0.0, 1390.0, t),
+                Shelf::frame_edge("shelf.frame", 0.0, 1390.0, t),
             ]
         });
         Shelf::row(format!("row.{p}"))

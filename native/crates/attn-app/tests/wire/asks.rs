@@ -2560,6 +2560,139 @@ fn close_tab(world: &mut World) {
     world.gesture(|app| app.press(chord));
 }
 
+/// The tabs of the panel the strip draws, by their place among the panel's tabs, and the tabs
+/// each count holds.
+fn strip(world: &World) -> (Vec<usize>, usize, usize) {
+    let screen = world.screen();
+    let drawn = (screen
+        .descendants(Target::key("asks.panel.tabs"))
+        .into_iter())
+    .filter_map(|n| n.key?.strip_prefix("asks.panel.tab.")?.parse().ok())
+    .collect();
+    let counted = |key: &str| {
+        (screen.find(Target::key(key)))
+            .and_then(|n| n.name?.split(' ').next()?.parse().ok())
+            .unwrap_or(0)
+    };
+    (
+        drawn,
+        counted("asks.panel.count.before"),
+        counted("asks.panel.count.after"),
+    )
+}
+
+fn current_tab(world: &World) -> Vec<usize> {
+    (world
+        .screen()
+        .descendants(Target::key("asks.panel.tabs"))
+        .into_iter())
+    .filter(|n| n.value.as_deref() == Some("current"))
+    .filter_map(|n| n.key?.strip_prefix("asks.panel.tab.")?.parse().ok())
+    .collect()
+}
+
+#[test]
+fn the_panel_tabs_fold_into_counts_at_their_ends_and_never_fold_the_tab_shown() {
+    const PLANS: [&str; 8] = [
+        "north-wing-plan",
+        "south-wing-plan",
+        "east-wing-plan",
+        "west-wing-plan",
+        "cellar-plan",
+        "attic-plan",
+        "garden-plan",
+        "garage-plan",
+    ];
+    let links: Vec<String> = PLANS.iter().map(|p| format!("[{p}]({p}.md)")).collect();
+    let mut asked = ask(
+        "a-plans",
+        "api",
+        "Plans",
+        5,
+        vec![prose(&format!("Read {}.", links.join(", ")))],
+    );
+    asked.references = Some(
+        PLANS
+            .iter()
+            .map(|p| AskReference {
+                kind: "file".into(),
+                text: format!("{p}.md"),
+                host: None,
+                path: format!("/tmp/api/{p}.md"),
+                line: 1,
+            })
+            .collect(),
+    );
+    let mut world = start(vec![asked], vec![api_working()]);
+    world.daemon.on("tile_document_read", |r| {
+        let path = r["path"].as_str().unwrap_or_default();
+        let plan = path
+            .rsplit('/')
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches(".md");
+        message(TileDocumentReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            content: Some(format!("# {}\n", plan.replace('-', " "))),
+            ..TileDocumentReadResultMessage::new()
+        })
+    });
+    open_sheet(&mut world);
+    for plan in PLANS {
+        world.gesture(|app| app.click(Target::key(format!("{plan}.md"))));
+    }
+
+    let (drawn, before, after) = strip(&world);
+    assert_eq!(current_tab(&world), [7], "{}", world.screen());
+    assert_eq!(drawn.last(), Some(&7), "the shown tab never folds");
+    assert!(
+        before > 0,
+        "the tabs that do not fit fold before: {drawn:?}"
+    );
+    assert_eq!((after, drawn.len() + before), (0, 8));
+    assert_eq!(name(&world, "asks.panel.tab.7"), "garage-plan.md");
+    let reads = |at: usize| vec![PLANS[at].replace('-', " ")];
+    assert_eq!(panel_reads(&world), reads(7));
+
+    world.gesture(|app| app.press("mod+shift+]"));
+    let (drawn, before, after) = strip(&world);
+    assert_eq!(current_tab(&world), [0], "the tab keys go round");
+    assert_eq!(drawn.first(), Some(&0), "the shown tab never folds");
+    assert!(after > 0 && before == 0, "{drawn:?} {before} {after}");
+    assert_eq!(panel_reads(&world), reads(0));
+
+    let nearest = drawn.last().unwrap() + 1;
+    click(&mut world, "asks.panel.count.after");
+    assert_eq!(
+        current_tab(&world),
+        [nearest],
+        "a count shows the tab folded nearest"
+    );
+    assert!(strip(&world).0.contains(&nearest));
+    assert_eq!(panel_reads(&world), reads(nearest));
+
+    let beside = strip(&world).0[0];
+    click(&mut world, &format!("asks.panel.tab.{beside}"));
+    assert_eq!(current_tab(&world), [beside], "a click shows its tab");
+    assert_eq!(panel_reads(&world), reads(beside));
+
+    world.gesture(|app| app.press("mod+shift+["));
+    world.gesture(|app| app.press("mod+shift+["));
+    let shown = (beside + 6) % 8;
+    assert_eq!(current_tab(&world), [shown]);
+    assert!(
+        strip(&world).0.contains(&shown),
+        "the shown tab never folds"
+    );
+
+    close_tab(&mut world);
+    let (drawn, before, after) = strip(&world);
+    assert_eq!(drawn.len() + before + after, 7, "the shown tab closed");
+    assert_eq!(current_tab(&world).len(), 1);
+    assert!(drawn.contains(&current_tab(&world)[0]));
+}
+
 #[test]
 fn file_links_in_an_ask_open_in_tabs_of_its_panel_read_from_the_machine_each_names() {
     let dir = tempfile::tempdir().unwrap();
