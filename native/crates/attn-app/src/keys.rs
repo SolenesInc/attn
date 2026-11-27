@@ -105,8 +105,10 @@ fn ask_terminal_key(
     tx: &mut Tx,
 ) -> bool {
     let focus = Focus::default();
-    if state.keymap.press(ev, tx, focus) == Press::Action(Action::DockAsks) {
-        return crate::asks::panel::hand_back(state, tx);
+    match state.keymap.press(ev, tx, focus) {
+        Press::Action(Action::DockAsks) => return crate::asks::panel::hand_back(state, tx),
+        Press::Action(Action::TerminalLabelIds) if crate::hints::start(state, tx) => return true,
+        _ => {}
     }
     if let Some(id) = &terminal
         && let Some(chord) = clipboard_chord(ev)

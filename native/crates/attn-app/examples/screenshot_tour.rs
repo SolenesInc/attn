@@ -5651,6 +5651,58 @@ fn chief_setup(dark: bool) {
     snap(&mut world, "chief-setup", dark);
 }
 
+/// An ask's file, web link and commands labelled while the label chord is held.
+fn asks_labels(dark: bool) {
+    let seeds = vec![seed("s-7k3f9m", "Colors in one place", "growing", None)];
+    let mut state = initial(dark, document_tile("m", "/repo/plan.md"), seeds);
+    let prose = "Read [the plan](plan.md) and [the notes](https://example.com/notes) on s-7k3f9m.\n\n\
+                 ```sh\nmake check\n```\n\nThen list what it left:\n\n```bash\nls -la\n```\n";
+    state.asks = Some(vec![Ask {
+        id: "a-ship".into(),
+        session_id: "s1".into(),
+        subject: "Ship the colors".into(),
+        base_dir: "/repo".into(),
+        created_at: "2026-11-17T09:00:00Z".into(),
+        parts: vec![
+            AskPart {
+                markdown: Some(prose.into()),
+                ..AskPart::default()
+            },
+            AskPart {
+                question: Some(AskQuestion {
+                    key: "q1".into(),
+                    kind: "text".into(),
+                    prompt: "Ship it?".into(),
+                    ..AskQuestion::default()
+                }),
+                ..AskPart::default()
+            },
+        ],
+        references: Some(vec![attn_protocol::AskReference {
+            kind: "file".into(),
+            text: "plan.md".into(),
+            host: None,
+            path: "/repo/plan.md".into(),
+            line: 1,
+        }]),
+        ..Ask::default()
+    }]);
+    let mut world = start(scripted().state(state));
+    press(&mut world, Action::DockAsks);
+    let mac = attn_testkit::mac();
+    world.gesture(|app| {
+        app.hold(rune::Mods {
+            cmd: true,
+            logo: mac,
+            ctrl: !mac,
+            shift: !mac,
+            ..rune::Mods::default()
+        })
+    });
+    press(&mut world, Action::TerminalLabelIds);
+    snap(&mut world, "asks-labels", dark);
+}
+
 /// The asks sheet showing one ask from the waiting agent, with its footer's keys and Send.
 fn asks(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
@@ -9433,6 +9485,7 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
             asks_waiting(dark, 12, "asks-waiting-many")
         });
         scene("asks_preview", || asks_preview(dark));
+        scene("asks_labels", || asks_labels(dark));
         scene("notebook", || notebook(dark));
         scene("notebook_tree", || notebook_tree(dark));
         scene("review_keys", || review_keys(dark));

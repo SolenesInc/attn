@@ -168,6 +168,11 @@ it does when you close its tab.
 asked, or onto the desktop you are on, and stays after you answer. The phone
 shows each command with **Copy** and the machine and folder it runs in.
 
+Hold Cmd+L (Ctrl+Shift+L on Linux) in Asks to put a letter on every seed, agent,
+file, link and command in the ask, also while a shell holds the keyboard. Keep
+holding and press a letter: a file, a link or a command opens as a click on it
+does, and a seed or an agent shows its card.
+
 While asks are open, the asks button in the title bar is an accent pill with
 their count. It pops when a new ask arrives and, by default, again every minute
 while asks wait with the sheet closed. **Settings → Agents and models → Asks

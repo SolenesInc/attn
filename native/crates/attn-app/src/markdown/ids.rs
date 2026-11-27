@@ -130,42 +130,6 @@ pub(crate) fn open(state: &mut State, target: Subject, tx: &mut Tx) {
     });
 }
 
-/// A box of the window that words show in, and the ids they show.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct Reading {
-    pub(crate) clip: [u32; 4],
-    pub(crate) marks: Vec<Mark>,
-}
-
-pub(crate) fn readings(state: &State, links: &[ShownLink]) -> Vec<Reading> {
-    let known: Vec<(Mark, [f32; 4])> = links
-        .iter()
-        .filter_map(|link| {
-            let target = subject(&link.id).filter(|target| state.terminals.knows(target))?;
-            Some((mark(target, *link.lines.first()?), link.clip))
-        })
-        .collect();
-    let mut boxes: Vec<[f32; 4]> = Vec::new();
-    for (_, clip) in &known {
-        if !boxes.iter().any(|outer| holds(*outer, *clip)) {
-            boxes.retain(|inner| !holds(*clip, *inner));
-            boxes.push(*clip);
-        }
-    }
-    let reading = |clip: &[f32; 4]| {
-        let inside = known.iter().filter(|(_, own)| holds(*clip, *own));
-        Reading {
-            clip: clip.map(f32::to_bits),
-            marks: inside.map(|(mark, _)| mark.clone()).collect(),
-        }
-    };
-    boxes.iter().map(reading).collect()
-}
-
-fn holds([x, y, w, h]: [f32; 4], [ix, iy, iw, ih]: [f32; 4]) -> bool {
-    x <= ix && y <= iy && ix + iw <= x + w && iy + ih <= y + h
-}
-
 /// Whether something in the window follows where the ids in its words are.
 pub(crate) fn followed(state: &State) -> bool {
     let window = &state.window;
@@ -183,9 +147,8 @@ pub(crate) fn drawn(state: &mut State, links: Vec<ShownLink>) -> bool {
         same.any(|link| link.lines.contains(&at))
     };
     let let_go = header_pop::words_drawn(state, shown);
-    let labelled = crate::hints::words_drawn(state, &links);
     if state.window.words.inside {
         state.window.words.links = links;
     }
-    let_go | labelled
+    let_go
 }

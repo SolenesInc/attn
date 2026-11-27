@@ -2523,7 +2523,7 @@ fn an_image_in_a_subject_prompt_or_choice_reads_as_its_alt_text_and_only_the_con
     );
 }
 
-fn reads_documents(world: &World) {
+pub(super) fn reads_documents(world: &World) {
     world.daemon.on("tile_document_read", |r| {
         let path = r["path"].as_str().unwrap_or_default();
         let (success, content, error) = match path.rsplit('/').next() {

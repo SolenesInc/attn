@@ -91,8 +91,13 @@ pub fn ids_drawn(rt: &mut Runtime<State>) -> bool {
     if !ids::followed(rt.state()) {
         return false;
     }
+    let labelled = crate::hints::shown(rt);
     let links = rt.links(ids::HREF);
-    rt.update_if(|state, _| ids::drawn(state, links))
+    rt.update_if(|state, _| {
+        let relabelled = labelled
+            .is_some_and(|(shown, elements)| crate::hints::words_drawn(state, &shown, &elements));
+        ids::drawn(state, links) | relabelled
+    })
 }
 
 impl Screens {

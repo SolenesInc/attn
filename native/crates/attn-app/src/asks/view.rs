@@ -401,40 +401,25 @@ struct Prose<'a> {
     measure: Option<f32>,
     pictures: Rc<HashMap<String, Option<Image>>>,
     widths: &'a HashMap<String, u32>,
-    document: String,
-    away: Option<links::Away>,
-    placed: Vec<links::Placed>,
+    document: links::Document,
     t: &'a Tokens,
 }
 
 impl<'a> Prose<'a> {
     fn of(state: &'a State, ask: &Ask, measure: Option<f32>, t: &'a Tokens) -> Prose<'a> {
-        let machines = crate::machine::Machines::of(&state.facts);
         Prose {
             names: mentions::of(state, &ask.id),
             ids: &state.readings.ids,
             measure,
             pictures: state.pictures.of_ask(&ask.id),
             widths: &state.window.asks.widths,
-            document: images::ask_document(ask),
-            away: links::Away::of(&machines, None),
-            placed: placed_files(&machines, ask),
+            document: document(state, ask),
             t,
         }
     }
 
     fn document(&self) -> links::Document {
-        links::Document {
-            path: self.document.clone(),
-            session: None,
-            away: self.away.clone(),
-            view: "asks.ask".into(),
-            opens_seed: None,
-            seed: None,
-            part: None,
-            ids: self.ids.clone(),
-            placed: self.placed.clone(),
-        }
+        self.document.clone()
     }
 
     /// The words of `source`, a line of inline markdown, and what draws its marks on the words
@@ -596,6 +581,31 @@ fn placed_files(machines: &crate::machine::Machines, ask: &Ask) -> Vec<links::Pl
             away: links::Away::of(machines, r.host.as_deref()),
         })
         .collect()
+}
+
+/// The document an ask's links belong to.
+pub(crate) fn document(state: &State, ask: &Ask) -> links::Document {
+    let machines = crate::machine::Machines::of(&state.facts);
+    links::Document {
+        path: images::ask_document(ask),
+        session: None,
+        away: links::Away::of(&machines, None),
+        view: "asks.ask".into(),
+        opens_seed: None,
+        seed: None,
+        part: None,
+        ids: state.readings.ids.clone(),
+        placed: placed_files(&machines, ask),
+    }
+}
+
+/// Follows the link `href` of ask `ask_id` as a click on it does.
+pub(crate) fn follow_href(state: &mut State, ask_id: &str, href: &str, tx: &mut Tx) {
+    let Some(ask) = state.facts.asks.iter().find(|a| a.id == ask_id) else {
+        return;
+    };
+    let document = document(state, ask);
+    follow_link(state, &document, href, tx);
 }
 
 fn follow_link(state: &mut State, document: &links::Document, href: &str, tx: &mut Tx) {

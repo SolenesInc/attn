@@ -22,7 +22,8 @@ use crate::sidebar::queue;
 
 pub(crate) use saving::poll as save_drafts;
 pub(crate) use view::{
-    ChipLevel, chip, chip_widths, marker, panel_key, preview, sheet, title_button,
+    ChipLevel, chip, chip_widths, document, follow_href, marker, open_command_key, panel_key,
+    preview, sheet, title_button,
 };
 
 pub(crate) const SETTING: &str = "asks_enabled";

@@ -29,6 +29,8 @@ fn physical(letter: char) -> PhysicalKeyCode {
         'a' => PhysicalKeyCode::KeyA,
         'd' => PhysicalKeyCode::KeyD,
         'f' => PhysicalKeyCode::KeyF,
+        'g' => PhysicalKeyCode::KeyG,
+        'j' => PhysicalKeyCode::KeyJ,
         'l' => PhysicalKeyCode::KeyL,
         's' => PhysicalKeyCode::KeyS,
         other => panic!("no key for {other}"),

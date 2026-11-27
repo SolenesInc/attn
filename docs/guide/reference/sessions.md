@@ -69,14 +69,15 @@ one forever from there.
 - Point at an id to see its card. Cmd-click (Ctrl-click on Linux) an id in a
   terminal, or click one in markdown, to open a live agent, or a seed in a tile.
   For a closed agent, the click moves the keyboard into its card, where you can
-  resume the agent or find it in the ledger. In an ask, a seed's link opens the
-  seed in the Garden and shows no card.
+  resume the agent or find it in the ledger. In an ask, a seed's link shows the
+  seed beside the question and shows no card.
 - Hold Cmd+L (Ctrl+Shift+L on Linux) to put a letter on each of those ids, in
   terminals and in markdown. Keep holding and press the letter to open its card
   with the keyboard in it: Enter opens the agent or the seed, or resumes a closed
   agent, and Escape returns to where you were. Let go to hide the letters.
   Settings → Appearance → Id Labels picks how they look: each id lit up with a
-  list of what the ids name, or each name in place of its id.
+  list of what the ids name, or each name in place of its id. In Asks, an ask's
+  files, links and commands get letters too.
 - If your shell marks commands (fish does by default), click a command's output
   to select the whole block. Cmd+C (Ctrl+Shift+C on Linux) copies the command
   and its output. Cmd+Shift+C (Ctrl+Alt+C on Linux) copies only the command.

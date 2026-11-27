@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use attn_protocol::{
-    Ask, DesktopPane, DesktopTileContentMessage, ReviewBundle, ReviewRow, ReviewStop, Seed,
-    Session, SessionLedgerEntry,
+    Ask, AskReference, DesktopPane, DesktopTileContentMessage, ReviewBundle, ReviewRow, ReviewStop,
+    Seed, Session, SessionLedgerEntry,
 };
 use attn_testkit::{Target, World, key_event, tree};
 use rune::{Chord, Key};
@@ -644,6 +644,97 @@ fn the_chord_labels_an_asks_sessions_and_seeds_and_a_label_opens_the_card() {
     key(&mut world, Key::Enter);
     assert_eq!(opened_seeds(&world), [SEED]);
     assert!(!has(&world, "asks.ask"), "the sheet gives way to the seed");
+}
+
+const PLAN: &str = "plan.md";
+const NOTES: &str = "https://example.com/notes";
+
+/// An ask that names a seed, a file and a web page, and offers two commands.
+fn asking_references() -> World {
+    let mut asked = ask(
+        "a-1",
+        "s1",
+        "Ship it?",
+        30,
+        vec![
+            prose(&format!(
+                "Read [the plan]({PLAN}) and [the notes]({NOTES}) on {SEED}.\n\n\
+                 ```sh\nmake check\n```\n\n```bash\nls -la\n```\n"
+            )),
+            question("q1", "one", "Ship it?", &["Yes", "No"]),
+        ],
+    );
+    asked.base_dir = "/work".into();
+    asked.references = Some(vec![AskReference {
+        kind: "file".into(),
+        text: PLAN.into(),
+        host: None,
+        path: "/work/plan.md".into(),
+        line: 1,
+    }]);
+    let mut world = start_with((vec![], vec![mapped()], vec![]), vec![asked], "");
+    mentions_answered(&world, &[(SEED, SEED)]);
+    super::asks::reads_documents(&world);
+    open_sheet(&mut world);
+    world
+}
+
+/// The panel's tabs, the links the system opened since the last look and the text of each shell
+/// spawned.
+fn opened(world: &mut World) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let tab = |i: usize| {
+        world
+            .screen()
+            .find(Target::key(format!("asks.panel.tab.{i}")))
+    };
+    let tabs = (0..4).filter_map(tab).filter_map(|n| n.name).collect();
+    let spawned = world.daemon.sent_of("spawn_session");
+    let typed = spawned
+        .iter()
+        .map(|r| r["typed"].as_str().unwrap().to_owned());
+    (tabs, typed.collect(), world.opened_links())
+}
+
+#[test]
+fn the_chord_labels_an_asks_seed_file_link_and_commands_and_each_label_opens_what_a_click_does() {
+    let mut labelled = asking_references();
+    hold(&mut labelled);
+    assert_eq!(
+        labels(&labelled, "words.0", "hints"),
+        [
+            "S Map the uploader, harvested",
+            "D plan.md, file",
+            "F https://example.com/notes, web page",
+            "G make check, command",
+            "J ls -la, command",
+        ]
+    );
+    press(&mut labelled, 's', false);
+    lets_go(&mut labelled);
+    assert!(shown(&labelled, SEED_CARD), "an id's label opens its card");
+    key(&mut labelled, Key::Escape);
+
+    let mut clicked = asking_references();
+    let targets = [
+        ('d', PLAN),
+        ('f', NOTES),
+        ('g', "asks.command.0.open"),
+        ('j', "asks.command.1.open"),
+    ];
+    let mut followed = Vec::new();
+    for (letter, target) in targets {
+        hold(&mut labelled);
+        press(&mut labelled, letter, false);
+        lets_go(&mut labelled);
+        click(&mut clicked, target);
+        let by_label = opened(&mut labelled);
+        assert_eq!(by_label, opened(&mut clicked), "{target}");
+        followed.extend(by_label.2);
+    }
+    let (tabs, typed, _) = opened(&mut labelled);
+    assert_eq!(tabs.len(), 3, "the file and both commands: {tabs:?}");
+    assert_eq!(typed, ["make check", "ls -la"]);
+    assert_eq!(followed, [NOTES]);
 }
 
 #[test]
