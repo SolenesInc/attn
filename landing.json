@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "962ab37bbd369e6d0e057c348bf2e17227a69081",
+  "head": "4de696011866373c0d5e7e31fc5dc9ebd638de9d",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 274.504,
+    "ranOn": "4de696011866373c0d5e7e31fc5dc9ebd638de9d"
+  },
+  "noMediaReason": "daemon and wire change; nothing in the app draws an ask-held terminal until the Asks panel lands",
+  "recordings": []
+}
