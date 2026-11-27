@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Fork palette in a popped-out tile can dismiss the wrong offer",
+  "at": "2026-11-27T14:37:55.611Z",
+  "detail": "With a popped-out fork focused, the palette shortcut dispatches in the main window without the originating tile. The new Open and Dismiss commands resolve the main window's active session. The independent wire probe expected to dismiss the popped tile and observed dismissal sent for the main tile. Preserve the originating tile's context for both actions.\n"
+}
