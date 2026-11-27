@@ -289,7 +289,10 @@ attnd                   the program that runs the daemon;
 ```
 
 ```text
-home                    the main daemon the user's app connects to
+home                    the main daemon, which holds the user's state; like a
+│                       server. The user's app connects to it directly, or
+│                       through the daemon on the app's machine when that
+│                       machine dials the home
 ├─ home id (1)         names the home apart from the daemon that runs it;
 │                      outposts stay paired to it when another daemon runs the home
 ├─ bridge (0..n)       a connection through the user's ssh to one outpost; the
