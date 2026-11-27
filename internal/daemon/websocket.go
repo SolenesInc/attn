@@ -556,7 +556,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 func (d *Daemon) sendInitialState(client *wsClient) {
 	state := d.currentStateProjection()
 	event := &protocol.InitialStateMessage{
-		TerminalBindings:       d.terminals().Bindings(),
+		TerminalBindings:       d.terminalBindingsSnapshot(client.selectedProfile()).TerminalBindings,
 		Event:                  protocol.EventInitialState,
 		ProtocolVersion:        protocol.Ptr(protocol.ProtocolVersion),
 		SourceFingerprint:      protocol.Ptr(buildinfo.SourceFingerprint),

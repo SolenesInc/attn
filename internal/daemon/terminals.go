@@ -3,6 +3,7 @@ package daemon
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"slices"
 	"sync"
 	"time"
@@ -325,9 +326,41 @@ func (r *terminalRegistry) Bindings() []protocol.TerminalBinding {
 	return bindings
 }
 
+func (d *Daemon) terminalBindingsShownIn(profileID string, bindings []protocol.TerminalBinding) []protocol.TerminalBinding {
+	shown := slices.Clone(bindings)
+	for i, binding := range shown {
+		if binding.AskID == nil {
+			continue
+		}
+		if session := d.store.Get(binding.SessionID); session == nil || !askShownIn(profileID, session.ProfileID) {
+			shown[i].AskID = nil
+		}
+	}
+	return shown
+}
+
+func (d *Daemon) terminalBindingsSnapshot(profileID string) *protocol.TerminalBindingsUpdatedMessage {
+	return &protocol.TerminalBindingsUpdatedMessage{Event: protocol.EventTerminalBindingsUpdated, TerminalBindings: d.terminalBindingsShownIn(profileID, d.terminals().Bindings())}
+}
+
 func (d *Daemon) projectTerminalBindings() {
 	d.projectSnapshot(protocol.EventTerminalBindingsUpdated, func() {
-		d.wsHub.BroadcastValue(&protocol.TerminalBindingsUpdatedMessage{Event: protocol.EventTerminalBindingsUpdated, TerminalBindings: d.terminals().Bindings()})
+		bindings := d.terminals().Bindings()
+		snapshots := map[string][]byte{}
+		d.wsHub.ForEachClient(func(client *wsClient) {
+			profileID := client.selectedProfile()
+			data, ok := snapshots[profileID]
+			if !ok {
+				var err error
+				data, err = json.Marshal(&protocol.TerminalBindingsUpdatedMessage{Event: protocol.EventTerminalBindingsUpdated, TerminalBindings: d.terminalBindingsShownIn(profileID, bindings)})
+				if err != nil {
+					d.logf("terminal bindings snapshot: %v", err)
+					return
+				}
+				snapshots[profileID] = data
+			}
+			d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data})
+		})
 	})
 }
 

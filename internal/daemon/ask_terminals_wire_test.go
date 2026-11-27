@@ -137,3 +137,56 @@ func TestAnAskHoldsAShellWithNoTileUntilItIsAnsweredOrATileTakesIt(t *testing.T)
 	}
 	awaitClosed(app, string(inWithdrawn.ID))
 }
+
+func TestOnlyClientsOfTheAsksProfileSeeWhichAskHoldsAShell(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	home := app.SelectedProfile()
+	setSetting(t, app, "asks_enabled", "true")
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	id := uuid.NewString()
+	other := mustProfileRequest(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: id, Name: "Other"}, id).Profile
+	otherApp := w.AppOn(other.ID)
+	bindingOf := func(bindings []protocol.TerminalBinding, session protocol.SessionID) (protocol.TerminalBinding, bool) {
+		i := slices.IndexFunc(bindings, func(b protocol.TerminalBinding) bool { return b.SessionID == session })
+		if i < 0 {
+			return protocol.TerminalBinding{}, false
+		}
+		return bindings[i], true
+	}
+	withheld := func(path string, bindings []protocol.TerminalBinding, session protocol.SessionID) {
+		t.Helper()
+		binding, ok := bindingOf(bindings, session)
+		if !ok {
+			t.Errorf("%s: the other profile's client does not see shell %s's binding", path, session)
+		} else if binding.AskID != nil {
+			t.Errorf("%s: the other profile's client sees shell %s held by ask %s", path, session, *binding.AskID)
+		}
+	}
+
+	mark := len(otherApp.Log())
+	shell := protocol.SessionID(w.Spawn(app, shellHarness, w.Path("shell"), func(m *protocol.SpawnSessionMessage) {
+		m.Placement = &protocol.SessionPlacement{AskID: protocol.Ptr(asked.ID)}
+	}))
+	awaitAskHolds(app, asked.ID, shell)
+	live := testworld.AwaitSince(otherApp, mark, protocol.EventTerminalBindingsUpdated, func(m protocol.TerminalBindingsUpdatedMessage) bool {
+		_, ok := bindingOf(m.TerminalBindings, shell)
+		return ok
+	})
+	withheld("terminal_bindings_updated", live.TerminalBindings, shell)
+
+	if !askHolds(w.AppOn(home).Initial.TerminalBindings, asked.ID, shell) {
+		t.Errorf("initial_state: a client of the ask's profile does not see ask %s holding shell %s", asked.ID, shell)
+	}
+	withheld("initial_state", w.AppOn(other.ID).Initial.TerminalBindings, shell)
+
+	mark = len(otherApp.Log())
+	otherApp.Send(protocol.ProfileSelectMessage{Cmd: protocol.CmdProfileSelect, RequestID: uuid.NewString(), ProfileID: home})
+	testworld.AwaitSince(otherApp, mark, protocol.EventTerminalBindingsUpdated, func(m protocol.TerminalBindingsUpdatedMessage) bool {
+		return askHolds(m.TerminalBindings, asked.ID, shell)
+	})
+}
