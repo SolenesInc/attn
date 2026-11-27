@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Reconnect during refused preflight leaves the move band stuck",
+  "at": "2026-11-27T15:05:41.970Z",
+  "detail": "An app reconnecting during a submitted preflight adopts checking. If preflight then fails normally, only the original socket receives the failure and the replacement client remains stuck on an undismissable Moving band. Reconcile the same move through terminal refusal without requiring an app or daemon restart.\n"
+}
