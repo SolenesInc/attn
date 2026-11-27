@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: Linux wire test hardcoded the Mac cold-start row label",
+  "at": "2026-11-27T07:53:56.671Z",
+  "fixesBug": "71edb9343f8f9c7a9c8aec0eeea269f024474945"
+}
