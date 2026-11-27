@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Home move can import stale crew from the target",
+  "at": "2026-11-27T11:09:06.337Z",
+  "detail": "An enrolled target that previously held its own home can retain its old crew directory. When the source has no crew entries to transfer, the new home can import that stale target crew. Apply the source home roots as a complete set, retaining displaced target data for rollback.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/homemove/homemove.go",
+    "line": 240
+  },
+  "culprit": "2113370ce24975ca7209ee34edc6b3db99c96614"
+}
