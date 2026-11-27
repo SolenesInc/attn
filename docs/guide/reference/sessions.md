@@ -141,12 +141,14 @@ session. These commands do this:
   in [Sigma](using-sigma.md). The original stays open and hidden.
 - `/branch` in Claude Code. The original closes into the Sessions ledger.
 
-`/clear`, `/new`, `/resume` and Codex's `/side` leave no notice.
+`/clear`, `/new`, `/resume`, Codex's `/side` and Claude Code's background
+`/fork` leave no notice.
 
-A notice over the top of the fork's terminal says "Forked from" and names the
-original. **Open original beside this** opens the original in the column right
-after the fork and moves the keyboard to it. A hidden original comes back on
-screen, and a closed one resumes. The × dismisses the notice in every window.
+A notice over the top of the fork's terminal reads "Forked from" and the
+original's name. When the original is closed, as after `/branch`, it reads
+"Forked from an earlier conversation." **Open original beside this** opens the
+original in the column right after the fork and moves the keyboard to it. A
+hidden original comes back on screen, and a closed one resumes. The × dismisses the notice in every window.
 On the fork's tile, the command palette offers the same two actions as **Open
 original beside this** and **Dismiss fork offer**.
 

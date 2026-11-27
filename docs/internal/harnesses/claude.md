@@ -12,6 +12,7 @@ Rules for adding claims: [Harness behavior](../harnesses.md).
 | `/clear` | SessionEnd `clear`, SessionStart `clear` | new |
 | `/resume <id>` or picker | SessionEnd `resume`, SessionStart `resume` | target (same id twice is a no-op) |
 | `/branch` | SessionEnd `resume`, SessionStart `fork` | new |
+| `/fork` with `CLAUDE_CODE_DISABLE_AGENT_VIEW=1` | none: starts a background subagent `[2.1.331–332]` | unchanged |
 | `/compact` | PreCompact, SessionStart `compact`, PostCompact | unchanged |
 | `claude -r <id>`, `--continue` | SessionStart `resume` | unchanged (`--fork-session` gives `fork` + new id) |
 | `/rewind` | none | unchanged |
