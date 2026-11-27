@@ -166,6 +166,7 @@ Preconditions:
 
 - The baseline has nothing to connect to: an added outpost ends `lost`, or `refused` when ssh refuses authentication or a host key. `go test ./cmd/attnd -run TestSSH -v` proves the bridge states only. Shells, agents, offline tiles, ledger resume, notebook sync and updates need a Linux box with the setup in `docs/guide/reference/using-outposts.md`. That outpost runs its machine's own Claude Code and Codex, never the mock agent.
 - A named instance pairs only with an outpost of the same instance name, never with production or another name. `go test ./cmd/attnd -run TestSSH -v` sidesteps this with two daemons in temporary data folders.
+- On an outpost newly added or joined, the home refuses a spawn there until the outpost's first sync of the Notebook folder completes, with `<name>'s first sync of the Notebook folder <root> has not completed: …`. Wait until `wsctl outposts` shows that outpost's `"notebook"` with `"state":"in_sync"` before you spawn on it.
 - Every outpost command refuses while Outposts is off: `outposts_enabled is off; run attn settings set outposts_enabled true before you add an outpost`.
 - The bridge uses the user's OpenSSH configuration. Every background command uses BatchMode and shows ssh's stderr on failure. The master survives a lost bridge and a home restart. Remove, Outposts off and instance clean exit the master.
 - `attn enrollment` reads the data folder of the attn it runs as. Run it on the outpost to see the outpost's side. On the home it always says `home`.
