@@ -1242,6 +1242,7 @@ pub(crate) fn spawn_then(
             desktop_id: Some(target.desktop.clone()),
             direction: Some(spawn.direction.wire().into()),
             anchor_pane_id: target.anchor,
+            ask_id: None,
         }),
         cols: 80,
         rows: 24,

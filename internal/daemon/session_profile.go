@@ -29,6 +29,7 @@ type launchPlacement struct {
 	itemID       string
 	reopen       bool
 	addsTerminal bool
+	askID        string
 	// terminal is the one the launch runs in, recorded on the pane it gets.
 	terminal harness.TerminalID
 }
@@ -48,7 +49,33 @@ func requestedLaunchPlacement(requested *protocol.SessionPlacement) *launchPlace
 		desktopID:    strings.TrimSpace(protocol.Deref(requested.DesktopID)),
 		anchorPaneID: strings.TrimSpace(protocol.Deref(requested.AnchorPaneID)),
 		direction:    layoutDirection(requested.Direction),
+		askID:        strings.TrimSpace(protocol.Deref(requested.AskID)),
 	}
+}
+
+func (d *Daemon) checkAskPlacement(profile profiles.Profile, placement *launchPlacement, isShell bool) error {
+	if placement.desktopID != "" || placement.anchorPaneID != "" {
+		return protocol.Refuse(protocol.RefusalInvalidInput, "placement rule: ask %s holds the terminal in place of a pane, so name no desktop_id or anchor_pane_id beside ask_id", placement.askID)
+	}
+	if !isShell {
+		return protocol.Refuse(protocol.RefusalInvalidInput, "placement rule: an ask holds only a shell; place an agent on a desktop")
+	}
+	notOpen := protocol.Refuse(protocol.RefusalWrongState, "placement rule: ask %s is not open in profile %q, so it cannot hold a terminal", placement.askID, profile.Name)
+	stored, err := d.store.GetOpenAsk(placement.askID)
+	if errors.Is(err, store.ErrAskNotOpen) {
+		return notOpen
+	}
+	if err != nil {
+		return err
+	}
+	shown, err := d.readAsk(stored)
+	if err != nil {
+		return err
+	}
+	if !askShownIn(profile.ID, shown.profileID) {
+		return notOpen
+	}
+	return nil
 }
 
 func (d *Daemon) liveLaunchProfile(profileID string) (profiles.Profile, error) {
@@ -99,6 +126,16 @@ func (d *Daemon) placeAnsweringRequester(session *protocol.Session, placement *l
 func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *launchPlacement) placementOutcome {
 	if placement == nil {
 		return placementOutcome{}
+	}
+	if placement.askID != "" {
+		err := d.store.PlaceInAsk(session.ID, placement.terminal, placement.askID)
+		if errors.Is(err, store.ErrAskNotOpen) {
+			err = fmt.Errorf("ask %s closed before it could hold the terminal of session %s", placement.askID, session.ID)
+		}
+		if err != nil {
+			d.logf("%v", err)
+		}
+		return placementOutcome{err: err}
 	}
 	var desktop profiles.Desktop
 	var paneID string

@@ -74,6 +74,7 @@ fn this_machine(home: &Daemon) -> Daemon {
         daemon_instance_id: Some("laptop-daemon".into()),
         sessions: Some(vec![shell("here", None)]),
         terminal_bindings: Some(vec![TerminalBinding {
+            ask_id: None,
             session_id: "here".into(),
             terminal_id: "rl".into(),
         }]),
@@ -150,6 +151,7 @@ fn laptop_state(sessions: Vec<Session>, terminals: &[(&str, &str)]) -> InitialSt
             terminals
                 .iter()
                 .map(|(session, terminal)| TerminalBinding {
+                    ask_id: None,
                     session_id: (*session).into(),
                     terminal_id: (*terminal).into(),
                 })
@@ -483,6 +485,7 @@ fn one_hidden() -> (InitialStateMessage, InitialStateMessage) {
         terminal_bindings: Some(
             [("agent", "rl"), ("there", "r2")]
                 .map(|(session, terminal)| TerminalBinding {
+                    ask_id: None,
                     session_id: session.into(),
                     terminal_id: terminal.into(),
                 })
@@ -557,6 +560,7 @@ fn three_here() -> (InitialStateMessage, InitialStateMessage) {
         sessions: Some(ids.map(|id| shell(id, None)).into()),
         terminal_bindings: Some(
             ids.map(|id| TerminalBinding {
+                ask_id: None,
                 session_id: id.into(),
                 terminal_id: format!("r{id}"),
             })
@@ -822,6 +826,7 @@ fn a_peek_at_this_machines_shelved_agent_reads_and_replies_on_its_own_daemon() {
             leaves
                 .iter()
                 .map(|id| TerminalBinding {
+                    ask_id: None,
                     session_id: (*id).into(),
                     terminal_id: format!("r-{id}"),
                 })

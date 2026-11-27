@@ -350,7 +350,7 @@ func (d *Daemon) homeGatewaySessions(profileID string) homegateway.HomeGatewaySe
 	chief := d.chiefOfProfile(profileID)
 	sessions := []homegateway.HomeGatewaySession{}
 	for _, session := range d.store.List("") {
-		if session.ProfileID != profileID {
+		if session.ProfileID != profileID || d.heldByAsks(session.ID) {
 			continue
 		}
 		state := homeGatewayState(session.State)

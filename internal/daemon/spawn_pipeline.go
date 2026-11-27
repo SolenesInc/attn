@@ -189,7 +189,12 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		placement.focus = policy.userStarted
 		placement.addsTerminal = addsTerminal
 	}
-	if err := d.checkLaunchPlacement(profile, placement); err != nil {
+	if placement != nil && placement.askID != "" {
+		err = d.checkAskPlacement(profile, placement, isShell)
+	} else {
+		err = d.checkLaunchPlacement(profile, placement)
+	}
+	if err != nil {
 		return nil, &spawnRejection{err: err}
 	}
 	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, profile: profile, placement: placement, addsTerminal: addsTerminal}, nil

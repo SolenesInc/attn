@@ -604,6 +604,7 @@ fn away_with(
             ..attn_protocol::Session::default()
         }]);
         initial.terminal_bindings = Some(vec![attn_protocol::TerminalBinding {
+            ask_id: None,
             session_id: "here".into(),
             terminal_id: "rl".into(),
         }]);

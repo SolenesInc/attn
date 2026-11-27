@@ -233,6 +233,8 @@ type Daemon struct {
 	inboxStates              map[who.Address]*inboxDeliveryState
 	inboxUnsubscribe         func()
 	monitorPolicyUnsubscribe func()
+	askTerminalsUnsubscribe  func()
+	askTerminalsUnsettled    atomic.Bool
 	crewStartMu              sync.Mutex
 	crewExitedMu             sync.Mutex
 	crewExitedSessions       map[string]string
@@ -791,6 +793,7 @@ func (d *Daemon) Start() error {
 			return
 		}
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
+		d.settleAskTerminals()
 		d.recoverHarnesses(context.Background(), harness.RecoverMonitors)
 		d.reconcileOutpostCommandTerminals()
 		if d.stopping() {
@@ -1201,7 +1204,7 @@ func (d *Daemon) placedLiveTerminals(ctx context.Context) map[protocol.SessionID
 	for terminalID := range d.liveTerminals(ctx) {
 		sessionID, ok := d.terminals().Showing(terminalID)
 		if !ok {
-			d.logf("worker reconciliation left runtime %s to the orphan prune: no pane places it", terminalID)
+			d.logf("worker reconciliation left runtime %s to the orphan prune: no session owns it", terminalID)
 			continue
 		}
 		placed[sessionID] = liveTerminal{terminal: terminalID, link: d.adapterTerminal(terminalID)}

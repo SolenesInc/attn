@@ -50,7 +50,7 @@ code navigation         definition, uses and type of a name, answered by a
 ```
 
 ```text
-terminal                one PTY process in a terminal tile
+terminal                one PTY process, shown in a terminal tile or in an ask
 ├─ runs 1 harness or 1 shell
 ├─ host (at most 1)    the outpost it runs on; no host means the home's machine
 └─ offline             its host is unreachable (bridge lost or refused, or

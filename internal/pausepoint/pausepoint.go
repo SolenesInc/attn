@@ -138,6 +138,8 @@ const (
 	OutpostRecoveryReported        = "outpost-recovery-reported"
 	OutpostRecoveryStarted         = "outpost-recovery-started"
 	OutpostRecoveryApplied         = "outpost-recovery-applied"
+	AskTerminalsSettling           = "ask-terminals-settling"
+	AskTerminalsSettled            = "ask-terminals-settled"
 	ForwardSocketCreated           = "forward-socket-created"
 	ProfileActionRan               = "profile-action-ran"
 	DatabaseBackupStarting         = "database-backup-starting"

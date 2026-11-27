@@ -24,6 +24,7 @@ type terminalRegistry struct {
 type terminal struct {
 	shows    harness.SessionID
 	copied   bool
+	ask      string
 	shownSeq uint64
 	lastKey  time.Time
 }
@@ -161,6 +162,7 @@ func (r *terminalRegistry) sync(bindings []store.TerminalBinding) {
 			entry.shows, entry.shownSeq = session, r.shown
 		}
 		entry.copied = binding.Copied
+		entry.ask = binding.AskID
 	}
 	now := time.Now()
 	for id, entry := range r.byID {
@@ -169,6 +171,15 @@ func (r *terminalRegistry) sync(bindings []store.TerminalBinding) {
 			r.endLocked(id, endingTerminal{session: entry.shows, copied: entry.copied, at: now})
 		}
 	}
+}
+
+func (r *terminalRegistry) askHolding(t harness.TerminalID) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if entry := r.byID[t]; entry != nil {
+		return entry.ask
+	}
+	return ""
 }
 
 func (r *terminalRegistry) Showing(t harness.TerminalID) (harness.SessionID, bool) {
@@ -304,7 +315,11 @@ func (r *terminalRegistry) Bindings() []protocol.TerminalBinding {
 	defer r.mu.RUnlock()
 	bindings := make([]protocol.TerminalBinding, 0, len(r.byID))
 	for id, entry := range r.byID {
-		bindings = append(bindings, protocol.TerminalBinding{TerminalID: id, SessionID: entry.shows})
+		binding := protocol.TerminalBinding{TerminalID: id, SessionID: entry.shows}
+		if entry.ask != "" {
+			binding.AskID = protocol.Ptr(entry.ask)
+		}
+		bindings = append(bindings, binding)
 	}
 	slices.SortFunc(bindings, func(a, b protocol.TerminalBinding) int { return cmp.Compare(a.TerminalID, b.TerminalID) })
 	return bindings

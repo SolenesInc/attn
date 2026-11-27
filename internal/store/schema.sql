@@ -132,7 +132,7 @@ CREATE TABLE "settings" ( key TEXT NOT NULL, value TEXT, copied_from TEXT NOT NU
 CREATE TABLE sqlite_sequence(name,seq);
 CREATE TABLE supervised_parks ( child TEXT PRIMARY KEY, parked_at TEXT NOT NULL, restart_attempt INTEGER NOT NULL DEFAULT 0, exit_at TEXT NOT NULL DEFAULT '', exit_code INTEGER, exit_signal TEXT NOT NULL DEFAULT '', exit_error TEXT NOT NULL DEFAULT '' );
 CREATE TABLE tasks ( id TEXT PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL, last_error TEXT NOT NULL DEFAULT '', meta_json TEXT NOT NULL DEFAULT '', requeued INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL );
-CREATE TABLE terminal_bindings ( terminal_id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE );
+CREATE TABLE terminal_bindings ( terminal_id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE , ask_id TEXT);
 CREATE TABLE terminal_open_commands ( terminal_id TEXT PRIMARY KEY, opener_session_id TEXT NOT NULL, command TEXT NOT NULL, created_at TEXT NOT NULL , submitting_at TEXT);
 CREATE TABLE terminal_views ( terminal_id TEXT PRIMARY KEY, link TEXT NOT NULL, profile_id TEXT NOT NULL, created_at TEXT NOT NULL );
 CREATE TABLE update_requests ( id TEXT PRIMARY KEY, requester TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, run_id TEXT NOT NULL DEFAULT '', notification_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL , profile_id TEXT NOT NULL DEFAULT '');

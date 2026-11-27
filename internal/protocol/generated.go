@@ -13374,6 +13374,9 @@ type SessionPlacement struct {
 	// AnchorPaneID corresponds to the JSON schema field "anchor_pane_id".
 	AnchorPaneID *string `json:"anchor_pane_id,omitempty,omitzero"`
 
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID *string `json:"ask_id,omitempty,omitzero"`
+
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
 
@@ -14596,6 +14599,9 @@ type TasksChangedMessage struct {
 }
 
 type TerminalBinding struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID *string `json:"ask_id,omitempty,omitzero"`
+
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
 

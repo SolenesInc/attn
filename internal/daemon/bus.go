@@ -258,7 +258,7 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectProfilesChanged() },
 		},
 		{
-			filter: bus.Filter{FactProfileArrangementChanged, FactProfileDeleted, FactSessionClosed, FactSessionUnregistered, FactWorktreeSessionsRemoved},
+			filter: bus.Filter{FactProfileArrangementChanged, FactProfileDeleted, FactSessionRegistered, FactSessionClosed, FactSessionUnregistered, FactWorktreeSessionsRemoved},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectTerminalBindings() },
 		},
 		{
@@ -448,6 +448,7 @@ func (d *Daemon) ensureEventBus() {
 	d.busUnsubscribe = d.eventBus.Subscribe(bus.All, d.projectToClients)
 	d.subscribeInboxFacts()
 	d.subscribeMonitorPolicyFacts()
+	d.subscribeAskTerminalSettling()
 	d.subscribeDocumentFacts()
 	d.subscribeSessionPullRequestFacts()
 	d.gardenSeedEventConsumerErr = d.registerGardenSeedEventConsumer()
@@ -474,6 +475,7 @@ func (d *Daemon) stopEventBus() {
 		d.inboxUnsubscribe = nil
 	}
 	d.unsubscribeMonitorPolicyFacts()
+	d.unsubscribeAskTerminalSettling()
 	d.unsubscribeDocumentFacts()
 	d.unsubscribeSessionPullRequestFacts()
 	if d.busUnsubscribe != nil {

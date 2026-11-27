@@ -2518,6 +2518,9 @@ model SessionPlacement {
   desktop_id?: string;      // Absent: the profile's current desktop
   anchor_pane_id?: string;  // Absent: that desktop's active pane
   direction?: LayoutSplitDirection;
+  // An open ask of the profile holds the shell's terminal instead of a pane.
+  // Refused beside desktop_id or anchor_pane_id, and for an agent.
+  ask_id?: string;
 }
 
 model AttachSessionMessage {
@@ -4403,6 +4406,9 @@ model SetSessionContextWindowCapMessage {
 model TerminalBinding {
   terminal_id: TerminalID;
   session_id: SessionID;
+  // The open ask that holds the terminal in place of a pane. It ends when the
+  // ask stops being open, unless a pane takes it first.
+  ask_id?: string;
 }
 
 model TerminalBindingsUpdatedMessage {
