@@ -1,0 +1,4 @@
+Removing an unreachable machine that dials the home (Settings → Machines) no longer says ssh might stop it, because the home never reaches such a machine by ssh. The note now says what happens. The machine's daemon and the shells this home started there keep running until its next dial. The home refuses that dial, and the machine leaves, stops those shells and becomes its own home again. A new stack test proves it. The dial-in row also drops Re-pair, which the daemon always refused, and its Details stop claiming an ssh destination and an ssh stop. `OutpostInfo.dials_home` is back so the app can tell the rows apart.
+
+![dial-in remove note, dark](https://land-feed.caketroll.cloud/m/SolenesInc/attn/089acb9a732f3aeeab026732698087e2997805944d3b4534ad3b3ab66eb4af20.png)
+![dial-in remove note, light](https://land-feed.caketroll.cloud/m/SolenesInc/attn/c8c005b80ce2cf1fbecdb6f74b80e71cf6bf37cdd90d05bee86e6762019a60f5.png)
