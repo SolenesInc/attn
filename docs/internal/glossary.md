@@ -290,6 +290,8 @@ attnd                   the program that runs the daemon and PTY workers;
 
 ```text
 home                    the main daemon the user's app connects to
+├─ home id (1)         names the home apart from the daemon that runs it;
+│                      outposts stay paired to it when another daemon runs the home
 ├─ bridge (0..n)       a connection through the user's ssh to one outpost
 │  ├─ state (1)
 │  │  ├─ connecting    the home is dialing the outpost
