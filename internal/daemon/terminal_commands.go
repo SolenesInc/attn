@@ -435,8 +435,8 @@ func (d *Daemon) typeAtFirstPrompt(id protocol.SessionID, text string) {
 	})
 }
 
-// Bash 5.3 turns bracketed paste on at most 0.29 ms after its first prompt mark, and zsh 5.9 at most 0.02 ms
-// after it (30 runs each on ai-sandbox, 2026-11-27).
+// A shell turns bracketed paste on at most 0.3 ms after its first prompt mark: bash 5.3 0.29 ms and zsh 5.9
+// 0.11 ms on ai-sandbox, zsh 5.9 0.05 ms in the macOS VM (30 runs each, 2026-11-27).
 const bracketedPasteGrace = 500 * time.Millisecond
 
 func (d *Daemon) shellReadsPastes(ctx context.Context, terminal protocol.TerminalID) bool {
