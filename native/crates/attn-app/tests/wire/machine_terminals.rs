@@ -293,7 +293,11 @@ fn before_the_home_answers_this_machines_terminals_are_live_in_one_row_the_home_
             .find(Target::key("sidebar.desktop."))
             .and_then(|n| n.name)
             .as_deref(),
-        Some("Open This Mac")
+        Some(if attn_testkit::mac() {
+            "Open This Mac"
+        } else {
+            "Open This machine"
+        })
     );
     assert_eq!(ids(machine(&world), "attach_session"), ["rl"]);
     type_into(&mut world, "rl", "x");
