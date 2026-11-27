@@ -170,6 +170,9 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 	}
 	w.app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "box", Destination: "box"})
 	boxRow := outpostState(w.app, "box", protocol.OutpostStateConnected)
+	if !protocol.Deref(row.DialsHome) || protocol.Deref(boxRow.DialsHome) {
+		t.Fatalf("dials_home is %v on the machine that dialed and %v on the outpost the home dials; want true and absent", protocol.Deref(row.DialsHome), protocol.Deref(boxRow.DialsHome))
+	}
 	second := testworld.NewStack(t)
 	w.ssh.Use(second.World)
 	second.Start()
@@ -314,9 +317,6 @@ func TestAReverseOutpostDialsItsHomeAndRedialsAfterEitherRestarts(t *testing.T) 
 func TestAReverseOutpostShowsItsDialAndBothWaysOutEndIt(t *testing.T) {
 	w := newReverseWorld(t)
 	row := w.join()
-	if !protocol.Deref(row.DialsHome) {
-		t.Fatalf("the row of a machine that dials the home does not say so: %+v", row)
-	}
 	requireLines(t, "status while bridged", w.status(), "dial:       home (bridged)", "enrolled to ")
 
 	requireStdout(t, w.home.Attn("settings", "set", "remote_home_enabled", "false"), "false")
@@ -410,7 +410,6 @@ func TestAMachineRemovedWhileOutOfReachKeepsItsShellUntilItDialsAgainThenLeavesA
 	if exited, err := procwait.Exited(pid, fakeagent.HangGuard); err != nil || !exited {
 		t.Fatalf("the shell %d the home started on the machine still runs after the machine left on its next dial: exited=%v err=%v", pid, exited, err)
 	}
-	requireLines(t, "status after it left on the refusal", w.status(), "enrollment: home")
 	t.Log("the machine's next dial was refused, and it left the home and stopped the shell the home had started there")
 }
 

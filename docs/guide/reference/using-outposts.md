@@ -559,19 +559,20 @@ An outpost enrolled to another home keeps its enrollment and its running daemon.
 binaries, their `.previous` copies, the data folder, and the Notebook folder on
 the outpost.
 
-For a machine that joined by dialing, **Remove** closes its terminals and its
-bridge and removes the row, without running ssh to it. When the machine isn't
-connected, its daemon and the shells this home started there keep running. Its
-next dial is refused, and then it leaves the home on its own, stops those shells
-and becomes its own home again, which may be when it wakes. To stop dialing from
-the machine first, run `attn enrollment leave` there. The row stays at the home
-as lost until you remove it.
-
 With terminals, the row offers **Remove and close N terminals** or **Cancel**.
-With none, Attn removes the outpost immediately. If ssh cannot reach the
-outpost, **Remove and forget N terminals** closes only their tiles at the home.
-To stop what remains there, set the matching `ATTN_INSTANCE` and run `enrollment leave`, then `daemon stop`, with
-the outpost's binary.
+With none, Attn removes the outpost immediately. While the outpost isn't
+connected, **Remove and forget N terminals** closes only their tiles at the
+home, and the row says what keeps running there. If ssh cannot reach the
+outpost, set the matching `ATTN_INSTANCE` there and run `enrollment leave`,
+then `daemon stop`, with the outpost's binary.
+
+For a machine that joined by dialing, **Remove** closes its terminals and its
+bridge and removes the row, without running ssh to it. While the machine isn't
+connected, its daemon and the shells this home started there keep running. At
+its next dial, which may be when it wakes, the home refuses it, and it leaves
+the home, stops those shells and becomes its own home again. To end that
+sooner, run `attn enrollment leave` on the machine. Run there first, `leave`
+stops the dialing, and the row stays at the home as lost until you remove it.
 
 Turning Outposts off disconnects every outpost and keeps the list for next
 time. Their terminals show offline until you turn Outposts on again.

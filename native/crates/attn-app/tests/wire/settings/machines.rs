@@ -384,6 +384,14 @@ fn a_dial_in_machine_offers_no_re_pair_and_its_remove_says_it_leaves_on_its_next
         !shows(&world, &part("repair")),
         "the home cannot re-pair a machine that dials it"
     );
+    show_details(&mut world);
+    assert!(!shows(&world, &part("destination")));
+    assert_eq!(
+        named(&world, &part("explain")).as_deref(),
+        Some(
+            "It dials this home, which never reaches it by ssh. Remove closes its terminals and its bridge, and the machine leaves this home at its next dial. Its binary, data and Notebook stay."
+        )
+    );
     click(&mut world, &part("remove"));
     assert_eq!(
         named(&world, &part("remove-note")).as_deref(),

@@ -1306,12 +1306,15 @@ fn details(state: &State, row: &Row, t: &Tokens) -> Vec<Block> {
         };
         return vec![facts.build(t)];
     };
-    let mut facts = Facts::new(part("details"))
-        .fact(
+    let mut facts = Facts::new(part("details"));
+    if outpost.dials_home != Some(true) {
+        facts = facts.fact(
             part("destination"),
             "ssh destination",
             outpost.destination.clone(),
-        )
+        );
+    }
+    let mut facts = facts
         .fact(part("since"), "Since", timestamp(&outpost.state_since))
         .code(
             part("build"),
@@ -1352,7 +1355,11 @@ fn details(state: &State, row: &Row, t: &Tokens) -> Vec<Block> {
         under.push(
             Prose::hint(
                 part("explain"),
-                "Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals, releases its enrollment and stops its daemon over ssh. Its binary, data and Notebook stay.",
+                if outpost.dials_home == Some(true) {
+                    "It dials this home, which never reaches it by ssh. Remove closes its terminals and its bridge, and the machine leaves this home at its next dial. Its binary, data and Notebook stay."
+                } else {
+                    "Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals, releases its enrollment and stops its daemon over ssh. Its binary, data and Notebook stay."
+                },
             )
             .build(t),
         );

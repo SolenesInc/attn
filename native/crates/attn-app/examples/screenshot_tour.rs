@@ -3603,8 +3603,6 @@ fn settings_machines_move(dark: bool) {
     snap(&mut world, "home-move-band", dark);
 }
 
-/// The Settings dialog on `section`, its state changed by `change` and the daemon answering as
-/// `answer` scripts it.
 /// Settings → Machines removing laptop, a machine that dials the home and is out of reach, with
 /// one of its terminals open, so the remove waits on its confirm and its note.
 fn settings_machines_remove_dial_in(dark: bool) {
@@ -3640,6 +3638,8 @@ fn settings_machines_remove_dial_in(dark: bool) {
     snap(&mut world, "settings-machines-remove-dial-in", dark);
 }
 
+/// The Settings dialog on `section`, its state changed by `change` and the daemon answering as
+/// `answer` scripts it.
 fn settings_world(
     dark: bool,
     section: &str,
