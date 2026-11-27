@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Interrupted home move can leave Settings stuck in Moving",
+  "at": "2026-11-27T11:06:21.448Z",
+  "detail": "An app-started move can lose its reply during a pre-commit interruption. The source clears the staged journal on restart and the reconnected app sees no move, but Settings stays in Moving with no Cancel or Retry. Reconcile the interrupted request with its own move state and restore the move controls when recovery confirms no move remains.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/settings/outposts.rs",
+    "line": 357
+  },
+  "culprit": "2113370ce24975ca7209ee34edc6b3db99c96614"
+}
