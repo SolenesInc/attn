@@ -224,7 +224,7 @@ pub(crate) fn open(state: &mut State, reference: Reference, tx: &mut Tx) {
 
 /// The terminal that runs shell `session`, by the binding its ask holds it with.
 fn runtime_of<'f>(facts: &'f Facts, session: &str) -> Option<&'f str> {
-    (facts.ask_terminals.iter())
+    (facts.held_terminals.iter())
         .find(|b| b.session_id == session)
         .map(|b| b.terminal_id.as_str())
 }
@@ -358,7 +358,7 @@ pub(crate) fn drawn_terminals<'f>(
     let Some(shown) = shown_ask(state) else {
         return Vec::new();
     };
-    (facts.ask_terminals.iter())
+    (facts.held_terminals.iter())
         .filter(|b| b.ask_id.as_deref() == Some(shown.as_str()))
         .map(|b| crate::terminal::Drawn {
             runtime: &b.terminal_id,
@@ -370,7 +370,7 @@ pub(crate) fn drawn_terminals<'f>(
 
 /// Whether a command still runs in a terminal `ask` holds, which sending the answer stops.
 pub(crate) fn runs_command(state: &State, ask: &str) -> bool {
-    (state.facts.ask_terminals.iter())
+    (state.facts.held_terminals.iter())
         .filter(|b| b.ask_id.as_deref() == Some(ask))
         .any(|b| state.terminals.runs_command(&b.terminal_id))
 }

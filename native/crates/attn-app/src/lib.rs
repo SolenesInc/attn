@@ -347,10 +347,15 @@ pub fn bind(
 
 /// Keeps the terminals this window draws attached, with the keyboard's terminal focused.
 pub(crate) fn follow_terminals(state: &mut State, tx: &mut Tx) {
-    let keyboard =
-        asks::panel::keys_terminal(state).or_else(|| state.window.keyboard_terminal(&state.facts));
+    let keyboard = asks::panel::keys_terminal(state)
+        .or_else(|| settings::machines::fix::keys_terminal(state))
+        .or_else(|| state.window.keyboard_terminal(&state.facts));
     let mut drawn = desktop::drawn_terminals(&state.facts, &state.window);
     drawn.extend(asks::panel::drawn_terminals(state, &state.facts));
+    drawn.extend(settings::machines::fix::drawn_terminals(
+        state,
+        &state.facts,
+    ));
     state
         .terminals
         .follow(&state.facts, &drawn, keyboard, tx.clock());
@@ -423,6 +428,7 @@ impl Links {
 fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let typing = keys::keyboard_terminal(state, tx);
     let recounted = state.terminals.drain(typing.as_deref(), tx);
+    let recounted = settings::machines::fix::follow(state, tx) | recounted;
     let said = state.terminals.take_said();
     let told = said.is_some();
     if let Some(said) = said {

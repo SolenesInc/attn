@@ -749,7 +749,7 @@ impl Task {
             }
             "terminal_bindings_updated" => {
                 let message: TerminalBindingsUpdatedMessage = parse(&header.event, text)?;
-                self.store.set_ask_terminals(message.terminal_bindings);
+                self.store.set_held_terminals(message.terminal_bindings);
                 None
             }
             "desktop_tile_content" => {

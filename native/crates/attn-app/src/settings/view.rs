@@ -23,7 +23,7 @@ const SEARCH_WIDTH: f32 = 280.0;
 const SEARCH_FLOOR: f32 = 160.0;
 
 /// The settings modal over the whole window, while it is open: its navigation beside the page.
-pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
+pub(crate) fn dialog(state: &State, t: &Tokens, scale: f32, layers: &mut Vec<El>) {
     if !super::is_open(state) {
         return;
     }
@@ -33,7 +33,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens, layers: &mut Vec<El>) {
         .min_h(0.0)
         .fill(t.bg_panel)
         .child(nav(state, t))
-        .child(body(state, t));
+        .child(body(state, scale, t));
     Dialog::new("settings", "Settings")
         .lead(
             crate::machine::Machines::of(&state.facts)
@@ -129,7 +129,7 @@ fn nav(state: &State, t: &Tokens) -> El {
         .scroll_bar_styled(bar)
 }
 
-fn body(state: &State, t: &Tokens) -> El {
+fn body(state: &State, scale: f32, t: &Tokens) -> El {
     state.window.settings.anchors.clear();
     let section = state.window.settings.section;
     let item = section.item();
@@ -159,7 +159,7 @@ fn body(state: &State, t: &Tokens) -> El {
     let off = item
         .feature
         .is_some_and(|key| !setting::on(&state.facts.settings, key));
-    let blocks = page(state, section, t);
+    let blocks = page(state, section, scale, t);
     let (said, parts) = status(state, t);
     Page::new()
         .head(head)
@@ -189,7 +189,7 @@ fn status(state: &State, t: &Tokens) -> (&'static str, Vec<El>) {
     (said.unwrap_or_default(), parts)
 }
 
-fn page(state: &State, section: Section, t: &Tokens) -> Vec<Block> {
+fn page(state: &State, section: Section, scale: f32, t: &Tokens) -> Vec<Block> {
     match section {
         Section::General => appearance::page(state, t),
         Section::Connectivity => github::page(state, t),
@@ -205,7 +205,7 @@ fn page(state: &State, section: Section, t: &Tokens) -> Vec<Block> {
         Section::Desktop => desktop::page(state, t),
         Section::Hygiene => hygiene::page(state, t),
         Section::Plugins => plugins::page(state, t),
-        Section::Machines => machines::page(state, t),
+        Section::Machines => machines::page(state, scale, t),
         Section::Phones => phones::page(state, t),
         Section::Senders => senders::page(state, t),
     }

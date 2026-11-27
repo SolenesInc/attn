@@ -40,6 +40,12 @@ pub(crate) fn keyboard_terminal(state: &State, tx: &Tx) -> Option<String> {
         None => crate::asks::panel::keys_terminal(state)
             .or_else(|| state.window.typing_terminal(&state.facts)),
         Some(crate::asks::panel::TERMINAL) => crate::asks::panel::keys_terminal(state),
+        focused
+            if crate::settings::machines::fix::focused(focused)
+                && crate::settings::machines::fix::holds(state) =>
+        {
+            crate::settings::machines::fix::keys_terminal(state)
+        }
         Some(_) => None,
     }
 }
@@ -70,6 +76,11 @@ fn heard_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> 
     if crate::hints::on_key(state, ev, tx) {
         return true;
     }
+    if crate::settings::machines::fix::focused(tx.focused())
+        && crate::settings::machines::fix::holds(state)
+    {
+        return fix_terminal_key(state, ev, trace, tx);
+    }
     let terminal = crate::asks::panel::keys_terminal(state);
     match (tx.focused(), &terminal) {
         (Some(crate::asks::panel::TERMINAL), _) | (None, Some(_)) => {
@@ -92,6 +103,23 @@ fn heard_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> 
         crate::desktop::header_pop::close(state);
     }
     route(state, ev, trace, tx) || disarmed || closed
+}
+
+/// A key while a failed move check's fix shell holds the keyboard: the Settings chord hands it
+/// back to the checks, the clipboard chords act, and every other key is the shell's, or
+/// nobody's while the shell starts.
+fn fix_terminal_key(state: &mut State, ev: &KeyEvent, trace: &TraceId, tx: &mut Tx) -> bool {
+    if let Press::Action(Action::UiOpenSettings) = state.keymap.press(ev, tx, Focus::default()) {
+        return crate::settings::machines::fix::hand_back(state, tx);
+    }
+    let terminal = crate::settings::machines::fix::keys_terminal(state);
+    if let Some(id) = &terminal
+        && let Some(chord) = clipboard_chord(ev)
+        && clipboard(state, id, chord, tx)
+    {
+        return true;
+    }
+    terminal.is_none() || send_to_terminal(state, terminal, ev, trace, tx)
 }
 
 /// A key while the Asks panel's terminal holds the keyboard: the Asks chord hands it back to

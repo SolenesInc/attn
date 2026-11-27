@@ -1,6 +1,8 @@
+use attn_app::Action;
 use attn_protocol::{
-    InitialStateMessage, OutpostInfo, OutpostNotebook, OutpostUpdate, OutpostsUpdatedMessage,
-    Profile, ProfileActionResultMessage, Session, SettingsUpdatedMessage, UpdateChangedMessage,
+    AttachResultMessage, InitialStateMessage, OutpostInfo, OutpostNotebook, OutpostUpdate,
+    OutpostsUpdatedMessage, Profile, ProfileActionResultMessage, Session, SessionRegisteredMessage,
+    SettingsUpdatedMessage, TerminalBinding, TerminalBindingsUpdatedMessage, UpdateChangedMessage,
     UpdateOutpostProgress, UpdateRun,
 };
 use attn_testkit::{Daemon, Target, World, message};
@@ -8,7 +10,9 @@ use rune::Key;
 use serde_json::{Value, json};
 
 use super::{click, named, open, press, value};
-use crate::wire::sidebar::{desktop, pane};
+use crate::wire::sidebar::{chord, desktop, pane};
+use crate::wire::terminal::output_frame_to;
+use crate::wire::terminal_blocks::ran;
 
 const NAME: &str = "settings.machines.name";
 const DESTINATION: &str = "settings.machines.destination";
@@ -1569,4 +1573,357 @@ fn waits(world: &World) -> usize {
         .iter()
         .filter(|r| r["wait"] == true)
         .count()
+}
+
+fn refused_linger() -> Value {
+    move_result(
+        json!({"step": "refused", "to": "studio", "remaps": [], "checks": [
+            {"name": "connected", "ok": true},
+            {"name": "linger", "ok": false, "detail": "linger is off for victor, so the home would stop when the user logs out; run loginctl enable-linger victor", "fix": "loginctl enable-linger victor"},
+            {"name": "systemd", "ok": false, "detail": "systemctl --user show-environment: exit status 1"},
+        ]}),
+    )
+}
+
+fn fix_shell(session: &str) -> Session {
+    Session {
+        id: session.into(),
+        label: session.into(),
+        agent: "shell".into(),
+        state: "idle".into(),
+        directory: "/home/victor".into(),
+        host: Some("outpost-1".into()),
+        profile_id: "work".into(),
+        ..Session::default()
+    }
+}
+
+/// The home answers the fix's spawn: the shell's session, then the linger check's binding to it.
+fn fix_bound(world: &mut World, session: &str, terminal: &str) {
+    world.daemon.emit(SessionRegisteredMessage {
+        session: fix_shell(session),
+        ..SessionRegisteredMessage::new()
+    });
+    world.daemon.emit(TerminalBindingsUpdatedMessage {
+        terminal_bindings: vec![TerminalBinding {
+            ask_id: None,
+            move_check: Some("linger".into()),
+            session_id: session.into(),
+            terminal_id: terminal.into(),
+        }],
+        ..TerminalBindingsUpdatedMessage::new()
+    });
+    world.settle();
+}
+
+fn fixing_world() -> World {
+    let daemon = remote_home(vec![studio()]);
+    daemon.on("home_move", |_| refused_linger());
+    daemon.on("attach_session", |r| {
+        message(AttachResultMessage {
+            id: r["id"].as_str().unwrap().into(),
+            success: true,
+            running: Some(true),
+            ..AttachResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
+    on_studio(&mut world);
+    click(&mut world, &part("move"));
+    world
+}
+
+fn typed_into(world: &World, terminal: &str) -> String {
+    (world.daemon.sent_of("pty_input").iter())
+        .filter(|r| r["id"] == terminal)
+        .map(|r| r["data"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+fn slots(world: &World, terminal: &str) -> usize {
+    world
+        .screen()
+        .all(Target::key(format!("terminal.{terminal}")))
+        .len()
+}
+
+#[test]
+fn a_failed_check_with_a_fix_opens_it_typed_in_a_shell_on_the_target_under_the_check() {
+    let mut world = fixing_world();
+    assert_eq!(
+        named(&world, &part("move.check.linger.open")).as_deref(),
+        Some("Open in terminal")
+    );
+    assert!(
+        !shows(&world, &part("move.check.systemd.open")),
+        "a check the daemon names no fix for offers none"
+    );
+
+    click(&mut world, &part("move.check.linger.open"));
+    let spawned = sent(&world, "spawn_session");
+    assert_eq!(spawned.len(), 1);
+    let spawn = &spawned[0];
+    assert_eq!(spawn["agent"], "shell");
+    assert_eq!(spawn["host"], "outpost-1");
+    assert_eq!(spawn["typed"], "loginctl enable-linger victor");
+    assert_eq!(spawn["placement"]["move_check"], "linger");
+    assert!(spawn["placement"]["desktop_id"].is_null(), "{spawn}");
+    assert_eq!(
+        named(&world, &part("move.check.linger.starting")).as_deref(),
+        Some("Starting a shell…")
+    );
+
+    let session = spawn["id"].as_str().unwrap().to_owned();
+    fix_bound(&mut world, &session, "rt-fix");
+    assert_eq!(slots(&world, "rt-fix"), 1, "{}", world.screen());
+    assert!(
+        (world.daemon.sent_of("attach_session").iter()).any(|r| r["id"] == "rt-fix"),
+        "the fix's terminal attaches"
+    );
+    assert!(
+        shows(&world, "settings.nav.machines"),
+        "Settings stays open"
+    );
+    assert_eq!(
+        named(&world, &part("move.check.linger.place")).as_deref(),
+        Some("studio · /home/victor")
+    );
+
+    world.gesture(|app| app.type_text("x"));
+    world.gesture(|app| app.press("Escape"));
+    world.settle();
+    assert_eq!(
+        typed_into(&world, "rt-fix"),
+        "x\u{1b}",
+        "the shell holds the keys"
+    );
+    assert!(
+        shows(&world, "settings.nav.machines"),
+        "Escape stays in the shell"
+    );
+
+    world.gesture(|app| app.key(chord(Action::UiOpenSettings)));
+    world.settle();
+    assert!(
+        shows(&world, "settings.nav.machines"),
+        "the Settings chord hands the keys back"
+    );
+    world.gesture(|app| app.type_text("z"));
+    world.settle();
+    assert_eq!(
+        typed_into(&world, "rt-fix"),
+        "x\u{1b}",
+        "the checks hold the keys again"
+    );
+
+    click(&mut world, "terminal.rt-fix");
+    world.gesture(|app| app.type_text("y"));
+    world.settle();
+    assert_eq!(
+        typed_into(&world, "rt-fix"),
+        "x\u{1b}y",
+        "a click gives the shell the keys"
+    );
+
+    assert!(
+        !shows(&world, &part("move.check.linger.open")),
+        "the open shell stands in for Open in terminal"
+    );
+}
+
+#[test]
+fn the_checks_run_again_once_the_fix_finishes_cleanly_and_its_shell_goes_once_the_check_passes() {
+    let mut world = fixing_world();
+    click(&mut world, &part("move.check.linger.open"));
+    let session = sent(&world, "spawn_session")[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    fix_bound(&mut world, &session, "rt-fix");
+    let checks = |world: &World| sent(world, "home_move").len();
+    assert_eq!(checks(&world), 1);
+
+    world.daemon.emit_frame(output_frame_to(
+        "rt-fix",
+        1,
+        b"\x1b]133;A\x07$ \x1b]133;B\x07loginctl enable-linger victor\r\n\x1b]133;C\x07Access denied\r\n\x1b]133;D;1\x07\x1b]133;A\x07$ ",
+    ));
+    world.settle();
+    assert_eq!(checks(&world), 1, "a fix that failed checks nothing again");
+    assert_eq!(
+        named(&world, &part("move.check.linger.hint")).as_deref(),
+        Some("It exited with 1.")
+    );
+
+    let answer = std::sync::Arc::new(std::sync::Mutex::new(None::<Value>));
+    let held = answer.clone();
+    world.daemon.on("home_move", move |r| {
+        let mut held = held.lock().unwrap();
+        *held = Some(r.clone());
+        None::<Value>
+    });
+    world.daemon.emit_frame(output_frame_to(
+        "rt-fix",
+        2,
+        &ran("loginctl enable-linger victor", ""),
+    ));
+    world.settle();
+    assert_eq!(checks(&world), 2, "a clean exit checks again");
+    assert_eq!(sent(&world, "home_move")[1]["check"], true);
+    assert_eq!(
+        named(&world, &part("move.checks.passed")).as_deref(),
+        Some("✓ 1 check passed · Checking again…"),
+        "the checks stay while they run again"
+    );
+    assert_eq!(slots(&world, "rt-fix"), 1, "the shell stays while they run");
+
+    let request_id = answer.lock().unwrap().clone().unwrap()["request_id"].clone();
+    let mut passed = move_result(
+        json!({"step": "refused", "to": "studio", "remaps": [], "checks": [
+            {"name": "connected", "ok": true},
+            {"name": "linger", "ok": true},
+            {"name": "systemd", "ok": false, "detail": "systemctl --user show-environment: exit status 1"},
+        ]}),
+    );
+    passed["request_id"] = request_id;
+    world.daemon.emit(passed);
+    world.settle();
+    assert_eq!(
+        named(&world, &part("move.checks.passed")).as_deref(),
+        Some("✓ 2 checks passed")
+    );
+    assert!(!shows(&world, &part("move.check.linger")));
+    assert_eq!(
+        slots(&world, "rt-fix"),
+        0,
+        "the shell goes once its check passes"
+    );
+}
+
+#[test]
+fn close_terminal_and_cancel_end_the_fix_shell() {
+    let mut world = fixing_world();
+    click(&mut world, &part("move.check.linger.open"));
+    let session = sent(&world, "spawn_session")[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    fix_bound(&mut world, &session, "rt-fix");
+
+    click(&mut world, &part("move.check.linger.close"));
+    let ended = sent(&world, "unregister");
+    assert_eq!(ended.len(), 1);
+    assert_eq!(ended[0]["id"], session.as_str());
+    assert_eq!(slots(&world, "rt-fix"), 0);
+    assert!(shows(&world, &part("move.check.linger.open")));
+
+    click(&mut world, &part("move.check.linger.open"));
+    let again = sent(&world, "spawn_session")[1]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    fix_bound(&mut world, &again, "rt-fix-2");
+    click(&mut world, &part("move.cancel"));
+    let ended = sent(&world, "unregister");
+    assert_eq!(ended.len(), 2, "Cancel ends the fix shells of the move");
+    assert_eq!(ended[1]["id"], again.as_str());
+}
+
+#[test]
+fn a_shell_a_check_still_holds_shows_under_it_again_after_settings_reopens() {
+    let mut world = fixing_world();
+    click(&mut world, &part("move.check.linger.open"));
+    let session = sent(&world, "spawn_session")[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    fix_bound(&mut world, &session, "rt-fix");
+
+    for _ in 0..2 {
+        world.gesture(|app| app.key(chord(Action::UiOpenSettings)));
+        world.settle();
+    }
+    assert!(
+        !shows(&world, "settings.nav.machines"),
+        "the second chord closes Settings"
+    );
+    assert!(
+        sent(&world, "unregister").is_empty(),
+        "closing Settings keeps the shell"
+    );
+    assert_eq!(slots(&world, "rt-fix"), 0);
+
+    on_machines(&mut world);
+    assert_eq!(slots(&world, "rt-fix"), 1, "{}", world.screen());
+}
+
+#[test]
+fn the_home_moved_band_asks_the_chief_to_check_the_paths_only_the_old_home_has() {
+    let daemon = remote_home(vec![studio()]);
+    daemon.on("home_move", |r| {
+        (r["check"] == true).then(|| {
+            move_result(json!({"step": "checked", "to": "studio", "checks": [{"name": "connected", "ok": true}], "remaps": []}))
+        })
+    });
+    daemon.on("quick_capture_send", |r| {
+        json!({"event": "quick_capture_result", "request_id": r["request_id"], "profile_id": "work",
+            "success": false, "error_code": "crew_member_not_found", "error": "the Chief is not set up"})
+    });
+    let mut world = World::start(daemon);
+    on_studio(&mut world);
+    click(&mut world, &part("move"));
+    click(&mut world, &part("move.go"));
+    for step in ["checking", "committed"] {
+        world.daemon.on("home_move_status", move |r| {
+            (r["wait"] != true).then(|| {
+                move_result(json!({"id": "m-2", "side": "from", "step": step, "from": "laptop", "to": "studio", "checks": [], "remaps": []}))
+            })
+        });
+        redial(&mut world);
+    }
+    press(&mut world, Key::Escape);
+    assert_eq!(
+        named(&world, "home-move.text").as_deref(),
+        Some("Home moved to studio.")
+    );
+    assert_eq!(
+        named(&world, "home-move.paths").as_deref(),
+        Some("Automations and crew members may still launch in folders on laptop.")
+    );
+
+    click(&mut world, "home-move.chief");
+    assert_eq!(
+        named(&world, "home-move.paths").as_deref(),
+        Some("Could not ask the Chief: the Chief is not set up")
+    );
+    assert_eq!(
+        named(&world, "home-move.chief").as_deref(),
+        Some("Ask again")
+    );
+
+    world.daemon.on("quick_capture_send", |r| {
+        json!({"event": "quick_capture_result", "request_id": r["request_id"], "profile_id": "work", "success": true,
+            "result": {"record": {"id": r["capture_id"], "mailbox": {"kind": "crew_member", "member_id": "chief"},
+                "content": r["content"], "attachments": [], "created_at": "2026-11-27T22:00:00Z"}}})
+    });
+    click(&mut world, "home-move.chief");
+    let asked = sent(&world, "quick_capture_send");
+    assert_eq!(asked.len(), 2);
+    let ask = &asked[1];
+    assert_eq!(
+        ask["mailbox"],
+        json!({"kind": "crew_member", "member_id": "chief"})
+    );
+    assert_eq!(ask["attachment_ids"], json!([]));
+    let content = ask["content"].as_str().unwrap();
+    assert!(
+        content.starts_with("The home moved from laptop to studio."),
+        "{content}"
+    );
+    assert!(content.contains("doesn't exist on studio"), "{content}");
+    assert_eq!(
+        named(&world, "home-move.paths").as_deref(),
+        Some("The Chief is checking for paths that don’t exist on studio.")
+    );
+    assert!(!shows(&world, "home-move.chief"));
 }

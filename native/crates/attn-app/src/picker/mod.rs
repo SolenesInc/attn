@@ -1243,6 +1243,7 @@ pub(crate) fn spawn_then(
             direction: Some(spawn.direction.wire().into()),
             anchor_pane_id: target.anchor,
             ask_id: None,
+            move_check: None,
         }),
         cols: 80,
         rows: 24,

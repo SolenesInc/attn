@@ -1003,7 +1003,7 @@ fn over_tiles(state: &State, t: &Tokens, scale: f32) -> Vec<El> {
         }
         Some(Layer::Notifications) => layers.push(crate::notifications::panel(state, t)),
         Some(Layer::CloseDesktop) => layers.extend(crate::desktop::close_confirmation(state, t)),
-        Some(Layer::Settings) => crate::settings::dialog(state, t, &mut layers),
+        Some(Layer::Settings) => crate::settings::dialog(state, t, scale, &mut layers),
         Some(Layer::Shortcuts) => shortcuts(state, t, &mut layers),
         Some(Layer::ShortcutEditor) => crate::shortcut_editor::view(state, t, &mut layers),
         Some(Layer::ProfileSwitcher) => layers.extend(crate::profile_switcher::view(state, t)),

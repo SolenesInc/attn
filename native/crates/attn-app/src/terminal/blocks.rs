@@ -41,6 +41,12 @@ impl Terminals {
             .is_some_and(|block| block.output.is_some())
     }
 
+    /// The last command the shell in terminal `id` finished, by its block, and how it exited.
+    pub(crate) fn last_exit(&self, id: &str) -> Option<(u64, Option<i32>)> {
+        let block = self.panes.get(id)?.blocks.blocks().last()?;
+        Some((block.id, block.exit_code))
+    }
+
     /// Takes the command steps the shell reported in the output just written.
     pub(super) fn read_prompts(term: &mut Term) {
         let running = |term: &Term| term.blocks.pending().is_some_and(|b| b.output.is_some());

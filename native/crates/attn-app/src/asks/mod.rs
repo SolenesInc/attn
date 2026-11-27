@@ -1088,7 +1088,7 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         .asks
         .follow_ups
         .retain(|id, _| listed.contains(id));
-    let held = state.facts.ask_terminals.clone();
+    let held = state.facts.held_terminals.clone();
     state.window.asks.panels.keep(&listed, &held);
     saving::restore(state);
     motion::sync(state, tx);

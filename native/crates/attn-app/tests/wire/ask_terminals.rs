@@ -101,6 +101,7 @@ fn shell(id: &str, directory: &str) -> Session {
 fn held(session: &str, terminal: &str) -> TerminalBinding {
     TerminalBinding {
         ask_id: Some(ASK.into()),
+        move_check: None,
         session_id: session.into(),
         terminal_id: terminal.into(),
     }

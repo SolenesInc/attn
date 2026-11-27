@@ -7,8 +7,8 @@ use attn_client::{Connection, Reply, Slices};
 use attn_protocol::{
     AddOutpostMessage, ConnectOutpostInTerminalMessage, HomeMove, HomeMoveMessage,
     HomeMoveProgressMessage, HomeMoveResultMessage, HomeMoveRollbackMessage, HomeMoveStatusMessage,
-    OutpostInfo, OutpostNotebook, ProfileActionResultMessage, RemoveOutpostMessage,
-    RepairOutpostMessage, UpdateOutpostMessage,
+    OutpostInfo, OutpostNotebook, ProfileActionResultMessage, QuickCaptureMailbox,
+    QuickCaptureSendMessage, RemoveOutpostMessage, RepairOutpostMessage, UpdateOutpostMessage,
 };
 use attn_ui::Tokens;
 use attn_ui::blocks::{
@@ -22,6 +22,8 @@ use rune_kit::TextInput;
 use crate::State;
 use crate::action::Action;
 use crate::requests::Answer;
+
+pub(crate) mod fix;
 
 const NOT_CONNECTED: &str = "Connect to the home daemon to change machines.";
 const COMMANDS: &[&str] = &[
@@ -57,6 +59,7 @@ pub(crate) struct Machines {
     told: Option<Told>,
     /// Why the last Roll back or Stop waiting from the band failed.
     band_error: Option<String>,
+    fixes: fix::Fixes,
 }
 
 /// A move of the home to one machine, from its checks until it ends.
@@ -73,6 +76,8 @@ struct Move {
 enum MoveStep {
     Checking,
     Checked(HomeMove),
+    /// The checks run again, and the last ones show meanwhile.
+    Rechecking(HomeMove),
     /// How many of the move's steps have begun.
     Moving(usize),
     Failed(String),
@@ -81,9 +86,21 @@ enum MoveStep {
 }
 
 enum Told {
-    Moved(String),
+    Moved {
+        from: String,
+        to: String,
+        review: Review,
+    },
     RollingBack,
     RolledBack,
+}
+
+/// Where the ask to the Chief to check the paths that broke stands.
+enum Review {
+    Unasked,
+    Asking,
+    Asked,
+    Failed(String),
 }
 
 /// The steps of a move as its band and its row count them; the daemon names the first four.
@@ -334,14 +351,41 @@ fn moving_to<'a>(state: &'a mut State, id: &str) -> Option<&'a mut Move> {
     panel(state).moving.as_mut().filter(|m| m.id == id)
 }
 
+/// The machine a move goes to and the checks it shows, while they show.
+fn checked_move(state: &State) -> Option<(&str, &[attn_protocol::HomeMoveCheck])> {
+    let moving = state.window.settings.machines.moving.as_ref()?;
+    match &moving.step {
+        MoveStep::Checked(checked) | MoveStep::Rechecking(checked) => {
+            Some((moving.id.as_str(), checked.checks.as_slice()))
+        }
+        _ => None,
+    }
+}
+
+/// The id and name of the machine whose checks show.
+fn checked_machine(state: &State) -> Option<(String, String)> {
+    let moving = state.window.settings.machines.moving.as_ref()?;
+    checked_move(state).map(|_| (moving.id.clone(), moving.name.clone()))
+}
+
+fn machine_title(state: &State, id: &str) -> String {
+    crate::machine::Machines::of(&state.facts).name(Some(id))
+}
+
 fn check_move(state: &mut State, id: &str, name: &str, tx: &mut Tx) {
     let machines = panel(state);
     machines.told = None;
     machines.band_error = None;
+    let shown = machines.moving.take().and_then(|moving| match moving.step {
+        MoveStep::Checked(checked) | MoveStep::Rechecking(checked) if moving.id == id => {
+            Some(checked)
+        }
+        _ => None,
+    });
     machines.moving = Some(Move {
         id: id.to_owned(),
         name: name.to_owned(),
-        step: MoveStep::Checking,
+        step: shown.map_or(MoveStep::Checking, MoveStep::Rechecking),
         move_id: None,
         waited: false,
     });
@@ -448,7 +492,14 @@ fn settle_move(state: &mut State, latest: &HomeMove) {
     let ours = moving.move_id.is_some() && latest.id == moving.move_id;
     let why = match (ours, latest.step.as_str()) {
         (true, "committed" | "applied" | "done") => {
-            machines.told = Some(Told::Moved(moving.name));
+            machines.told = Some(Told::Moved {
+                from: latest
+                    .from
+                    .clone()
+                    .unwrap_or_else(|| "the old home".to_owned()),
+                to: moving.name,
+                review: Review::Unasked,
+            });
             return;
         }
         (true, "aborted" | "rolled-back") => {
@@ -684,6 +735,50 @@ fn retry_move(state: &mut State, tx: &mut Tx) {
     start_move(state, &id, 4, tx);
 }
 
+/// What the band's button asks the Chief after a move: to find and fix the folders that only
+/// the old home has.
+fn paths_review(from: &str, to: &str) -> String {
+    format!(
+        "The home moved from {from} to {to}. Automations launch in the folder their definition names, and crew members in their launch folder, and those were set on {from}. Check every automation (attn automation list, then attn automation show <id>) and every crew member's launch folder (attn crew list --all) for a path that doesn't exist on {to}. Point each one at the matching folder on {to}, or ask me when you can't tell which folder that is."
+    )
+}
+
+fn ask_chief(state: &mut State, tx: &mut Tx) {
+    let Some(Told::Moved { from, to, review }) = panel(state).told.as_mut() else {
+        return;
+    };
+    let content = paths_review(from, to);
+    *review = Review::Asking;
+    let capture_id = uuid::Uuid::new_v4().to_string();
+    state.ask(
+        |request_id| QuickCaptureSendMessage {
+            request_id: Some(request_id),
+            capture_id,
+            mailbox: QuickCaptureMailbox {
+                kind: "crew_member".into(),
+                member_id: Some(crate::quick_capture::CHIEF.to_owned()),
+                session_id: None,
+            },
+            content,
+            attachment_ids: Vec::new(),
+            ..QuickCaptureSendMessage::new()
+        },
+        |state, answer, _| {
+            let outcome = crate::quick_capture::result(answer);
+            if let Some(Told::Moved { review, .. }) = panel(state).told.as_mut() {
+                *review = match outcome {
+                    Ok(_) => Review::Asked,
+                    Err(crate::quick_capture::Failure::Lost) => {
+                        Review::Failed("not connected to the home".to_owned())
+                    }
+                    Err(failure) => Review::Failed(failure.say()),
+                };
+            }
+        },
+        tx,
+    );
+}
+
 /// The band of the move this window runs: its step while it runs, and how it ended.
 pub(crate) fn banner(state: &State, t: &Tokens, cx: &Cx<State>) -> Option<El> {
     let banner = said(state)?.details(crate::shell::opens_details(crate::shell::Band::HomeMove));
@@ -711,7 +806,7 @@ pub(crate) fn identity(state: &State) -> Option<String> {
         return Some(format!("stopped:{name}:{why}"));
     }
     match state.window.settings.machines.told.as_ref()? {
-        Told::Moved(to) => Some(format!("moved:{to}")),
+        Told::Moved { to, .. } => Some(format!("moved:{to}")),
         Told::RollingBack => Some("rolling-back".to_owned()),
         Told::RolledBack => Some("rolled-back".to_owned()),
     }
@@ -812,10 +907,33 @@ pub(crate) fn said(state: &State) -> Option<Banner> {
         );
     }
     Some(match machines.told.as_ref()? {
-        Told::Moved(to) => dismiss(
-            Banner::new("home-move", "Home move", BannerTone::Good)
-                .says("home-move.text", format!("Home moved to {to}.")),
-        ),
+        Told::Moved { from, to, review } => {
+            let banner = Banner::new("home-move", "Home move", BannerTone::Good)
+                .says("home-move.text", format!("Home moved to {to}."));
+            let ask = |banner: Banner, label: &'static str| {
+                banner.action("home-move.chief", Button::new(label), ask_chief)
+            };
+            dismiss(match review {
+                Review::Unasked => ask(
+                    banner.note(
+                        "home-move.paths",
+                        format!(
+                            "Automations and crew members may still launch in folders on {from}."
+                        ),
+                    ),
+                    "Ask the Chief to check paths",
+                ),
+                Review::Asking => banner.note("home-move.paths", "Asking the Chief…"),
+                Review::Asked => banner.note(
+                    "home-move.paths",
+                    format!("The Chief is checking for paths that don’t exist on {to}."),
+                ),
+                Review::Failed(why) => ask(
+                    banner.note("home-move.paths", format!("Could not ask the Chief: {why}")),
+                    "Ask again",
+                ),
+            })
+        }
         Told::RollingBack => Banner::new("home-move", "Home move", BannerTone::Calm)
             .says("home-move.text", "Rolling back"),
         Told::RolledBack => dismiss(
@@ -955,7 +1073,7 @@ fn can_make_home(state: &State, id: &str) -> Option<String> {
 
 /// What the row of the machine a move goes to shows under it: the checks, the paths that
 /// change, the steps while it runs, and what can be done next.
-fn move_blocks(state: &State, row: &Row, t: &Tokens) -> Option<(Vec<Block>, Vec<El>)> {
+fn move_blocks(state: &State, row: &Row, scale: f32, t: &Tokens) -> Option<(Vec<Block>, Vec<El>)> {
     let moving = state
         .window
         .settings
@@ -968,7 +1086,9 @@ fn move_blocks(state: &State, row: &Row, t: &Tokens) -> Option<(Vec<Block>, Vec<
     let name = moving.name.clone();
     let online = connected(state);
     let cancel = || {
-        action(part("cancel"), "Cancel", false, t, |state, _| {
+        let id = row.id.clone();
+        action(part("cancel"), "Cancel", false, t, move |state, tx| {
+            fix::close_all(state, &id, tx);
             panel(state).moving = None;
         })
     };
@@ -994,8 +1114,9 @@ fn move_blocks(state: &State, row: &Row, t: &Tokens) -> Option<(Vec<Block>, Vec<
             vec![Notice::error(part("failed"), format!("Move failed: {why}")).build(t)],
             vec![again(), cancel()],
         ),
-        MoveStep::Checked(checked) => {
-            let mut under = vec![checks(&key, checked, t)];
+        MoveStep::Checked(checked) | MoveStep::Rechecking(checked) => {
+            let rechecking = matches!(moving.step, MoveStep::Rechecking(_));
+            let mut under = vec![checks(state, &row.id, &key, checked, rechecking, scale, t)];
             if !checked.remaps.is_empty() {
                 under.push(remaps(state, &key, checked, t));
             }
@@ -1008,7 +1129,7 @@ fn move_blocks(state: &State, row: &Row, t: &Tokens) -> Option<(Vec<Block>, Vec<
                     .build(t),
                 );
             }
-            let ready = checked.step == "checked";
+            let ready = checked.step == "checked" && !rechecking;
             let id = row.id.clone();
             let go = Button::new(format!("Move home to {name}"))
                 .look(Look::Primary)
@@ -1074,20 +1195,43 @@ fn remaps(state: &State, key: &str, checked: &HomeMove, t: &Tokens) -> Block {
     facts.build(t)
 }
 
-fn checks(key: &str, checked: &HomeMove, t: &Tokens) -> Block {
+fn checks(
+    state: &State,
+    machine: &str,
+    key: &str,
+    checked: &HomeMove,
+    rechecking: bool,
+    scale: f32,
+    t: &Tokens,
+) -> Block {
     let passed = checked.checks.iter().filter(|c| c.ok).count();
     let noun = if passed == 1 { "check" } else { "checks" };
-    let summary = format!("✓ {passed} {noun} passed");
+    let summary = match rechecking {
+        true => format!("✓ {passed} {noun} passed · Checking again…"),
+        false => format!("✓ {passed} {noun} passed"),
+    };
     let failed = checked.checks.iter().filter(|c| !c.ok).map(|c| {
         let said = match c.detail.as_deref() {
             Some(detail) => format!("✗ {}: {detail}", c.name),
             None => format!("✗ {}", c.name),
         };
-        words(said.clone(), Type::Small, t.warning)
+        let line = words(said.clone(), Type::Small, t.warning)
             .key(format!("{key}.check.{}", c.name))
             .label(said)
             .role("alert")
-            .wrap()
+            .wrap();
+        let Some((open, shell)) = fix::under(state, machine, key, c, scale, t) else {
+            return line;
+        };
+        Stack::tight()
+            .w_full()
+            .child(
+                Inline::loose()
+                    .w_full()
+                    .child(line.grow(1.0).min_w(0.0))
+                    .children(open),
+            )
+            .children(shell)
     });
     Block::custom(
         format!("{key}.checks.block"),
@@ -1268,7 +1412,7 @@ fn status_line(state: &State, row: &Row) -> Option<String> {
     if let Some(moving) = moving.filter(|m| m.id == row.id) {
         return Some(match &moving.step {
             MoveStep::Checking => "checking".to_owned(),
-            MoveStep::Checked(_) => "checked".to_owned(),
+            MoveStep::Checked(_) | MoveStep::Rechecking(_) => "checked".to_owned(),
             MoveStep::Moving(steps) => {
                 step_label((*steps).clamp(1, STEPS), &moving.name).to_lowercase()
             }
@@ -1486,12 +1630,18 @@ fn actions(state: &State, row: &Row, t: &Tokens) -> Vec<El> {
 }
 
 /// A machine's row, and what is under it while it is chosen or a move goes to it.
-fn machine_row(state: &State, row: &Row, chosen: bool, t: &Tokens) -> (ListRow, Vec<Block>) {
+fn machine_row(
+    state: &State,
+    row: &Row,
+    chosen: bool,
+    scale: f32,
+    t: &Tokens,
+) -> (ListRow, Vec<Block>) {
     let page = &state.window.settings.machines;
     let key = row_key(&row.id);
     let part = |name: &str| format!("{key}.{name}");
     let mut under = Vec::new();
-    if let Some((blocks, moves)) = move_blocks(state, row, t) {
+    if let Some((blocks, moves)) = move_blocks(state, row, scale, t) {
         under.extend(blocks);
         if !moves.is_empty() {
             under.push(
@@ -1601,7 +1751,7 @@ fn add_form(state: &State, t: &Tokens) -> Block {
         .build(t)
 }
 
-pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
+pub(super) fn page(state: &State, scale: f32, t: &Tokens) -> Vec<Block> {
     let page = &state.window.settings.machines;
     let mut shown = Vec::new();
     if let Some(error) = page.terminal_error.as_ref().or(page.command_error.as_ref()) {
@@ -1615,7 +1765,15 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<Block> {
     let rows = rows(state);
     let list = rows
         .iter()
-        .map(|row| machine_row(state, row, chosen.as_deref() == Some(row.id.as_str()), t))
+        .map(|row| {
+            machine_row(
+                state,
+                row,
+                chosen.as_deref() == Some(row.id.as_str()),
+                scale,
+                t,
+            )
+        })
         .fold(
             List::new(LIST, "Machines")
                 .chooser(chooser)

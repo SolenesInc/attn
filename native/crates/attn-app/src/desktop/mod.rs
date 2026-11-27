@@ -549,9 +549,9 @@ pub(crate) fn drawn_terminals<'f>(
         .collect()
 }
 
-/// Every terminal a desktop or an ask holds, drawn in this window or not.
+/// Every terminal a desktop, an ask or a move check holds, drawn in this window or not.
 pub(crate) fn held_terminals(facts: &Facts) -> impl Iterator<Item = crate::terminal::Drawn<'_>> {
-    let in_asks = facts.ask_terminals.iter().map(|b| crate::terminal::Drawn {
+    let held = facts.held_terminals.iter().map(|b| crate::terminal::Drawn {
         runtime: &b.terminal_id,
         session: &b.session_id,
         kind: "shell",
@@ -561,7 +561,7 @@ pub(crate) fn held_terminals(facts: &Facts) -> impl Iterator<Item = crate::termi
         .iter()
         .flat_map(|desktop| desktop.panes.iter())
         .map(drawn)
-        .chain(in_asks)
+        .chain(held)
 }
 
 fn drawn(pane: &attn_protocol::DesktopPane) -> crate::terminal::Drawn<'_> {

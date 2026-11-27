@@ -608,6 +608,7 @@ fn away_with(
         }]);
         initial.terminal_bindings = Some(vec![attn_protocol::TerminalBinding {
             ask_id: None,
+            move_check: None,
             session_id: "here".into(),
             terminal_id: "rl".into(),
         }]);

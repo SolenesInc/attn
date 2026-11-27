@@ -75,6 +75,7 @@ fn this_machine(home: &Daemon) -> Daemon {
         sessions: Some(vec![shell("here", None)]),
         terminal_bindings: Some(vec![TerminalBinding {
             ask_id: None,
+            move_check: None,
             session_id: "here".into(),
             terminal_id: "rl".into(),
         }]),
@@ -152,6 +153,7 @@ fn laptop_state(sessions: Vec<Session>, terminals: &[(&str, &str)]) -> InitialSt
                 .iter()
                 .map(|(session, terminal)| TerminalBinding {
                     ask_id: None,
+                    move_check: None,
                     session_id: (*session).into(),
                     terminal_id: (*terminal).into(),
                 })
@@ -331,6 +333,7 @@ fn before_the_home_answers_the_cold_row_leaves_out_a_shell_an_ask_holds() {
         .get_or_insert_default()
         .push(TerminalBinding {
             ask_id: Some("a-1".into()),
+            move_check: None,
             session_id: "asked".into(),
             terminal_id: "ra".into(),
         });
@@ -509,6 +512,7 @@ fn one_hidden() -> (InitialStateMessage, InitialStateMessage) {
             [("agent", "rl"), ("there", "r2")]
                 .map(|(session, terminal)| TerminalBinding {
                     ask_id: None,
+                    move_check: None,
                     session_id: session.into(),
                     terminal_id: terminal.into(),
                 })
@@ -584,6 +588,7 @@ fn three_here() -> (InitialStateMessage, InitialStateMessage) {
         terminal_bindings: Some(
             ids.map(|id| TerminalBinding {
                 ask_id: None,
+                move_check: None,
                 session_id: id.into(),
                 terminal_id: format!("r{id}"),
             })
@@ -850,6 +855,7 @@ fn a_peek_at_this_machines_shelved_agent_reads_and_replies_on_its_own_daemon() {
                 .iter()
                 .map(|id| TerminalBinding {
                     ask_id: None,
+                    move_check: None,
                     session_id: (*id).into(),
                     terminal_id: format!("r-{id}"),
                 })

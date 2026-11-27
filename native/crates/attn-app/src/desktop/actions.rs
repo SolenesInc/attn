@@ -804,6 +804,7 @@ pub(super) fn split_at(
             ),
             anchor_pane_id: Some(pane.pane_id.clone()),
             ask_id: None,
+            move_check: None,
         }),
         agent: "shell".into(),
         cols: 80,
