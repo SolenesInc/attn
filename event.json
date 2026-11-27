@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Home move separates vent sequence state from its identity",
+  "at": "2026-11-27T11:10:29.572Z",
+  "detail": "Promotion can move the vent identity separately from its queue and sequence state. The next vent may reuse an already-ingested sequence and appear sent without being ingested. Keep its canonical identity, queue and sequence together across the move.\n"
+}
