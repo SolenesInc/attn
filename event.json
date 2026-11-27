@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Second upgrade after rollback can terminate a live outpost shell",
+  "at": "2026-11-27T02:36:44.571Z",
+  "detail": "A second upgrade after restoring the database and rolling back can terminate a live outpost shell before the home reconnects. The isolated old → new → restored old → new sequence reproduced it at 49dde75e0. The upgraded outpost retains its home identity but skips adopting restored copies keyed by the same home's earlier daemon ID. Cleanup deletes the copied binding, then prunes the recovered PTY as orphaned. Independently source-confirmed with the enrollment transition measured. Adopt restored same-home copies before cleanup. The originating plot already assigned this class to its Builder. Evidence is on s-j7wkbm.\n"
+}
