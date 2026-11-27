@@ -50,7 +50,8 @@ refuses its registration, because Attn has the harness of that name.
   which stays open and hidden. The new session's transcript follows the forked
   conversation (including the history it inherited up to the fork), while its
   title comes from the first prompt you type in the fork and its usage, recent
-  files, and pull requests start at the fork.
+  files, and pull requests start at the fork. The fork's tile offers to open
+  the original beside it, as [Forks](sessions.md#forks) describes.
 - A delegation role that needs the attn-workflow skill installs it where Sigma
   finds skills: `skills` in the Sigma home, `skills` in `CLAUDE_CONFIG_DIR` (by
   default `~/.claude`), and `skills` in the folder of each Claude provider in

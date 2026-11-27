@@ -135,9 +135,13 @@ current session, and naming a member between sessions starts nothing. Attn never
 
 When a harness forks the conversation a tile shows, the tile moves to the fork,
 which is a session of its own, and the conversation you forked from keeps its
-session. In [shared Codex](using-shared-codex.md#switching-conversations),
-`/fork` does this, and the original stays open and hidden. `/new`, `/resume`
-and `/side` leave no notice.
+session. These commands do this:
+
+- `/fork` in [shared Codex](using-shared-codex.md#switching-conversations) and
+  in [Sigma](using-sigma.md). The original stays open and hidden.
+- `/branch` in Claude Code. The original closes into the Sessions ledger.
+
+`/clear`, `/new`, `/resume` and Codex's `/side` leave no notice.
 
 A notice over the top of the fork's terminal says "Forked from" and names the
 original. **Open original beside this** opens the original in the column right
