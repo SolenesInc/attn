@@ -205,6 +205,7 @@ run_checks() {
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^scripts/harnesslint/' && targets+=(lint-harness)
   touches '^(pty-host|native|cli|mobile)/' && targets+=(lint-harness-apps)
+  touches '^cli/' && targets+=(check-cli)
   touches '^app/' && targets+=(check-harness)
   touches '^app/|^sdk/|^cmd/prompt-editor/(web|test)/|^lint/|^\.oxlintrc\.json$' && targets+=(lint-js)
   touches '^native/browser-runtime/|^native/crates/attn-app/src/browser/runtime\.js$' && targets+=(check-browser-runtime)

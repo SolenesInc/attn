@@ -231,7 +231,7 @@ lint: lint-go lint-js
 
 GO_PACKAGES ?= ./...
 
-.PHONY: compile-go check-go check-js-tools lint-harness lint-harness-apps lint-js check-mobile check-harness check-browser-runtime check-native test-native test-native-wire
+.PHONY: compile-go check-go check-js-tools lint-harness lint-harness-apps lint-js check-mobile check-harness check-browser-runtime check-cli check-native test-native test-native-wire
 compile-go: $(NATIVE_VT_DEP)
 	go list -test -deps -export $(GO_PACKAGES) >/dev/null
 
@@ -285,6 +285,10 @@ check-browser-runtime: $(BROWSER_RUNTIME_NODE_MODULES)
 		echo "native/crates/attn-app/src/browser/runtime.js differs from a fresh build of native/browser-runtime. Commit the file this check just rebuilt." >&2; \
 		exit 1; \
 	}
+
+check-cli:
+	cargo fmt --manifest-path cli/Cargo.toml --all -- --check
+	cargo clippy --manifest-path cli/Cargo.toml --locked --all-targets -- -D warnings
 
 NATIVE_CLIPPY ?= --workspace
 check-native: $(NATIVE_VT_DEP)
