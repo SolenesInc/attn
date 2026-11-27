@@ -561,6 +561,7 @@ fn a_popped_out_terminal_on_this_machine_stays_out_while_the_home_is_lost_and_th
     };
     let mut state = home_state();
     let mut desktops = state.desktops.take().unwrap();
+    desktops[0].active_pane_id = "t-home".into();
     desktops[0].tree_json = tree::row([
         popped(tree::pane("t-here"), 10.0),
         popped(tree::pane("t-home"), 600.0),
@@ -597,11 +598,67 @@ fn a_popped_out_terminal_on_this_machine_stays_out_while_the_home_is_lost_and_th
         [10.0],
         "this machine's terminal keeps its window, and the home's hides"
     );
+    let here_window = world
+        .tile_windows()
+        .into_iter()
+        .find(|w| w.shown && w.frame.x == 10.0)
+        .expect("this machine's terminal has its window")
+        .key;
+    world.tile_gesture(&here_window, |app| app.click(Target::key("terminal.rl")));
     reconnect_home(&mut world, &answering, true);
     assert_eq!(shown(&world), [10.0, 600.0]);
+    world.tile_gesture(&here_window, |app| app.type_text("w"));
+    assert_eq!(
+        typed(machine(&world)).last(),
+        Some(&("rl".to_owned(), "w".to_owned())),
+        "a press in the window while the home was away leaves it holding its own terminal"
+    );
     assert_eq!(
         ids(machine(&world), "attach_session"),
         ["rl"],
         "the terminal on this machine stayed attached through the outage"
+    );
+}
+
+#[test]
+fn while_the_home_is_away_a_desktop_switch_reaches_this_machines_terminal_there() {
+    let answering = Arc::new(AtomicBool::new(true));
+    let (state, here) = one_hidden();
+    let home = Daemon::scripted();
+    let answers = answering.clone();
+    home.on("client_hello", move |_| {
+        if answers.load(Ordering::SeqCst) {
+            message(state.clone())
+        } else {
+            json!({"event": "home_unreachable", "home": "oma", "state": "dialing"})
+        }
+    });
+    let laptop = Daemon::of_this_machine(&home).state(here);
+    let mut world =
+        World::start_relaying(home.relaying_to(HERE, "oma"), laptop, WIDE_ENOUGH_FOR_BOTH);
+    world.open_desktop();
+    reconnect_home(&mut world, &answering, false);
+    let before = world.daemon.sent().len();
+
+    world.gesture(|app| app.key(super::sidebar::chord(attn_app::Action::DesktopSelect2)));
+    world.gesture(|app| app.type_text("q"));
+
+    assert_eq!(
+        typed(machine(&world)).last(),
+        Some(&("r2".to_owned(), "q".to_owned()))
+    );
+    assert_eq!(
+        world.daemon.sent()[before..]
+            .iter()
+            .map(|r| r["cmd"].clone())
+            .filter(|cmd| cmd != "set_client_presence")
+            .collect::<Vec<_>>(),
+        Vec::<serde_json::Value>::new(),
+        "nothing goes to the away home"
+    );
+    assert!(
+        world.screen().find(Target::key("notice.text")).is_none(),
+        "{}",
+        world.screen()
     );
 }

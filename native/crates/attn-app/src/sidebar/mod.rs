@@ -1557,7 +1557,7 @@ pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
     state.window.show_desktop(tx);
     state.window.follow_next_turn = false;
     if let Some((desktop, leaf)) = &shown
-        && crate::desktop::show_here(state, desktop, leaf)
+        && crate::desktop::show_here(state, desktop, leaf, tx)
     {
         return;
     }

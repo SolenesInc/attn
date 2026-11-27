@@ -246,6 +246,19 @@ fn set_current(state: &mut State, desktop: &str, refused: Refused, tx: &mut Tx) 
     let Some(profile_id) = profile(state) else {
         return;
     };
+    let active = state
+        .facts
+        .desktops
+        .iter()
+        .find(|d| d.id == desktop)
+        .map(|d| d.active_pane_id.clone());
+    if let Some(leaf) =
+        active.filter(|_| state.facts.connection != attn_client::Connection::Connected)
+    {
+        give_keyboard(state, desktop, &leaf, tx);
+        show_here(state, desktop, &leaf, tx);
+        return;
+    }
     state.window.desk.awaited = None;
     let desktop_id = desktop.to_owned();
     state.act(
@@ -496,7 +509,7 @@ fn show_leaf_only(state: &mut State, desktop: &str, leaf: &str, announced: bool,
     if state.window.desk.pick(desktop, leaf) {
         tx.instant();
     }
-    if show_here(state, desktop, leaf) {
+    if show_here(state, desktop, leaf, tx) {
         return;
     }
     let awaited = arrival::Shown::Leaf {
@@ -554,21 +567,30 @@ pub(crate) fn activate_pressed(state: &mut State, desktop: &str, leaf: &str, tx:
     }
 }
 
-/// Makes `leaf` the active tile here, sending nothing, while the home is away to send it to.
-pub(crate) fn show_here(state: &mut State, desktop: &str, leaf: &str) -> bool {
+/// Makes `leaf` on `desktop` the active tile and `desktop` the current one here, sending
+/// nothing, while the home is away to send it to. A tile window holds its one tile already.
+pub(crate) fn show_here(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) -> bool {
     if state.facts.connection == attn_client::Connection::Connected {
         return false;
     }
+    if state.window.tile.is_some() {
+        return true;
+    }
     state.window.away_active = Some((desktop.to_owned(), leaf.to_owned()));
     keep_away_active(state);
+    crate::follow_terminals(state, tx);
     let keyboard = state.window.keyboard_terminal(&state.facts);
     state.terminals.focus(keyboard);
     true
 }
 
-/// Shows the tile made active while the home was away over the facts, until the home answers,
-/// and then gives the keyboard back to the home's active tile.
+/// Shows the tile made active while the home was away over the facts, with its desktop the
+/// current one, until the home answers, and then gives the keyboard back to the home's active
+/// tile.
 pub(crate) fn keep_away_active(state: &mut State) {
+    if state.window.tile.is_some() {
+        return;
+    }
     if state.facts.connection == attn_client::Connection::Connected {
         if state.window.away_active.take().is_some()
             && let Some(desktop) = state.facts.current_desktop()
@@ -578,19 +600,38 @@ pub(crate) fn keep_away_active(state: &mut State) {
         }
         return;
     }
-    let Some((desktop, leaf)) = &state.window.away_active else {
+    let Some((desktop, leaf)) = state.window.away_active.clone() else {
         return;
     };
-    let Some(at) = state.facts.desktops.iter().position(|d| {
-        d.id == *desktop && d.active_pane_id != *leaf && d.panes.iter().any(|p| p.pane_id == *leaf)
-    }) else {
+    let facts = &mut state.facts;
+    let Some(at) = facts
+        .desktops
+        .iter()
+        .position(|d| d.id == desktop && d.panes.iter().any(|p| p.pane_id == leaf))
+    else {
         return;
     };
-    let desktops = std::sync::Arc::make_mut(&mut state.facts.desktops);
-    desktops[at] = attn_client::Desktop::from(attn_protocol::Desktop {
-        active_pane_id: leaf.clone(),
-        ..(*desktops[at]).clone()
-    });
+    if facts.desktops[at].active_pane_id != leaf {
+        let mut desktops = (*facts.desktops).clone();
+        desktops[at] = attn_client::Desktop::from(attn_protocol::Desktop {
+            active_pane_id: leaf,
+            ..(*desktops[at]).clone()
+        });
+        facts.desktops = std::sync::Arc::new(desktops);
+    }
+    let selected = facts.profiles.selected.clone();
+    if facts
+        .profiles
+        .all
+        .iter()
+        .any(|p| p.id == selected && p.current_desktop_id != desktop)
+    {
+        let mut profiles = (*facts.profiles).clone();
+        for profile in profiles.all.iter_mut().filter(|p| p.id == selected) {
+            profile.current_desktop_id.clone_from(&desktop);
+        }
+        facts.profiles = std::sync::Arc::new(profiles);
+    }
 }
 
 fn is_active(state: &State, desktop: &str, leaf: &str) -> bool {
