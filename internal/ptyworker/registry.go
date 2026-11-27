@@ -21,9 +21,6 @@ type RegistryEntry struct {
 	CWD              string `json:"cwd"`
 	StartedAt        string `json:"started_at"`
 	ControlToken     string `json:"control_token"`
-	OwnerPID         int    `json:"owner_pid,omitempty"`
-	OwnerStartedAt   string `json:"owner_started_at,omitempty"`
-	OwnerNonce       string `json:"owner_nonce,omitempty"`
 
 	LaunchParamsRecorded bool                                `json:"launch_params_recorded,omitempty"`
 	YoloMode             bool                                `json:"yolo_mode,omitempty"`

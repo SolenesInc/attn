@@ -52,7 +52,6 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"--check-schema"}, run: runCheckSchema, checks: checkNothing, unrecorded: true},
 		{names: []string{"--protocol-version"}, run: runProtocolVersion, checks: checkNothing, unrecorded: true},
 		{names: []string{"--build-info-json"}, run: runBuildInfoJSON, checks: checkNothing, unrecorded: true},
-		{names: []string{"pty-worker"}, run: runPTYWorker, unrecorded: true},
 		{names: []string{"_outpost-install"}, run: runOutpostInstall},
 		{names: []string{"_outpost-switch"}, run: runOutpostSwitch},
 		{names: []string{"_update-apply"}, run: runUpdateApply, checks: checkNothing, unrecorded: true},

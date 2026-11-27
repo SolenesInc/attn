@@ -63,14 +63,13 @@ func TestTheDiagnosticsServerIsOptInAndLoopbackOnly(t *testing.T) {
 		}
 	}
 	var reported struct {
-		PtyBackend string `json:"pty_backend"`
-		Sessions   int    `json:"sessions"`
+		Sessions int `json:"sessions"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&reported); err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("%s answered %s with a body that is not the vars JSON: %v", vars, resp.Status, err)
 	}
-	if backend := app.Initial.Settings["pty_backend_mode"]; reported.PtyBackend != backend || reported.Sessions != 1 {
-		t.Errorf("/debug/vars reports backend %q with %d sessions, want the app's %v with the one spawned session", reported.PtyBackend, reported.Sessions, backend)
+	if reported.Sessions != 1 {
+		t.Errorf("/debug/vars reports %d sessions, want the one spawned session", reported.Sessions)
 	}
 }
 

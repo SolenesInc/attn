@@ -68,7 +68,7 @@ export async function captureWebKitPids() {
 
 export function classify(proc) {
   const command = proc.command;
-  if (command.includes('pty-worker')) return 'pty_worker';
+  if (command.includes('attn-pty-host')) return 'pty_host';
   if (/attnd? daemon/.test(command)) return 'daemon';
   if (/\/(Contents\/MacOS|bin)\/attn-app( |$)/.test(command)) return 'app';
   if (command.includes('com.apple.WebKit.WebContent')) return 'webkit_webcontent';

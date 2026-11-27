@@ -176,7 +176,6 @@ var (
 	SessionCostPrice             = add(&Setting{Key: "session_cost.price.<model>", Class: Home, Kind: Checked, Description: "Custom model token prices as JSON. Empty uses catalog prices."})
 	SessionCostBilledAs          = add(&Setting{Key: "session_cost.billed_as.<model>", Class: Home, Kind: Checked, Description: "Billing model alias. Empty removes the alias."})
 	NotebookRootEffective        = add(&Setting{Key: "notebook.root.effective", Class: Machine, Kind: Computed, Scope: PerProfile, Description: "The Notebook folder this profile uses."})
-	PTYBackendMode               = add(&Setting{Key: "pty_backend_mode", Class: Machine, Kind: Computed, Description: "Active terminal backend."})
 	DBLastBackupAt               = add(&Setting{Key: "db.last_backup_at", Class: Machine, Kind: Computed, Description: "Time of the last database backup."})
 	HeadlessTasksEnabledStored   = add(&Setting{Key: "headless_tasks.enabled.stored", Class: Home, Kind: Computed, Description: "Stored background model task switch."})
 	HeadlessTasksEnabledOverride = add(&Setting{Key: "headless_tasks.enabled.override", Class: Home, Kind: Computed, Description: "Environment override for background model tasks."})

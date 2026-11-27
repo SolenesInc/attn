@@ -240,7 +240,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	delete(settings, setting.AnalyticsSubjectSecret.Key)
 	delete(settings, setting.AnalyticsClearedAt.Key)
 
-	settings[setting.PTYBackendMode.Key] = d.ptyBackendMode()
 	settings[setting.NotebookSyncState.Key], settings[setting.NotebookSyncLastError.Key] = d.notebookSyncSettings()
 	d.lastBackupMu.Lock()
 	lastBackupAt := d.lastBackupAt

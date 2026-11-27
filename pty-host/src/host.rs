@@ -1215,9 +1215,8 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                     "host is handing its terminals over to a new build; retry the removal",
                 );
             }
-            let sent = connection.send(&response(&request.id, json!({"ok": true})));
             session.remove();
-            sent
+            connection.send(&response(&request.id, json!({"ok": true})))
         }
         "watch" => {
             if connection.selected.is_none() {

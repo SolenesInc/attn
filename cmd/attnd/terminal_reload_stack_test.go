@@ -19,10 +19,10 @@ import (
 func TestTerminalRunWaitsForTheFirstPromptAfterReload(t *testing.T) {
 	for _, placement := range []string{"local", "outpost"} {
 		t.Run(placement, func(t *testing.T) {
-			home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
+			home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 			machine := home
 			if placement == "outpost" {
-				machine = testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
+				machine = testworld.NewStack(t)
 			}
 			realBash, err := exec.LookPath("bash")
 			if err != nil || runtime.GOOS == "darwin" && realBash == "/bin/bash" {

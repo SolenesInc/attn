@@ -198,7 +198,6 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "session_cost.price.<model>", machine: false, default_on: false },
     Setting { key: "session_cost.billed_as.<model>", machine: false, default_on: false },
     Setting { key: "notebook.root.effective", machine: true, default_on: false },
-    Setting { key: "pty_backend_mode", machine: true, default_on: false },
     Setting { key: "db.last_backup_at", machine: true, default_on: false },
     Setting { key: "headless_tasks.enabled.stored", machine: false, default_on: false },
     Setting { key: "headless_tasks.enabled.override", machine: false, default_on: false },

@@ -183,7 +183,7 @@ func TestAnUpdateCarriesTheHostToAnOutpostAndATerminalInTheHostSurvivesIt(t *tes
 
 	ssh := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
-	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	remote.Vars = append(remote.Vars, "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
 	home.RunFrom(before)
 	home.InstallsOnOutposts(before, hostBefore)
 	ssh.Use(home.World)
@@ -264,7 +264,7 @@ func outpostWithMatchingBuild(t *testing.T) (*testworld.SSH, *testworld.Stack, *
 	build := testworld.AttnUpdateBinaryWithSnapshotFormat(t, "matching", format)
 	ssh := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
-	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	remote.Vars = append(remote.Vars, "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
 	remote.RunFrom(build)
 	home.RunFrom(build)
 	home.InstallsOnOutposts(build, ptyhosttest.Variant(t, format))

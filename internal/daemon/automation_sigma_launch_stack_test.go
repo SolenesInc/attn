@@ -11,9 +11,9 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func sigmaAutomationStack(t *testing.T, backend testworld.PTYBackend) (*testworld.Stack, *testworld.Peer) {
+func sigmaAutomationStack(t *testing.T) (*testworld.Stack, *testworld.Peer) {
 	t.Helper()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(backend))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma))
 	s.Start()
 	app := s.App()
 	setSetting(t, app, "sigma_enabled", "true")
@@ -33,29 +33,25 @@ location: {type: directory, path: %q}
 }
 
 func TestASigmaAutomationWhoseClientExitsBeforeItsFirstTurnFailsWithItsScreen(t *testing.T) {
-	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			s, app := sigmaAutomationStack(t, backend)
-			const screen = "Error: no provider named retired"
-			s.ExitAtNextBoot(1, screen)
-			answered := runAutomationFromApp(app, "exits")
-			if answered.Run != nil && answered.Run.State == "delivered" {
-				t.Fatalf("Run Now answered %s for a Sigma that exits at boot, want it not delivered", describeRunAnswer(answered))
-			}
-			runs := automationRuns(t, s.Client(), 1)
-			if len(runs) != 1 {
-				t.Fatalf("runs = %+v, want one", runs)
-			}
-			failed := awaitStackRun(t, s, app, runs[0].ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
-			if failure := protocol.Deref(failed.LastError); failed.State != "failed" || !strings.Contains(failure, "exited with code 1 before its first turn") || !strings.Contains(failure, screen) {
-				t.Fatalf("a run whose Sigma exited at boot is %s with %q, want it failed naming the exit and the screen Sigma left", failed.State, failure)
-			}
-		})
+	s, app := sigmaAutomationStack(t)
+	const screen = "Error: no provider named retired"
+	s.ExitAtNextBoot(1, screen)
+	answered := runAutomationFromApp(app, "exits")
+	if answered.Run != nil && answered.Run.State == "delivered" {
+		t.Fatalf("Run Now answered %s for a Sigma that exits at boot, want it not delivered", describeRunAnswer(answered))
+	}
+	runs := automationRuns(t, s.Client(), 1)
+	if len(runs) != 1 {
+		t.Fatalf("runs = %+v, want one", runs)
+	}
+	failed := awaitStackRun(t, s, app, runs[0].ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
+	if failure := protocol.Deref(failed.LastError); failed.State != "failed" || !strings.Contains(failure, "exited with code 1 before its first turn") || !strings.Contains(failure, screen) {
+		t.Fatalf("a run whose Sigma exited at boot is %s with %q, want it failed naming the exit and the screen Sigma left", failed.State, failure)
 	}
 }
 
 func TestASigmaAutomationStoppedBeforeItsFirstTurnAcrossARestartFailsWithItsScreen(t *testing.T) {
-	s, app := sigmaAutomationStack(t, testworld.WorkerPTY)
+	s, app := sigmaAutomationStack(t)
 	const screen = "Sigma is waiting for its provider login"
 	s.RequireEnterAtNextBoot(screen)
 	answered := runAutomationFromApp(app, "stuck")

@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const repository = path.resolve(new URL('../../..', import.meta.url).pathname);
 const mockAgent = path.join(repository, 'app/scripts/real-app-harness/mockAgent.mjs');
@@ -25,6 +26,8 @@ export function readAccessToken(minutes) {
   return accessToken;
 }
 
+const ptyHost = () => execFileSync('bash', [fileURLToPath(new URL('../../lib/rust-build-store.sh', import.meta.url)), 'provide', 'attn-pty-host'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }).trim();
+
 function scrubbedEnv() {
   return Object.fromEntries(Object.entries(process.env).filter(([key]) =>
     !/^(ATTN_|CLAUDE|CODEX_|ANTHROPIC_)/.test(key) || key === 'ATTN_SESSION_HOME' || key === 'ATTN_SESSION_BINARY'));
@@ -42,7 +45,7 @@ export function createWorld({ root, arm, accessToken }) {
     PATH: `${arm.bin}:${process.env.PATH}`,
     ATTN_INSTANCE: instance,
     ATTN_HEADLESS_TASKS: 'off',
-    ATTN_PTY_BACKEND: 'worker',
+    ATTN_PTY_HOST_BINARY: process.env.ATTN_PTY_HOST_BINARY || ptyHost(),
     ATTN_AUTOMATION: '1',
     ATTN_HARNESS_SKILL_SYNC: '1',
     ATTN_TOOL_HOME: toolHome,

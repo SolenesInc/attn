@@ -15,197 +15,189 @@ import (
 )
 
 func TestTerminalCLI(t *testing.T) {
-	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			t.Parallel()
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
-			s.Vars = append(s.Vars, "SHELL=/bin/bash")
-			s.Start()
-			app := s.App()
-			caller := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
-			s.Launched(caller)
-			run := func(args ...string) testworld.Result {
-				return s.Run(testworld.Invocation{Session: caller, Args: append([]string{"terminal"}, args...)})
-			}
-			open := func() protocol.TerminalOpenResult {
-				got := run("open", "--json", "--", "printf terminal-ready")
-				if got.Code != 0 {
-					t.Fatalf("open: %+v", got)
-				}
-				var opened protocol.TerminalOpenResult
-				got.JSON(t, &opened)
-				app.AwaitScreen(string(opened.SessionID), "terminal-ready")
-				return opened
-			}
-			first := open()
-			second := open()
-			var entries []protocol.TerminalEntry
-			listed := run("ls", "--json")
-			listed.JSON(t, &entries)
-			if listed.Code != 0 || len(entries) != 3 {
-				t.Fatalf("ls: %+v %+v", listed, entries)
-			}
-			for _, entry := range entries {
-				switch entry.SessionID {
-				case first.SessionID:
-					if entry.TerminalID != first.TerminalID || !strings.HasPrefix(string(entry.TerminalID), entry.ShortID) {
-						t.Errorf("listed terminal identity: %+v", entry)
-					}
-					if protocol.Deref(entry.Position) != "right/left" || protocol.Deref(entry.OpenedBy) != protocol.SessionID(caller) {
-						t.Errorf("first placement: %+v", entry)
-					}
-				case second.SessionID:
-					if protocol.Deref(entry.Position) != "right/right" {
-						t.Errorf("second placement: %+v", entry)
-					}
-				}
-			}
-			fresh := s.App()
-			for _, desktop := range fresh.Initial.Desktops {
-				if desktop.ID == first.DesktopID {
-					for _, pane := range desktop.Panes {
-						if string(pane.SessionID) == caller && desktop.ActivePaneID != pane.PaneID {
-							t.Fatalf("open stole active tile: %+v", desktop)
-						}
-					}
-				}
-			}
-			var chained protocol.TerminalOpenResult
-			openedWithCommand := run("open", "--json", "--", "printf chained-%s first")
-			if openedWithCommand.Code != 0 {
-				t.Fatal(openedWithCommand)
-			}
-			openedWithCommand.JSON(t, &chained)
-			if got := run("run", string(chained.TerminalID), "printf chained-second", "--wait"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "chained-second" {
-				t.Fatalf("run --wait right after open with a command: %+v", got)
-			}
-			if got := run("run", string(chained.TerminalID), "printf chained-third"); got.Code != 0 {
-				t.Fatalf("run right after a finished command: %+v", got)
-			}
-			if got := run("run", string(chained.TerminalID), "printf chained-fourth", "--wait"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "chained-fourth" {
-				t.Fatalf("run --wait right after run: %+v", got)
-			}
-			if got := run("close", string(chained.TerminalID)); got.Code != 0 {
-				t.Fatalf("close chained shell: %+v", got)
-			}
-
-			got := run("run", string(first.TerminalID), "printf 'command-output\\n'; (exit 7)", "--wait")
-			if got.Code != 7 || strings.TrimSpace(got.Stdout) != "command-output" {
-				t.Fatalf("run --wait: %+v", got)
-			}
-			last := run("read", string(first.TerminalID), "--last")
-			if last.Code != 0 || strings.TrimSpace(last.Stdout) != "command-output" {
-				t.Fatalf("read --last: %+v", last)
-			}
-			command := "for i in {1..60}; do printf 'history-%02d\\n' \"$i\"; done"
-			if got := run("run", string(first.TerminalID), command, "--wait"); got.Code != 0 {
-				t.Fatalf("history command: %+v", got)
-			}
-			screen := run("read", string(first.TerminalID))
-			history := run("read", string(first.TerminalID), "--scrollback", "--lines", "100")
-			if screen.Code != 0 || !strings.Contains(screen.Stdout, "history-60") || strings.Contains(screen.Stdout, "history-01") {
-				t.Fatalf("screen: %+v", screen)
-			}
-			if history.Code != 0 || !strings.Contains(history.Stdout, "history-01") {
-				t.Fatalf("scrollback: %+v", history)
-			}
-			limited := run("read", string(first.TerminalID), "--scrollback", "--lines", "3")
-			if limited.Code != 0 || len(strings.Split(strings.TrimSpace(limited.Stdout), "\n")) > 3 {
-				t.Fatalf("limited scrollback: %+v", limited)
-			}
-
-			for _, length := range []int{79, 80, 81} {
-				command := fmt.Sprintf("printf '%%0%dd' 0", length)
-				got := run("run", string(first.TerminalID), command, "--wait")
-				if got.Code != 0 || strings.TrimSpace(got.Stdout) != strings.Repeat("0", length) {
-					t.Fatalf("no-newline output length %d: %+v", length, got)
-				}
-				last := run("read", string(first.TerminalID), "--last")
-				if last.Code != 0 || strings.TrimSpace(last.Stdout) != strings.Repeat("0", length) {
-					t.Fatalf("last no-newline output length %d: %+v", length, last)
-				}
-			}
-
-			sleeping := s.Launch(testworld.Invocation{Session: caller, Args: []string{"terminal", "run", string(first.TerminalID), "printf 'sleep-started\\n'; sleep 600", "--wait"}})
-			app.AwaitScreen(string(first.SessionID), "sleep-started\r\n")
-			if got := run("send", string(first.TerminalID), "--keys", "C-c"); got.Code != 0 {
-				t.Fatalf("interrupt: %+v", got)
-			}
-			if got := sleeping.Wait(); got.Code != 130 {
-				t.Fatalf("interrupted sleep: %+v", got)
-			}
-
-			if got := run("send", string(second.TerminalID), "--text", "exit 9\r"); got.Code != 0 {
-				t.Fatalf("exit input: %+v", got)
-			}
-			testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == second.SessionID })
-			if got := run("wait", string(second.TerminalID), "--until", "exit"); got.Code != 9 {
-				t.Fatalf("wait --until exit: %+v", got)
-			}
-			if got := run("wait", string(second.TerminalID), "--until", "prompt", "--json"); got.Code != 9 || strings.TrimSpace(got.Stdout) != `{"exit_code":9,"exited":true}` {
-				t.Fatalf("wait --until prompt on a shell that exited after attn typed into it: %+v", got)
-			}
-
-			if got := run("close", caller); got.Code != 1 || !strings.Contains(got.Stderr, "attn agent close") {
-				t.Fatalf("close agent: %+v", got)
-			}
-			other := s.Spawn(app, fakeagent.Claude, s.Path("other"))
-			s.Launched(other)
-			if got := run("send", other, "--text", "unauthorized"); got.Code != 1 || !strings.Contains(got.Stderr, "delegation-chain rule") {
-				t.Fatalf("outside chain: %+v", got)
-			}
-			if got := run("close", string(first.TerminalID)); got.Code != 0 {
-				t.Fatalf("close shell: %+v", got)
-			}
-			t.Logf("verified terminal open/read/run/send/wait/close on %s", backend)
-		})
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	s.Start()
+	app := s.App()
+	caller := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	s.Launched(caller)
+	run := func(args ...string) testworld.Result {
+		return s.Run(testworld.Invocation{Session: caller, Args: append([]string{"terminal"}, args...)})
 	}
+	open := func() protocol.TerminalOpenResult {
+		got := run("open", "--json", "--", "printf terminal-ready")
+		if got.Code != 0 {
+			t.Fatalf("open: %+v", got)
+		}
+		var opened protocol.TerminalOpenResult
+		got.JSON(t, &opened)
+		app.AwaitScreen(string(opened.SessionID), "terminal-ready")
+		return opened
+	}
+	first := open()
+	second := open()
+	var entries []protocol.TerminalEntry
+	listed := run("ls", "--json")
+	listed.JSON(t, &entries)
+	if listed.Code != 0 || len(entries) != 3 {
+		t.Fatalf("ls: %+v %+v", listed, entries)
+	}
+	for _, entry := range entries {
+		switch entry.SessionID {
+		case first.SessionID:
+			if entry.TerminalID != first.TerminalID || !strings.HasPrefix(string(entry.TerminalID), entry.ShortID) {
+				t.Errorf("listed terminal identity: %+v", entry)
+			}
+			if protocol.Deref(entry.Position) != "right/left" || protocol.Deref(entry.OpenedBy) != protocol.SessionID(caller) {
+				t.Errorf("first placement: %+v", entry)
+			}
+		case second.SessionID:
+			if protocol.Deref(entry.Position) != "right/right" {
+				t.Errorf("second placement: %+v", entry)
+			}
+		}
+	}
+	fresh := s.App()
+	for _, desktop := range fresh.Initial.Desktops {
+		if desktop.ID == first.DesktopID {
+			for _, pane := range desktop.Panes {
+				if string(pane.SessionID) == caller && desktop.ActivePaneID != pane.PaneID {
+					t.Fatalf("open stole active tile: %+v", desktop)
+				}
+			}
+		}
+	}
+	var chained protocol.TerminalOpenResult
+	openedWithCommand := run("open", "--json", "--", "printf chained-%s first")
+	if openedWithCommand.Code != 0 {
+		t.Fatal(openedWithCommand)
+	}
+	openedWithCommand.JSON(t, &chained)
+	if got := run("run", string(chained.TerminalID), "printf chained-second", "--wait"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "chained-second" {
+		t.Fatalf("run --wait right after open with a command: %+v", got)
+	}
+	if got := run("run", string(chained.TerminalID), "printf chained-third"); got.Code != 0 {
+		t.Fatalf("run right after a finished command: %+v", got)
+	}
+	if got := run("run", string(chained.TerminalID), "printf chained-fourth", "--wait"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "chained-fourth" {
+		t.Fatalf("run --wait right after run: %+v", got)
+	}
+	if got := run("close", string(chained.TerminalID)); got.Code != 0 {
+		t.Fatalf("close chained shell: %+v", got)
+	}
+
+	got := run("run", string(first.TerminalID), "printf 'command-output\\n'; (exit 7)", "--wait")
+	if got.Code != 7 || strings.TrimSpace(got.Stdout) != "command-output" {
+		t.Fatalf("run --wait: %+v", got)
+	}
+	last := run("read", string(first.TerminalID), "--last")
+	if last.Code != 0 || strings.TrimSpace(last.Stdout) != "command-output" {
+		t.Fatalf("read --last: %+v", last)
+	}
+	command := "for i in {1..60}; do printf 'history-%02d\\n' \"$i\"; done"
+	if got := run("run", string(first.TerminalID), command, "--wait"); got.Code != 0 {
+		t.Fatalf("history command: %+v", got)
+	}
+	screen := run("read", string(first.TerminalID))
+	history := run("read", string(first.TerminalID), "--scrollback", "--lines", "100")
+	if screen.Code != 0 || !strings.Contains(screen.Stdout, "history-60") || strings.Contains(screen.Stdout, "history-01") {
+		t.Fatalf("screen: %+v", screen)
+	}
+	if history.Code != 0 || !strings.Contains(history.Stdout, "history-01") {
+		t.Fatalf("scrollback: %+v", history)
+	}
+	limited := run("read", string(first.TerminalID), "--scrollback", "--lines", "3")
+	if limited.Code != 0 || len(strings.Split(strings.TrimSpace(limited.Stdout), "\n")) > 3 {
+		t.Fatalf("limited scrollback: %+v", limited)
+	}
+
+	for _, length := range []int{79, 80, 81} {
+		command := fmt.Sprintf("printf '%%0%dd' 0", length)
+		got := run("run", string(first.TerminalID), command, "--wait")
+		if got.Code != 0 || strings.TrimSpace(got.Stdout) != strings.Repeat("0", length) {
+			t.Fatalf("no-newline output length %d: %+v", length, got)
+		}
+		last := run("read", string(first.TerminalID), "--last")
+		if last.Code != 0 || strings.TrimSpace(last.Stdout) != strings.Repeat("0", length) {
+			t.Fatalf("last no-newline output length %d: %+v", length, last)
+		}
+	}
+
+	sleeping := s.Launch(testworld.Invocation{Session: caller, Args: []string{"terminal", "run", string(first.TerminalID), "printf 'sleep-started\\n'; sleep 600", "--wait"}})
+	app.AwaitScreen(string(first.SessionID), "sleep-started\r\n")
+	if got := run("send", string(first.TerminalID), "--keys", "C-c"); got.Code != 0 {
+		t.Fatalf("interrupt: %+v", got)
+	}
+	if got := sleeping.Wait(); got.Code != 130 {
+		t.Fatalf("interrupted sleep: %+v", got)
+	}
+
+	if got := run("send", string(second.TerminalID), "--text", "exit 9\r"); got.Code != 0 {
+		t.Fatalf("exit input: %+v", got)
+	}
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == second.SessionID })
+	if got := run("wait", string(second.TerminalID), "--until", "exit"); got.Code != 9 {
+		t.Fatalf("wait --until exit: %+v", got)
+	}
+	if got := run("wait", string(second.TerminalID), "--until", "prompt", "--json"); got.Code != 9 || strings.TrimSpace(got.Stdout) != `{"exit_code":9,"exited":true}` {
+		t.Fatalf("wait --until prompt on a shell that exited after attn typed into it: %+v", got)
+	}
+
+	if got := run("close", caller); got.Code != 1 || !strings.Contains(got.Stderr, "attn agent close") {
+		t.Fatalf("close agent: %+v", got)
+	}
+	other := s.Spawn(app, fakeagent.Claude, s.Path("other"))
+	s.Launched(other)
+	if got := run("send", other, "--text", "unauthorized"); got.Code != 1 || !strings.Contains(got.Stderr, "delegation-chain rule") {
+		t.Fatalf("outside chain: %+v", got)
+	}
+	if got := run("close", string(first.TerminalID)); got.Code != 0 {
+		t.Fatalf("close shell: %+v", got)
+	}
+	t.Logf("verified terminal open/read/run/send/wait/close")
 }
 
 func TestTerminalWaitUntilPromptAfterACommandAttnTyped(t *testing.T) {
-	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			t.Parallel()
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
-			s.Vars = append(s.Vars, "SHELL=/bin/bash")
-			s.Start()
-			app := s.App()
-			caller := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
-			s.Launched(caller)
-			invoke := func(args ...string) testworld.Invocation {
-				return testworld.Invocation{Session: caller, Args: append([]string{"terminal"}, args...)}
-			}
-			run := func(args ...string) testworld.Result { return s.Run(invoke(args...)) }
-			var opened protocol.TerminalOpenResult
-			got := run("open", "--json")
-			if got.Code != 0 {
-				t.Fatalf("open: %+v", got)
-			}
-			got.JSON(t, &opened)
-			shell := string(opened.TerminalID)
-			if got := run("run", shell, "true", "--wait"); got.Code != 0 {
-				t.Fatalf("first prompt: %+v", got)
-			}
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	s.Start()
+	app := s.App()
+	caller := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	s.Launched(caller)
+	invoke := func(args ...string) testworld.Invocation {
+		return testworld.Invocation{Session: caller, Args: append([]string{"terminal"}, args...)}
+	}
+	run := func(args ...string) testworld.Result { return s.Run(invoke(args...)) }
+	var opened protocol.TerminalOpenResult
+	got := run("open", "--json")
+	if got.Code != 0 {
+		t.Fatalf("open: %+v", got)
+	}
+	got.JSON(t, &opened)
+	shell := string(opened.TerminalID)
+	if got := run("run", shell, "true", "--wait"); got.Code != 0 {
+		t.Fatalf("first prompt: %+v", got)
+	}
 
-			if got := run("run", shell, "echo )"); got.Code != 0 {
-				t.Fatalf("type a line bash rejects: %+v", got)
-			}
-			if got := run("wait", shell, "--until", "prompt"); got.Code != 0 {
-				t.Fatalf("wait --until prompt after bash rejected the typed line: %+v", got)
-			}
+	if got := run("run", shell, "echo )"); got.Code != 0 {
+		t.Fatalf("type a line bash rejects: %+v", got)
+	}
+	if got := run("wait", shell, "--until", "prompt"); got.Code != 0 {
+		t.Fatalf("wait --until prompt after bash rejected the typed line: %+v", got)
+	}
 
-			if got := run("run", shell, "printf 'ready-%s\\n' seq; IFS= read -r line; seq 160000"); got.Code != 0 {
-				t.Fatalf("type a command whose output outgrows scrollback: %+v", got)
-			}
-			app.AwaitScreen(string(opened.SessionID), "ready-seq")
-			waiting := s.Launch(invoke("wait", shell, "--until", "prompt"))
-			if got := run("send", shell, "--keys", "Enter"); got.Code != 0 {
-				t.Fatalf("release the command: %+v", got)
-			}
-			if got := waiting.Wait(); got.Code != 0 {
-				t.Fatalf("wait --until prompt after the command's output left scrollback: %+v", got)
-			}
-		})
+	if got := run("run", shell, "printf 'ready-%s\\n' seq; IFS= read -r line; seq 160000"); got.Code != 0 {
+		t.Fatalf("type a command whose output outgrows scrollback: %+v", got)
+	}
+	app.AwaitScreen(string(opened.SessionID), "ready-seq")
+	waiting := s.Launch(invoke("wait", shell, "--until", "prompt"))
+	if got := run("send", shell, "--keys", "Enter"); got.Code != 0 {
+		t.Fatalf("release the command: %+v", got)
+	}
+	if got := waiting.Wait(); got.Code != 0 {
+		t.Fatalf("wait --until prompt after the command's output left scrollback: %+v", got)
 	}
 }
 
@@ -361,81 +353,74 @@ func TestTerminalCLIWithoutShellIntegration(t *testing.T) {
 }
 
 func TestTerminalTextSurvivesAnUpgrade(t *testing.T) {
-	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			t.Parallel()
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
-			s.Vars = append(s.Vars, "SHELL=/bin/bash")
-			current := testworld.AttnBinaryWithSnapshotFormat(t, "current")
-			next := testworld.AttnBinaryWithSnapshotFormat(t, "next")
-			hostBuild := func(format string) []string {
-				if backend != testworld.SharedHostPTY {
-					return nil
-				}
-				return []string{"ATTN_PTY_HOST_BINARY=" + ptyhosttest.Variant(t, format)}
-			}
-			s.StartBinary(current, hostBuild("current")...)
-			app := s.App()
-			caller := s.Spawn(app, fakeagent.Claude, s.Path("upgrade"))
-			s.Launched(caller)
-			run := func(args ...string) testworld.Result {
-				return s.Run(testworld.Invocation{Binary: current, Session: caller, Args: append([]string{"terminal"}, args...)})
-			}
-			got := run("open", "--json", "--", "printf 'upgrade-%s' ready")
-			if got.Code != 0 {
-				t.Fatal(got)
-			}
-			var opened protocol.TerminalOpenResult
-			got.JSON(t, &opened)
-			app.AwaitScreen(string(opened.SessionID), "upgrade-ready")
-			if got := run("wait", string(opened.TerminalID), "--until", "prompt"); got.Code != 0 {
-				t.Fatal(got)
-			}
-			output := strings.Repeat("0", 81)
-			got = run("run", string(opened.TerminalID), "printf '%081d' 0; printf '\\033[?7l'", "--wait")
-			if got.Code != 0 || strings.TrimSpace(got.Stdout) != output {
-				t.Fatalf("before upgrade: %+v", got)
-			}
-			s.Stop()
-			s.StartBinary(next, hostBuild("next")...)
-			app = s.App()
-			terminal := app.Terminal(string(opened.SessionID))
-			for _, session := range app.Initial.Sessions {
-				if session.ID == opened.SessionID && session.TerminalBuildStale != nil {
-					testworld.AwaitSession(app, string(opened.SessionID), func(x protocol.Session) bool { return x.TerminalBuildStale == nil })
-				}
-			}
-			attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
-			if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next" {
-				testworld.AwaitEvent(app, "the old terminal stream to end at handover", func(e protocol.WebSocketEvent) bool {
-					return e.Event == protocol.EventPtyDesync && protocol.Deref(e.ID) == terminal
-				})
-				attached = testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
-			}
-			if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next" {
-				format := "none"
-				if attached.Snapshot != nil {
-					format = protocol.Deref(attached.Snapshot.Format)
-				}
-				t.Fatalf("worker snapshot format = %s, want next", format)
-			}
-			payload, err := base64.StdEncoding.DecodeString(attached.Snapshot.SnapshotB64)
-			if err != nil {
-				t.Fatal(err)
-			}
-			restored, err := ghosttyvt.Restore(payload, ghosttyvt.Options{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer restored.Close()
-			restored.Write([]byte("\x1b[1;1H" + strings.Repeat("x", 81)))
-			if _, row := restored.CursorPos(); row != 0 {
-				t.Fatalf("the adopted terminal wraps onto row %d; wraparound was disabled before upgrade", row)
-			}
-			got = s.Run(testworld.Invocation{Binary: next, Session: caller, Args: []string{"terminal", "read", string(opened.SessionID), "--last"}})
-			if got.Code != 0 || strings.TrimSpace(got.Stdout) != output {
-				t.Fatalf("after upgrade: %+v", got)
-			}
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	current := testworld.AttnBinaryWithSnapshotFormat(t, "current")
+	next := testworld.AttnBinaryWithSnapshotFormat(t, "next")
+	hostBuild := func(format string) []string {
+		return []string{"ATTN_PTY_HOST_BINARY=" + ptyhosttest.Variant(t, format)}
+	}
+	s.StartBinary(current, hostBuild("current")...)
+	app := s.App()
+	caller := s.Spawn(app, fakeagent.Claude, s.Path("upgrade"))
+	s.Launched(caller)
+	run := func(args ...string) testworld.Result {
+		return s.Run(testworld.Invocation{Binary: current, Session: caller, Args: append([]string{"terminal"}, args...)})
+	}
+	got := run("open", "--json", "--", "printf 'upgrade-%s' ready")
+	if got.Code != 0 {
+		t.Fatal(got)
+	}
+	var opened protocol.TerminalOpenResult
+	got.JSON(t, &opened)
+	app.AwaitScreen(string(opened.SessionID), "upgrade-ready")
+	if got := run("wait", string(opened.TerminalID), "--until", "prompt"); got.Code != 0 {
+		t.Fatal(got)
+	}
+	output := strings.Repeat("0", 81)
+	got = run("run", string(opened.TerminalID), "printf '%081d' 0; printf '\\033[?7l'", "--wait")
+	if got.Code != 0 || strings.TrimSpace(got.Stdout) != output {
+		t.Fatalf("before upgrade: %+v", got)
+	}
+	s.Stop()
+	s.StartBinary(next, hostBuild("next")...)
+	app = s.App()
+	terminal := app.Terminal(string(opened.SessionID))
+	for _, session := range app.Initial.Sessions {
+		if session.ID == opened.SessionID && session.TerminalBuildStale != nil {
+			testworld.AwaitSession(app, string(opened.SessionID), func(x protocol.Session) bool { return x.TerminalBuildStale == nil })
+		}
+	}
+	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next" {
+		testworld.AwaitEvent(app, "the old terminal stream to end at handover", func(e protocol.WebSocketEvent) bool {
+			return e.Event == protocol.EventPtyDesync && protocol.Deref(e.ID) == terminal
 		})
+		attached = testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	}
+	if attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next" {
+		format := "none"
+		if attached.Snapshot != nil {
+			format = protocol.Deref(attached.Snapshot.Format)
+		}
+		t.Fatalf("worker snapshot format = %s, want next", format)
+	}
+	payload, err := base64.StdEncoding.DecodeString(attached.Snapshot.SnapshotB64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := ghosttyvt.Restore(payload, ghosttyvt.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	restored.Write([]byte("\x1b[1;1H" + strings.Repeat("x", 81)))
+	if _, row := restored.CursorPos(); row != 0 {
+		t.Fatalf("the adopted terminal wraps onto row %d; wraparound was disabled before upgrade", row)
+	}
+	got = s.Run(testworld.Invocation{Binary: next, Session: caller, Args: []string{"terminal", "read", string(opened.SessionID), "--last"}})
+	if got.Code != 0 || strings.TrimSpace(got.Stdout) != output {
+		t.Fatalf("after upgrade: %+v", got)
 	}
 }

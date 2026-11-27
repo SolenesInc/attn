@@ -6,16 +6,15 @@
 bash scripts/test-pty-upgrade.sh
 ```
 
-Downloads the latest release and builds the last pre-Rust daemon, the current
-daemon and the host to verify session survival across upgrades, failing builds
-and mid-move daemon crashes. Requires `lsof` and `fish`. CI runs
-it on macOS and Linux.
+Downloads the latest release and builds the current daemon and the host to
+verify session survival across updates, failing builds and mid-move daemon
+crashes. Requires `lsof` and `fish`. CI runs it on macOS and Linux.
 
 To test compatibility with a pre-move retained host:
 
 ```sh
 scripts/build-retained-pty-host.sh /tmp/retained-pty-host
-ATTN_TEST_RETAINED_PTY_HOST=/tmp/retained-pty-host ./scripts/test-go.sh --packages -run TestSharedHost ./cmd/attnd
+ATTN_TEST_RETAINED_PTY_HOST=/tmp/retained-pty-host ./scripts/test-go.sh --packages -run TestSharedHost_OperatesARetainedOlderArtifact ./internal/ptybackend
 ```
 
 ## Resource measurement
@@ -35,5 +34,3 @@ RSS, ~72 KiB per extra terminal, ~0 idle CPU); Linux amd64, 32 empty terminals
 - Released Linux hosts (`make build-pty-host-linux-{amd64,arm64}`) link with zig
   against an older glibc so they run wherever `attn` runs; release preflight
   fails if the host needs a newer glibc than `attn`.
-- `sh -c 'ps -o comm= -p $(ps -o ppid= -p $PPID)'` inside a terminal shows
-  whether it runs under `attn-pty-host` or a Go worker (`attn`).

@@ -22,29 +22,25 @@ func TestNoProcessALaunchStartsHoldsTheAgentCredentialInItsArguments(t *testing.
 	if runtime.GOOS != "linux" {
 		t.Skip("the login shell comes from SHELL only on Linux, and the test records it there")
 	}
-	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex), testworld.OnPTYBackend(backend))
-			loginShell := recordingLoginShell(t, s)
-			s.Start()
-			app := s.App()
-			requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
-			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-				launch := string(h)
-				session := s.Spawn(app, h, s.Path(string(h)))
-				agent := s.Launched(session)
-				credential := stackCredential(t, s, "t."+app.Terminal(session))
-				if h == fakeagent.Claude && (!slices.Contains(agent.Env, "ATTN_AGENT_CREDENTIAL="+credential) || len(credentialsSignedBy(t, s, strings.Join(agent.Env, " "))) == 0) {
-					t.Errorf("%s: the agent's environment lacks a credential the scan finds", launch)
-				}
-				arguments := append([]string{strings.Join(agent.Argv, " ")}, runningProcessArguments(t)...)
-				for _, args := range append(arguments, loginShell.launches(t)...) {
-					if held := credentialsSignedBy(t, s, args); len(held) > 0 {
-						t.Errorf("%s: a process started with the credentials %q in its arguments", launch, held)
-					}
-				}
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
+	loginShell := recordingLoginShell(t, s)
+	s.Start()
+	app := s.App()
+	requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
+	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		launch := string(h)
+		session := s.Spawn(app, h, s.Path(string(h)))
+		agent := s.Launched(session)
+		credential := stackCredential(t, s, "t."+app.Terminal(session))
+		if h == fakeagent.Claude && (!slices.Contains(agent.Env, "ATTN_AGENT_CREDENTIAL="+credential) || len(credentialsSignedBy(t, s, strings.Join(agent.Env, " "))) == 0) {
+			t.Errorf("%s: the agent's environment lacks a credential the scan finds", launch)
+		}
+		arguments := append([]string{strings.Join(agent.Argv, " ")}, runningProcessArguments(t)...)
+		for _, args := range append(arguments, loginShell.launches(t)...) {
+			if held := credentialsSignedBy(t, s, args); len(held) > 0 {
+				t.Errorf("%s: a process started with the credentials %q in its arguments", launch, held)
 			}
-		})
+		}
 	}
 }
 

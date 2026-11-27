@@ -11,7 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptyworker"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -221,10 +221,9 @@ func TestAReopenedAppServerSessionStillWaitsOnTheQuestionItAsked(t *testing.T) {
 
 func TestAnAppServerSessionWorkingThroughADaemonRestartSettlesFromTheServerAfterIt(t *testing.T) {
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
-		t.Setenv("ATTN_PTY_BACKEND", "worker")
-		t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+		t.Setenv("ATTN_PTY_HOST_BINARY", testworld.SharedHostBinary(t))
 		w := newWorld(t, h)
-		t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+		t.Cleanup(func() { ptyhost.ReapDataDir(w.Dir) })
 		app := w.App()
 		session, view, server := appServerSession(t, w, app, h)
 		conversation := view.ConversationID
@@ -244,10 +243,9 @@ func TestAnAppServerSessionWorkingThroughADaemonRestartSettlesFromTheServerAfter
 
 func TestAppServerSessionsKeepTheirAnswersAndLearnRunsThatEndedWhileTheDaemonWasDown(t *testing.T) {
 	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
-		t.Setenv("ATTN_PTY_BACKEND", "worker")
-		t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+		t.Setenv("ATTN_PTY_HOST_BINARY", testworld.SharedHostBinary(t))
 		w := newWorld(t, h)
-		t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+		t.Cleanup(func() { ptyhost.ReapDataDir(w.Dir) })
 		app := w.App()
 		asked, askedTUI, server := appServerSession(t, w, app, h)
 		app.TypeLine(asked, "which index should the report use?")

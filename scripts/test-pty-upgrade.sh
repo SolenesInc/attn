@@ -11,8 +11,6 @@ if ! command -v fish >/dev/null; then
   echo 'PTY upgrade test requires fish to start agents through a fish login shell (install fish).' >&2
   exit 1
 fi
-# Last daemon revision before the Rust host: never build both sides from HEAD.
-legacy_revision=f68ab3f02f329f46d3b9b3d1e7603f545c27dd50
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/attn-pty-upgrade.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
 
@@ -23,21 +21,6 @@ fi
 if [ -z "${ATTN_TEST_PTY_HOST_VARIANTS:-}" ]; then
   ATTN_TEST_PTY_HOST_VARIANTS="$(bash scripts/lib/rust-build-store.sh provide-variants pty-host/test-variants)"
   export ATTN_TEST_PTY_HOST_VARIANTS
-fi
-if [ -z "${ATTN_UPGRADE_OLD_BIN:-}" ]; then
-  mkdir -p "$test_root/legacy"
-  git archive "$legacy_revision" | tar -x -C "$test_root/legacy"
-  platform="$(go env GOOS)_$(go env GOARCH)"
-  if [ -d "third_party/ghostty-vt/$platform" ] && cmp -s ghostty-vt.pin "$test_root/legacy/ghostty-vt.pin" && cmp -s ghostty-vt-native.lock "$test_root/legacy/ghostty-vt-native.lock"; then
-    mkdir -p "$test_root/legacy/third_party/ghostty-vt"
-    cp -R "third_party/ghostty-vt/$platform" "$test_root/legacy/third_party/ghostty-vt/$platform"
-  else
-    (cd "$test_root/legacy" && bash scripts/build-libghostty-vt.sh)
-  fi
-  (cd "$test_root/legacy" && go build \
-    -ldflags "-X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$(bash scripts/snapshot-format.sh)" \
-    -o "$test_root/attn-legacy" ./cmd/attn)
-  export ATTN_UPGRADE_OLD_BIN="$test_root/attn-legacy"
 fi
 download_release() {
   local url="$1" dir="$2" arch
@@ -81,4 +64,4 @@ if [ -z "${ATTN_E2E_BIN:-}" ]; then
   bash scripts/rust-cli.sh build --out "$test_root/current/attn"
   export ATTN_E2E_BIN="$test_root/current/attn"
 fi
-go test ./cmd/attnd -run '^(TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations|TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortWhenItReloadsOntoTheHost|TestAnUpdateFromTheRelease.*|TestAFreshInstallFindsItsHost.*|TestATerminalOpenedBeforeTheFirstHostCheck.*|TestAfterAnUpdateAReboot.*|TestAHostThatCannotRun.*|TestAMachineWithOnlyAttn.*|TestDirectLaunchStartsAgents.*|TestAPhoneReattachesToAHost.*|TestKillingTheDaemonDuringAHostMove.*|TestAnOutpostOnTheRelease.*|TestAnOutpostAddedByAddress.*)$' -count=1 -timeout=180s -v "$@"
+go test ./cmd/attnd -run '^(TestSessionsSurviveDaemonRestartsAndSharedHostGenerations|TestAnUpdateFromTheRelease.*|TestAFreshInstallFindsItsHost.*|TestATerminalOpenedBeforeTheFirstHostCheck.*|TestAfterAnUpdateAReboot.*|TestAHostThatCannotRun.*|TestAMachineWithOnlyAttn.*|TestDirectLaunchStartsAgents.*|TestAPhoneReattachesToAHost.*|TestKillingTheDaemonDuringAHostMove.*|TestAnOutpostOnTheRelease.*|TestAnOutpostAddedByAddress.*)$' -count=1 -timeout=180s -v "$@"

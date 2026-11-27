@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptyworker"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -26,7 +26,7 @@ const (
 var kittyImagePixels = []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
 
 func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
-	onPtyWorkers(t, testKittyPlacementsReachOnlyClientsThatAskedForThem)
+	onTheSharedHost(t, testKittyPlacementsReachOnlyClientsThatAskedForThem)
 }
 
 func testKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T, w *world) {
@@ -75,7 +75,7 @@ func testKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T, w *world)
 }
 
 func TestKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T) {
-	onPtyWorkers(t, testKittyImagesOnScreenAreServedInTheFormEachClientReads)
+	onTheSharedHost(t, testKittyImagesOnScreenAreServedInTheFormEachClientReads)
 }
 
 func testKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T, w *world) {
@@ -124,7 +124,7 @@ func testKittyImagesOnScreenAreServedInTheFormEachClientReads(t *testing.T, w *w
 }
 
 func TestAKittyImageKeepsOneIdentityThatNoOtherSessionShares(t *testing.T) {
-	onPtyWorkers(t, func(t *testing.T, w *world) {
+	onTheSharedHost(t, func(t *testing.T, w *world) {
 		app := w.App()
 		describer := transportPeer(w, protocol.CapabilityKittyImages)
 		generations := map[string]int{}
@@ -242,7 +242,7 @@ func TestResizingASessionWithoutImagesDescribesNoPlacements(t *testing.T) {
 }
 
 func TestClientsGetTheImageStreamRewrittenAndAResyncWhenItsLayoutCannotBeCarried(t *testing.T) {
-	onPtyWorkers(t, func(t *testing.T, w *world) {
+	onTheSharedHost(t, func(t *testing.T, w *world) {
 		session := w.Spawn(w.App(), shellHarness, w.Path("shop"))
 		terminal := w.Terminal(session)
 		describer := transportPeer(w, protocol.CapabilityKittyImages)
@@ -275,11 +275,10 @@ func TestClientsGetTheImageStreamRewrittenAndAResyncWhenItsLayoutCannotBeCarried
 	})
 }
 
-func onPtyWorkers(t *testing.T, script func(t *testing.T, w *world)) {
-	t.Setenv("ATTN_PTY_BACKEND", "worker")
-	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+func onTheSharedHost(t *testing.T, script func(t *testing.T, w *world)) {
+	t.Setenv("ATTN_PTY_HOST_BINARY", testworld.SharedHostBinary(t))
 	w := newWorld(t)
-	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	t.Cleanup(func() { ptyhost.ReapDataDir(w.Dir) })
 	script(t, w)
 }
 

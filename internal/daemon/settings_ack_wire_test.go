@@ -24,7 +24,7 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 	for _, refused := range []struct{ key, value string }{
 		{"crew.away_seconds", "59"},
 		{"crew.away_seconds", "86401"},
-		{"pty_backend_mode", "elsewhere"},
+		{"outpost_state", "elsewhere"},
 		{"default_context_window_cap_codex", "1"},
 	} {
 		ack := trySetSetting(app, refused.key, refused.value)

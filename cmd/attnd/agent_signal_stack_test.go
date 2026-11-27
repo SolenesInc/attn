@@ -13,34 +13,30 @@ import (
 )
 
 func TestEverySignalToTheTerminalProcessReachesTheAgentUnchanged(t *testing.T) {
-	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
-			executable := filepath.Join(s.Dir, "signal-agent")
-			if err := os.WriteFile(executable, []byte(`#!/bin/sh
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	executable := filepath.Join(s.Dir, "signal-agent")
+	if err := os.WriteFile(executable, []byte(`#!/bin/sh
 trap 'printf "forwarded-TERM\n"' TERM
 trap 'printf "forwarded-HUP\n"; exit 7' HUP
 printf 'signal-ready\n'
 while :; do read hold; done
 `), 0o700); err != nil {
-				t.Fatal(err)
-			}
-			s.Start()
-			app := s.App()
-			id := s.Spawn(app, fakeagent.Claude, s.Path("signals"), func(m *protocol.SpawnSessionMessage) { m.Executable = protocol.Ptr(executable) })
-			app.AwaitScreen(id, "signal-ready")
-			terminal := protocol.TerminalID(app.Terminal(id))
-			s.SignalTerminalProcess(id, syscall.SIGTERM)
-			app.AwaitScreen(id, "forwarded-TERM")
-			s.SignalTerminalProcess(id, syscall.SIGHUP)
-			testworld.Await(app, protocol.EventSessionExited, func(event protocol.SessionExitedMessage) bool {
-				return string(event.SessionID) == id && event.ExitCode == 7
-			})
-			final := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal, AttachPolicy: protocol.Ptr(protocol.AttachPolicySameAppRemount)}, protocol.EventAttachResult, func(result protocol.AttachResultMessage) bool { return result.ID == terminal })
-			if !final.Success || final.Exit == nil || final.Exit.Code != 7 || final.Screen == nil || !strings.Contains(final.Screen.Text, "forwarded-HUP") {
-				t.Fatalf("final output after exit: %+v", final)
-			}
-			t.Log("the agent received TERM, then HUP, with both signal identities preserved")
-		})
+		t.Fatal(err)
 	}
+	s.Start()
+	app := s.App()
+	id := s.Spawn(app, fakeagent.Claude, s.Path("signals"), func(m *protocol.SpawnSessionMessage) { m.Executable = protocol.Ptr(executable) })
+	app.AwaitScreen(id, "signal-ready")
+	terminal := protocol.TerminalID(app.Terminal(id))
+	s.SignalTerminalProcess(id, syscall.SIGTERM)
+	app.AwaitScreen(id, "forwarded-TERM")
+	s.SignalTerminalProcess(id, syscall.SIGHUP)
+	testworld.Await(app, protocol.EventSessionExited, func(event protocol.SessionExitedMessage) bool {
+		return string(event.SessionID) == id && event.ExitCode == 7
+	})
+	final := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal, AttachPolicy: protocol.Ptr(protocol.AttachPolicySameAppRemount)}, protocol.EventAttachResult, func(result protocol.AttachResultMessage) bool { return result.ID == terminal })
+	if !final.Success || final.Exit == nil || final.Exit.Code != 7 || final.Screen == nil || !strings.Contains(final.Screen.Text, "forwarded-HUP") {
+		t.Fatalf("final output after exit: %+v", final)
+	}
+	t.Log("the agent received TERM, then HUP, with both signal identities preserved")
 }

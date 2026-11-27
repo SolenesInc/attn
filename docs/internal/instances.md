@@ -16,7 +16,7 @@ eval "$(attn instance-env --unset)"
   session inherits `ATTN_SOCKET_PATH` and `ATTN_DB_PATH`, which beat
   `ATTN_DATA_DIR`. Select a named instance inside a session, or use
   `config.ScopeTestEnvironment` in tests.
-- `attn` (Rust CLI) and `attnd` (Go daemon/workers) install side by side; never
+- `attn` (Rust CLI) and `attnd` (Go daemon) install side by side; never
   copy one without the other (`make build` writes both).
 - **Install & run:** `make install-daemon INSTANCE=<name>` (Go only),
   `make install INSTANCE=<name>` (full app; `ATTN_APP_CARGO_PROFILE=release`

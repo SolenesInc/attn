@@ -9,7 +9,7 @@ import { registeredAgentPid } from './workerRegistry.mjs';
 function dataDirWith(entries) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-registry-'));
   entries.forEach((entry, index) => {
-    const registryDir = path.join(dataDir, 'workers', `instance-${index}`, 'registry');
+    const registryDir = path.join(dataDir, 'pty-hosts', `instance-${index}`, 'registry');
     fs.mkdirSync(registryDir, { recursive: true });
     fs.writeFileSync(path.join(registryDir, 'session.json'), JSON.stringify(entry));
   });

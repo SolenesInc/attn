@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/homegateway"
 	"github.com/victorarias/attn/internal/ptyhost"
@@ -33,9 +34,9 @@ import (
 	"nhooyr.io/websocket"
 )
 
-func writeUpgradeCodexFixture(t *testing.T, root string) string {
+func writeUpgradeAgentFixture(t *testing.T, root string) string {
 	t.Helper()
-	fixture := filepath.Join(root, "fixture-codex")
+	fixture := filepath.Join(root, "fixture-agent")
 	script := `#!/bin/sh
 set -eu
 stty -echo
@@ -51,18 +52,7 @@ mkdir -p "$ATTN_TOOL_HOME/.codex/sessions"
 printf '{"type":"session_meta","payload":{"id":"%s","cwd":"%s"}}\n' "$conversation" "$PWD" > "$transcript"
 printf '{"session_id":"%s","transcript_path":"%s"}' "$conversation" "$transcript" | "$ATTN_WRAPPER_PATH" _hook-session-start
 while IFS= read -r line; do
-  previous=''; resume=''; model=''; effort=''
-  for arg in "$@"; do
-    if [ "$previous" = resume ]; then resume="$arg"; fi
-    if [ "$previous" = --model ]; then model="$arg"; fi
-    if [ "$previous" = -c ]; then
-      case "$arg" in model_reasoning_effort=*) effort="$arg";; esac
-    fi
-    previous="$arg"
-  done
-  printf '__MODEL_%s__\n__EFFORT_%s__\n' "$model" "$effort"
   printf '__ACK_%s_%s_%s__\n' "$terminal_id" "$line" "$$"
-  printf '__RESUME_%s__\n' "$resume"
 done
 `
 	if err := os.WriteFile(fixture, []byte(script), 0o755); err != nil {
@@ -80,63 +70,10 @@ done
 	return fixture
 }
 
-func TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortWhenItReloadsOntoTheHost(t *testing.T) {
-	oldBinary, hostBinary := os.Getenv("ATTN_UPGRADE_OLD_BIN"), os.Getenv("ATTN_TEST_PTY_HOST")
-	if oldBinary == "" || hostBinary == "" {
-		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade test")
-	}
-	root, err := os.MkdirTemp("/tmp", "attn-model-upgrade-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(root) })
-	fixture := writeUpgradeCodexFixture(t, root)
-	workers := make(map[int]bool)
-	agentPIDs := make(map[string]int)
-	terminals := make(map[string]string)
-	t.Cleanup(func() {
-		for pid := range workers {
-			process, _ := os.FindProcess(pid)
-			_ = process.Kill()
-		}
-	})
-	start := func(binary, host string) *upgradeDaemon {
-		d := startUpgradeDaemon(t, root, binary, host)
-		d.workers, d.agentPIDs, d.terminals = workers, agentPIDs, terminals
-		return d
-	}
-	assertPins := func(output string) {
-		t.Helper()
-		models := regexp.MustCompile(`__MODEL_([^\r\n]*)__`).FindAllStringSubmatch(output, -1)
-		efforts := regexp.MustCompile(`__EFFORT_([^\r\n]*)__`).FindAllStringSubmatch(output, -1)
-		if len(models) == 0 || len(efforts) == 0 || models[len(models)-1][1] != "upgrade-model" || efforts[len(efforts)-1][1] != `model_reasoning_effort="high"` {
-			t.Fatalf("agent arguments lost the selected model or effort: %q", output)
-		}
-	}
-	old := start(oldBinary, "")
-	old.command(map[string]any{"cmd": "register_workspace", "id": "upgrade", "title": "upgrade", "directory": root}, "workspace_registered", "")
-	old.spawn("pinned-agent", "codex", fixture, func(spawn map[string]any) {
-		spawn["model"], spawn["effort"] = "upgrade-model", "high"
-	})
-	identity := old.identity("pinned-agent", false)
-	assertPins(old.probe("pinned-agent", identity.ChildPID, "before-upgrade"))
-	old.stop()
-
-	current := start(testworld.AttnBinaryWithSnapshotFormat(t, "upgrade-model-pins"), hostBinary)
-	current.waitForLog("worker swapped in place", nil)
-	current.assertIdentity("pinned-agent", false, identity)
-	assertPins(current.probe("pinned-agent", identity.ChildPID, "after-upgrade"))
-	current.command(map[string]any{"cmd": "reload_session", "id": "pinned-agent", "cols": 80, "rows": 24}, "reload_session_result", "pinned-agent")
-	reloaded := current.identity("pinned-agent", true)
-	delete(agentPIDs, "pinned-agent")
-	assertPins(current.probe("pinned-agent", reloaded.ChildPID, "after-reload"))
-	current.command(map[string]any{"cmd": "unregister", "id": "pinned-agent"}, "session_unregistered", "")
-}
-
-func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
-	oldBinary, hostBinary := os.Getenv("ATTN_UPGRADE_OLD_BIN"), os.Getenv("ATTN_TEST_PTY_HOST")
-	if oldBinary == "" || hostBinary == "" {
-		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade test")
+func TestSessionsSurviveDaemonRestartsAndSharedHostGenerations(t *testing.T) {
+	hostBinary := os.Getenv("ATTN_TEST_PTY_HOST")
+	if hostBinary == "" {
+		t.Skip("ATTN_TEST_PTY_HOST is unset: run it through scripts/test-go.sh")
 	}
 	root, err := os.MkdirTemp("/tmp", "attn-upgrade-")
 	if err != nil {
@@ -144,7 +81,7 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	newBinary := testworld.AttnBinary(t)
-	fixture := writeUpgradeCodexFixture(t, root)
+	fixture := writeUpgradeAgentFixture(t, root)
 	var workers = make(map[int]bool)
 	agentPIDs := make(map[string]int)
 	terminals := make(map[string]string)
@@ -161,45 +98,31 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 		d.terminals = terminals
 		return d
 	}
-	old := start(oldBinary, "")
-	old.command(map[string]any{"cmd": "register_workspace", "id": "upgrade", "title": "upgrade", "directory": root}, "workspace_registered", "")
-	old.spawn("legacy-shell", "shell", "")
-	old.spawn("legacy-agent", "codex", fixture)
-	old.spawn("promote-agent", "codex", fixture)
-	identities := map[string]ptyworker.RegistryEntry{}
-	for _, id := range []string{"legacy-shell", "legacy-agent", "promote-agent"} {
-		identities[id] = old.identity(id, false)
-		old.probe(id, identities[id].ChildPID, "old-daemon")
-	}
-	old.stop()
-
 	current := start(newBinary, hostBinary)
-	for _, id := range []string{"legacy-shell", "legacy-agent", "promote-agent"} {
-		current.assertIdentity(id, false, identities[id])
-		current.probe(id, identities[id].ChildPID, "new-daemon")
+	current.spawn("shell", "shell", "")
+	current.spawn("agent", "claude", fixture)
+	current.spawn("promote-agent", "claude", fixture)
+	identities := map[string]ptyworker.RegistryEntry{}
+	for _, id := range []string{"shell", "agent", "promote-agent"} {
+		identities[id] = current.identity(id)
+		current.probe(id, identities[id].ChildPID, "first-daemon")
 	}
-	current.spawn("new-agent", "claude", fixture)
-	identities["new-agent"] = current.identity("new-agent", true)
-	current.probe("new-agent", identities["new-agent"].ChildPID, "rust-agent")
 	current.command(map[string]any{"cmd": "reload_session", "id": "promote-agent", "cols": 80, "rows": 24}, "reload_session_result", "promote-agent")
-	promoted := current.identity("promote-agent", true)
-	if promoted.ChildPID == identities["promote-agent"].ChildPID || promoted.WorkerPID != identities["new-agent"].WorkerPID {
+	promoted := current.identity("promote-agent")
+	if promoted.ChildPID == identities["promote-agent"].ChildPID || promoted.WorkerPID != identities["agent"].WorkerPID {
 		t.Fatalf("reload did not replace only the selected child on the shared host: before=%+v after=%+v", identities["promote-agent"], promoted)
 	}
 	identities["promote-agent"] = promoted
 	priorAgentPID := agentPIDs["promote-agent"]
 	delete(agentPIDs, "promote-agent")
-	output := current.probe("promote-agent", promoted.ChildPID, "promoted")
-	if !strings.Contains(output, "__RESUME_native-promote-agent__") || agentPIDs["promote-agent"] == priorAgentPID {
-		t.Fatalf("reload lost native conversation identity: %q", output)
+	current.probe("promote-agent", promoted.ChildPID, "promoted")
+	if agentPIDs["promote-agent"] == priorAgentPID {
+		t.Fatalf("reload kept the agent process %d, want a new one", priorAgentPID)
 	}
-	sharedSessions := map[string]bool{"promote-agent": true, "new-agent": true}
 	assertAll := func(d *upgradeDaemon, phase string) {
 		for _, id := range slices.Sorted(maps.Keys(identities)) {
-			identity := identities[id]
-			shared := sharedSessions[id]
-			d.assertIdentity(id, shared, identity)
-			d.probe(id, identity.ChildPID, phase)
+			d.assertIdentity(id, identities[id])
+			d.probe(id, identities[id].ChildPID, phase)
 		}
 	}
 	assertAll(current, "after-reload")
@@ -220,16 +143,15 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	assertAll(current, "host-upgrade")
 	current.waitForLog("shared PTY host artifact promoted", nil)
 	current.spawn("next-agent", "claude", fixture)
-	next := current.identity("next-agent", true)
+	next := current.identity("next-agent")
 	identities["next-agent"] = next
-	sharedSessions["next-agent"] = true
-	if next.WorkerPID == identities["new-agent"].WorkerPID {
+	if next.WorkerPID == identities["agent"].WorkerPID {
 		t.Fatal("new host generation reused the old host")
 	}
 	current.probe("next-agent", next.ChildPID, "next-host")
 	assertAll(current, "all-generations-alive")
-	current.command(map[string]any{"cmd": "pty_resize", "id": terminals["legacy-shell"], "cols": 97, "rows": 31}, "pty_resized", terminals["legacy-shell"])
-	current.probe("legacy-shell", identities["legacy-shell"].ChildPID, "resized")
+	current.command(map[string]any{"cmd": "pty_resize", "id": terminals["shell"], "cols": 97, "rows": 31}, "pty_resized", terminals["shell"])
+	current.probe("shell", identities["shell"].ChildPID, "resized")
 	current.stop()
 
 	brokenHost := filepath.Join(root, "broken-pty-host")
@@ -243,9 +165,8 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	}
 	assertAll(current, "rejected-candidate")
 	current.spawn("last-known-good-agent", "claude", fixture)
-	lastKnownGood := current.identity("last-known-good-agent", true)
+	lastKnownGood := current.identity("last-known-good-agent")
 	identities["last-known-good-agent"] = lastKnownGood
-	sharedSessions["last-known-good-agent"] = true
 	if lastKnownGood.WorkerPID != next.WorkerPID {
 		t.Fatalf("launch after a rejected candidate used host %d, want last-known-good host %d", lastKnownGood.WorkerPID, next.WorkerPID)
 	}
@@ -262,8 +183,7 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	current = start(newBinary, filepath.Join(root, "missing-host"))
 	assertAll(current, "missing-bundle-restart")
 	current.spawn("missing-bundle-agent", "claude", fixture)
-	identities["missing-bundle-agent"] = current.identity("missing-bundle-agent", true)
-	sharedSessions["missing-bundle-agent"] = true
+	identities["missing-bundle-agent"] = current.identity("missing-bundle-agent")
 	if identities["missing-bundle-agent"].WorkerPID != next.WorkerPID {
 		t.Fatal("a missing bundle host moved new launches off the last-known-good host")
 	}
@@ -286,6 +206,7 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 			t.Parallel()
 			u := startTheRelease(t)
 			app := u.ReleaseApp()
+			turnOnTheSharedHost(t, app)
 			claude, codex := u.spawnAgent(app, fakeagent.Claude), u.spawnAgent(app, fakeagent.Codex)
 			shell := u.spawnShell(app)
 			parents := map[string]string{}
@@ -340,13 +261,10 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 	}
 }
 
-func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheHostWithDirectLaunch(t *testing.T) {
+func TestAnUpdateFromTheReleaseKeepsHostTerminalsAndReloadsThemWithDirectLaunch(t *testing.T) {
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
-	setSetting(t, app, upgradeSharedHostEnabled, "false")
-	onWorker := u.spawnAgent(app, fakeagent.Claude)
-	u.assertNoSharedHost(app.Terminal(onWorker.session))
 	turnOnTheSharedHost(t, app)
 	onHost := u.spawnAgent(app, fakeagent.Claude)
 	sharedHostOf(t, u.Dir, app.Terminal(onHost.session))
@@ -354,9 +272,7 @@ func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheH
 	hostTerminal := app.Terminal(shellOnHost.session)
 	hostBefore := sharedHostOf(t, u.Dir, hostTerminal)
 	formatBefore := attachedFormat(app, hostTerminal)
-	for _, agent := range []releaseAgent{onWorker, onHost} {
-		u.turn(app, agent, "before-update")
-	}
+	u.turn(app, onHost, "before-update")
 
 	u.InstallBuild(testworld.AttnBinaryWithSnapshotFormat(t, upgradeMovedSnapshotFormat), ptyhosttest.Variant(t, upgradeMovedSnapshotFormat))
 	app = u.ensureCurrent()
@@ -368,20 +284,53 @@ func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheH
 	if host := sharedHostOf(t, u.Dir, hostTerminal); host != hostBefore {
 		t.Errorf("the terminal moved from host pid %d to %d, want the same process carrying it", hostBefore, host)
 	}
-	for _, agent := range []releaseAgent{onWorker, onHost} {
-		app.AwaitScreen(agent.session, "before-update reply")
-		u.turn(app, agent, "after-update")
-	}
+	app.AwaitScreen(onHost.session, "before-update reply")
+	u.turn(app, onHost, "after-update")
 	shellOnHost.assertSameProcess(app)
 	settled := u.App()
-	for _, session := range []string{onWorker.session, onHost.session, shellOnHost.session} {
+	for _, session := range []string{onHost.session, shellOnHost.session} {
 		u.assertNoReloadNotice(settled, session)
 	}
 
-	for _, agent := range []releaseAgent{onWorker, onHost} {
-		u.reloadOntoTheHost(app, agent)
-	}
+	u.reloadOntoTheHost(app, onHost)
 	shellOnHost.assertSameProcess(app)
+}
+
+func TestAnUpdateFromTheReleaseStopsShowingAWorkerTerminalAndLeavesItsWorkerRunning(t *testing.T) {
+	t.Parallel()
+	u := startTheRelease(t)
+	app := u.ReleaseApp()
+	setSetting(t, app, upgradeSharedHostEnabled, "false")
+	onWorker := u.spawnShell(app)
+	terminal := app.Terminal(onWorker.session)
+	u.assertNoSharedHost(terminal)
+	registry, worker := u.workerOf(terminal)
+	before, err := os.ReadFile(registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	u.InstallBuild(u.currentAttn, u.currentHost)
+	app = u.ensureCurrent()
+	for _, warning := range app.Initial.Warnings {
+		if warning.Code != "stale_session_missing_worker" {
+			t.Errorf("the updated daemon warns: %+v", warning)
+		}
+	}
+	if came := initialSession(t, app, onWorker.session); came.State != protocol.SessionStateRecoverable {
+		t.Errorf("the session whose terminal stayed in a worker came back %s, want recoverable", came.State)
+	}
+	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	if attached.Success {
+		t.Errorf("the updated daemon attached the worker's terminal: %+v", attached)
+	}
+	if !procreap.ProcessAlive(worker) {
+		t.Errorf("the update ended worker %d, want it left running", worker)
+	}
+	if after, err := os.ReadFile(registry); err != nil || !bytes.Equal(after, before) {
+		t.Errorf("the update changed the worker's registry %s (err=%v)", registry, err)
+	}
 }
 
 func TestAnUpdateFromTheReleaseWhoseNewHostFailsItsCheckShowsTheNoticeAndRefusesNewTerminals(t *testing.T) {
@@ -474,10 +423,11 @@ func TestAnUpdateFromTheReleaseDropsStoredOffSettingsAndMovesAgentsOntoTheHostWi
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
-	setSetting(t, app, upgradeSharedHostEnabled, "false")
-	setSetting(t, app, upgradeDirectLaunchEnabled, "false")
+	turnOnTheSharedHost(t, app)
 	live := u.spawnAgent(app, fakeagent.Claude)
 	u.turn(app, live, "before-update")
+	setSetting(t, app, upgradeSharedHostEnabled, "false")
+	setSetting(t, app, upgradeDirectLaunchEnabled, "false")
 
 	u.InstallBuild(u.currentAttn, u.currentHost)
 	app = u.ensureCurrent()
@@ -490,7 +440,6 @@ func TestAnUpdateFromTheReleaseDropsStoredOffSettingsAndMovesAgentsOntoTheHostWi
 	if len(app.Initial.Warnings) != 0 {
 		t.Errorf("the updated daemon warns: %+v", app.Initial.Warnings)
 	}
-	u.assertParent(live.run, " -s ")
 	u.turn(app, live, "after-update")
 	fresh := u.spawnAgent(app, fakeagent.Claude)
 	u.assertParent(fresh.run, "attn-pty-host")
@@ -511,8 +460,9 @@ func TestAfterAnUpdateARebootBringsSessionsBackOnTheHostWithDirectLaunchAndTheir
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
-	onWorker := u.spawnAgent(app, fakeagent.Claude)
-	u.turn(app, onWorker, "before-update")
+	turnOnTheSharedHost(t, app)
+	fromRelease := u.spawnAgent(app, fakeagent.Claude)
+	u.turn(app, fromRelease, "before-update")
 	u.InstallBuild(u.currentAttn, u.currentHost)
 	app = u.ensureCurrent()
 	onHost := u.spawnAgent(app, fakeagent.Codex)
@@ -526,7 +476,7 @@ func TestAfterAnUpdateARebootBringsSessionsBackOnTheHostWithDirectLaunchAndTheir
 		t.Fatalf("attn daemon ensure after the reboot: %+v", got)
 	}
 	app = u.App()
-	for _, agent := range []releaseAgent{onWorker, onHost} {
+	for _, agent := range []releaseAgent{fromRelease, onHost} {
 		back := releaseAgent{session: agent.session, run: u.Launched(agent.session)}
 		u.assertBackInItsConversation(app, back, agent.run.ConversationID)
 	}
@@ -565,7 +515,7 @@ func TestAHostThatCannotRunRefusesNewTerminalsWithOneNotification(t *testing.T) 
 	u.assertSpawnRefused(app, "Reinstall attn")
 }
 
-func TestAMachineWithOnlyAttnKeepsItsWorkerTerminalsAndRefusesNewOnesWithTheRemedy(t *testing.T) {
+func TestAMachineWithOnlyAttnRefusesNewTerminalsWithTheRemedyAfterAnUpdate(t *testing.T) {
 	t.Parallel()
 	skipUnlessAMachineCanHaveNoHost(t)
 	releaseAttn := os.Getenv("ATTN_UPGRADE_RELEASE_BIN")
@@ -575,18 +525,15 @@ func TestAMachineWithOnlyAttnKeepsItsWorkerTerminalsAndRefusesNewOnesWithTheReme
 	s, _ := newInstalledStack(t)
 	s.Vars = append(s.Vars, "XDG_DATA_HOME="+filepath.Join(s.Dir, "share"))
 	u := &releaseUpdate{Stack: s, t: t, currentAttn: testworld.AttnBinary(t)}
+	skipIfTheReleaseFindsAHostOfThisMachine(t)
 	s.InstallBuild(releaseAttn, "")
 	s.StartRelease()
-	app := s.ReleaseApp()
-	live := u.spawnAgent(app, fakeagent.Claude)
-	u.turn(app, live, "before-update")
 
 	s.InstallBuild(u.currentAttn, "")
-	app = u.ensureCurrent()
+	app := u.ensureCurrent()
 	if len(app.Initial.Warnings) != 0 {
 		t.Errorf("the updated daemon warns: %+v", app.Initial.Warnings)
 	}
-	u.turn(app, live, "after-update")
 	u.assertSpawnRefused(app, "Reinstall attn")
 }
 
@@ -688,7 +635,7 @@ func TestAPhoneReattachesToAHostTerminalAndDrawsAfterAnUpdate(t *testing.T) {
 	t.Parallel()
 	cloud := testworld.StartCloud(t)
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL, "ATTN_PTY_BACKEND=migrating")
+	s.Vars = append(s.Vars, "ATTN_CLOUD_URL="+cloud.HomeURL)
 	s.StartBinary(testworld.AttnBinaryWithSnapshotFormat(t, "current"), "ATTN_PTY_HOST_BINARY="+ptyhosttest.Variant(t, "current"))
 	u := &releaseUpdate{Stack: s, t: t}
 	app := s.App()
@@ -749,7 +696,6 @@ func TestKillingTheDaemonDuringAHostMoveLeavesTerminalsAliveAndTheNextStartRecov
 			current := testworld.AttnBinaryWithSnapshotFormat(t, "current")
 			next := testworld.AttnBinaryWithSnapshotFormat(t, "next")
 			nextHost := "ATTN_PTY_HOST_BINARY=" + ptyhosttest.Variant(t, "next")
-			s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating")
 			s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.Variant(t, "current"))
 			u := &releaseUpdate{Stack: s, t: t}
 			app := s.App()
@@ -761,7 +707,7 @@ func TestKillingTheDaemonDuringAHostMoveLeavesTerminalsAliveAndTheNextStartRecov
 
 			held := s.PauseAt(point)
 			s.RunFrom(next)
-			s.Vars = append(s.Vars, "ATTN_PTY_WORKER_BINARY="+next, nextHost, "ATTN_CRASH_AT="+point)
+			s.Vars = append(s.Vars, nextHost, "ATTN_CRASH_AT="+point)
 			s.StartHeldAt(held)
 			held.Release()
 			s.AwaitCrash()
@@ -794,21 +740,29 @@ func TestKillingTheDaemonDuringAHostMoveLeavesTerminalsAliveAndTheNextStartRecov
 
 func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *testing.T) {
 	t.Parallel()
-	releaseAttn, currentHost := os.Getenv("ATTN_UPGRADE_RELEASE_BIN"), os.Getenv("ATTN_TEST_PTY_HOST")
-	if releaseAttn == "" || currentHost == "" || os.Getenv("ATTN_E2E_BIN") == "" {
+	releaseAttn, releaseHost, currentHost := os.Getenv("ATTN_UPGRADE_RELEASE_BIN"), os.Getenv("ATTN_UPGRADE_RELEASE_HOST"), os.Getenv("ATTN_TEST_PTY_HOST")
+	if releaseAttn == "" || releaseHost == "" || currentHost == "" || os.Getenv("ATTN_E2E_BIN") == "" {
 		t.Skip("run scripts/test-pty-upgrade.sh to start from the real previous release")
 	}
 	current := testworld.AttnBinary(t)
 	ssh := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude)), testworld.NewStack(t)
-	remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	remote.Vars = append(remote.Vars, "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
 	ssh.Use(home.World)
 	ssh.Route("release-outpost", remote)
 	ssh.InstallBinary(remote, releaseAttn)
+	releaseHostBytes, err := os.ReadFile(releaseHost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ssh.HostPath(remote), releaseHostBytes, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	remote.RunFrom(ssh.InstallPath(remote))
 	remote.Vars = append(remote.Vars, "ATTN_WRAPPER_PATH="+ssh.InstallPath(remote))
 	remote.StartRelease()
 	remoteApp := remote.ReleaseApp()
+	turnOnTheSharedHost(t, remoteApp)
 	liveShell := remote.Spawn(remoteApp, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"))
 	pidPath := filepath.Join(remote.Dir, "shell.pid")
 	remoteApp.TypeLine(liveShell, "echo $$ > "+pidPath+"; echo before-$((1+1))")
@@ -902,6 +856,18 @@ func skipUnlessAMachineCanHaveNoHost(t *testing.T) {
 	}
 }
 
+func skipIfTheReleaseFindsAHostOfThisMachine(t *testing.T) {
+	t.Helper()
+	if home, err := os.UserHomeDir(); err == nil {
+		if _, err := os.Stat(filepath.Join(home, ".local", "bin", ptyhost.BinaryName)); err == nil {
+			t.Skipf("the release would pin the host in %s/.local/bin", home)
+		}
+	}
+	if path, err := exec.LookPath(ptyhost.BinaryName); err == nil {
+		t.Skipf("the release would pin the host on PATH at %s", path)
+	}
+}
+
 func attachedFormat(app *testworld.Peer, terminal string) string {
 	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
 		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
@@ -967,7 +933,7 @@ func newInstalledStack(t *testing.T) (*testworld.Stack, string) {
 		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade tests")
 	}
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
-	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=", "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	s.Vars = append(s.Vars, "ATTN_PTY_HOST_BINARY=", "ATTN_PTY_SKIP_STARTUP_PROBE=")
 	t.Cleanup(func() {
 		if t.Failed() {
 			s.LogDaemonTail()
@@ -1148,6 +1114,19 @@ func (u *releaseUpdate) assertNoSharedHost(terminal string) {
 	if len(paths) != 0 {
 		u.T.Fatalf("terminal %s is on the shared host: %v", terminal, paths)
 	}
+}
+
+func (u *releaseUpdate) workerOf(terminal string) (registry string, pid int) {
+	u.T.Helper()
+	paths, _ := filepath.Glob(filepath.Join(u.Dir, "workers", "*", "registry", terminal+".json"))
+	if len(paths) != 1 {
+		u.T.Fatalf("terminal %s has %d worker registry entries, want one", terminal, len(paths))
+	}
+	entry, err := ptyworker.ReadRegistry(paths[0])
+	if err != nil || entry.WorkerPID <= 0 {
+		u.T.Fatalf("worker registry %s: %+v, %v", paths[0], entry, err)
+	}
+	return paths[0], entry.WorkerPID
 }
 
 const (
@@ -1396,28 +1375,12 @@ func (d *upgradeDaemon) spawn(id, agent, executable string, options ...func(map[
 	for _, option := range options {
 		option(spawn)
 	}
-	if d.profileID == "" {
-		d.command(map[string]any{"cmd": "workspace_layout_add_session_pane", "workspace_id": "upgrade", "session_id": id, "pane_id": "pane-" + id}, "workspace_layout_action_result", "")
-		spawn["workspace_id"] = "upgrade"
-	} else {
-		spawn["profile_id"] = d.profileID
-		spawn["placement"] = map[string]any{}
-	}
-	if d.profileID == "" {
-		d.command(spawn, "spawn_result", id)
-		d.terminals[id] = d.paneTerminal(id)
-	} else {
-		d.write(spawn)
-		d.terminals[id] = d.placedTerminal(id)
-	}
-	for _, shared := range []bool{false, true} {
-		path := filepath.Join(d.root, "workers", d.instanceID, "registry", d.terminals[id]+".json")
-		if shared {
-			path = ptyhost.SessionRegistryPath(d.root, d.instanceID, d.terminals[id])
-		}
-		if entry, err := ptyworker.ReadRegistry(path); err == nil {
-			d.workers[entry.WorkerPID] = true
-		}
+	spawn["profile_id"] = d.profileID
+	spawn["placement"] = map[string]any{}
+	d.write(spawn)
+	d.terminals[id] = d.placedTerminal(id)
+	if entry, err := ptyworker.ReadRegistry(ptyhost.SessionRegistryPath(d.root, d.instanceID, d.terminals[id])); err == nil {
+		d.workers[entry.WorkerPID] = true
 	}
 }
 
@@ -1458,52 +1421,23 @@ func (d *upgradeDaemon) placedTerminal(id string) string {
 	return terminal
 }
 
-// paneTerminal reads the terminal the session's pane places: its id before the upgrade, a new one after.
-func (d *upgradeDaemon) paneTerminal(id string) string {
+func (d *upgradeDaemon) identity(id string) ptyworker.RegistryEntry {
 	d.t.Helper()
-	var layout struct {
-		WorkspaceLayout struct {
-			Panes []struct {
-				SessionID string `json:"session_id"`
-				RuntimeID string `json:"runtime_id"`
-			} `json:"panes"`
-		} `json:"workspace_layout"`
-	}
-	event := d.command(map[string]any{"cmd": "workspace_layout_get", "workspace_id": "upgrade"}, "workspace_layout", "")
-	data, _ := json.Marshal(event)
-	if err := json.Unmarshal(data, &layout); err != nil {
-		d.t.Fatalf("decode the upgrade layout: %v", err)
-	}
-	for _, pane := range layout.WorkspaceLayout.Panes {
-		if pane.SessionID == id && pane.RuntimeID != "" {
-			return pane.RuntimeID
-		}
-	}
-	d.t.Fatalf("no pane places session %s: %v", id, event)
-	return ""
-}
-
-func (d *upgradeDaemon) identity(id string, shared bool) ptyworker.RegistryEntry {
-	d.t.Helper()
-	path := filepath.Join(d.root, "workers", d.instanceID, "registry", d.terminals[id]+".json")
-	if shared {
-		path = ptyhost.SessionRegistryPath(d.root, d.instanceID, d.terminals[id])
-	}
-	entry, err := ptyworker.ReadRegistry(path)
+	entry, err := ptyworker.ReadRegistry(ptyhost.SessionRegistryPath(d.root, d.instanceID, d.terminals[id]))
 	if err != nil {
-		d.t.Fatalf("%s shared=%t registry: %v", id, shared, err)
+		d.t.Fatalf("%s registry: %v", id, err)
 	}
 	if entry.ChildPID <= 0 || entry.WorkerPID <= 0 {
 		d.t.Fatalf("invalid process identity: %+v", entry)
 	}
 	d.workers[entry.WorkerPID] = true
-	d.t.Logf("%s shared=%t worker=%d child=%d", id, shared, entry.WorkerPID, entry.ChildPID)
+	d.t.Logf("%s host=%d child=%d", id, entry.WorkerPID, entry.ChildPID)
 	return entry
 }
 
-func (d *upgradeDaemon) assertIdentity(id string, shared bool, want ptyworker.RegistryEntry) {
+func (d *upgradeDaemon) assertIdentity(id string, want ptyworker.RegistryEntry) {
 	d.t.Helper()
-	got := d.identity(id, shared)
+	got := d.identity(id)
 	if got.ChildPID != want.ChildPID || got.WorkerPID != want.WorkerPID || got.DaemonInstanceID != want.DaemonInstanceID {
 		d.t.Fatalf("surviving session %s moved: got=%+v want=%+v", id, got, want)
 	}
@@ -1518,10 +1452,10 @@ func (d *upgradeDaemon) probe(id string, pid int, phase string) string {
 	}
 	input := phase + "\n"
 	want := fmt.Sprintf("__ACK_%d_%s__", pid, phase)
-	if id != "legacy-shell" {
+	if id != "shell" {
 		want = "__ACK_" + terminal + "_" + phase + "_"
 	}
-	if id == "legacy-shell" {
+	if id == "shell" {
 		input = fmt.Sprintf("stty -echo; printf '__ACK_%%s_%%s__\\n' '%d' '%s'\n", pid, phase)
 	}
 	d.write(map[string]any{"cmd": "pty_input", "id": terminal, "data": input})
@@ -1529,12 +1463,11 @@ func (d *upgradeDaemon) probe(id string, pid int, phase string) string {
 	defer cancel()
 	var output strings.Builder
 	ack := regexp.MustCompile(regexp.QuoteMeta(want) + `([0-9]+)__`)
-	resume := regexp.MustCompile(`__RESUME_[^\r\n]*__\r?\n`)
 	complete := func() bool {
-		if id == "legacy-shell" {
+		if id == "shell" {
 			return strings.Contains(output.String(), want)
 		}
-		return ack.MatchString(output.String()) && resume.MatchString(output.String())
+		return ack.MatchString(output.String())
 	}
 	for !complete() {
 		_, outputID, data := d.read(ctx)
@@ -1542,7 +1475,7 @@ func (d *upgradeDaemon) probe(id string, pid int, phase string) string {
 			output.Write(data)
 		}
 	}
-	if id != "legacy-shell" {
+	if id != "shell" {
 		match := ack.FindStringSubmatch(output.String())
 		if len(match) != 2 {
 			d.t.Fatalf("missing agent PID acknowledgement: %q", output.String())

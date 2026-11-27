@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptyworker"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -51,10 +51,9 @@ func TestAServerQuestionAttnNeverSawStartReachesTheUserAndARetryDoesNotRunItAgai
 }
 
 func TestAServerQuestionTheUserHandledStaysHandledThroughReconnectsAndRestarts(t *testing.T) {
-	t.Setenv("ATTN_PTY_BACKEND", "worker")
-	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	t.Setenv("ATTN_PTY_HOST_BINARY", testworld.SharedHostBinary(t))
 	w := newWorld(t, fakeagent.SampleServer)
-	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	t.Cleanup(func() { ptyhost.ReapDataDir(w.Dir) })
 	app := w.App()
 	session, view, server := appServerSession(t, w, app, fakeagent.SampleServer)
 	neighbour := w.Spawn(app, fakeagent.SampleServer, w.Path("neighbour"))
@@ -206,11 +205,17 @@ func TestAServerSessionWhoseTargetIsUnavailableKeepsItsErrorAndTriesThatTargetAg
 }
 
 func TestACompletionMissedWithoutAViewSurvivesTheViewsRecovery(t *testing.T) {
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.SampleServer), testworld.OnPTYBackend(testworld.WorkerPTY))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.SampleServer))
 	s.Start()
 	w := &world{World: s.World}
 	app := s.App()
-	session, view, server := appServerSession(t, w, app, fakeagent.SampleServer)
+	offerAppServer(t, w, app, fakeagent.SampleServer)
+	s.Spawn(app, fakeagent.SampleServer, s.Path("server-on-an-older-host-build"))
+	restartOnANewerHostBuild(t, s)
+	app = s.App()
+	registerSampleServerDriver(t, w, app)
+	session := s.Spawn(app, fakeagent.SampleServer, s.Path("shop"))
+	view, server := s.Launched(session), s.AppServer(fakeagent.SampleServer)
 	promptUntilWorking(app, session, view, server, "which index")
 	server.Reply(view.ConversationID, "By date? <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool {
@@ -268,7 +273,7 @@ func TestACompletionMissedWithoutAViewSurvivesTheViewsRecovery(t *testing.T) {
 }
 
 func TestAServerRunThatStartsAndEndsWhileAttnIsDownOwesTheUserItsQuestion(t *testing.T) {
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.SampleServer), testworld.OnPTYBackend(testworld.WorkerPTY))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.SampleServer))
 	s.Start()
 	w := &world{World: s.World}
 	app := s.App()

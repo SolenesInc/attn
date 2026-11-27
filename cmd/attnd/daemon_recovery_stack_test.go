@@ -47,3 +47,13 @@ func TestAnAppConnectingDuringRestartRecoveryWaitsForTheRecoveredSessions(t *tes
 	attachWithPolicy(t, app, shell, protocol.AttachPolicyRelaunchRestore)
 	app.AwaitScreen(shell, "before-2")
 }
+
+func attachWithPolicy(t *testing.T, p *testworld.Peer, session string, policy protocol.AttachPolicy) {
+	t.Helper()
+	terminal := p.Terminal(session)
+	result := testworld.Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal), AttachPolicy: protocol.Ptr(policy)},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	if !result.Success {
+		t.Fatalf("attach %s refused: %s", session, protocol.Deref(result.Error))
+	}
+}

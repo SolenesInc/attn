@@ -16,7 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/ptyworker"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/supervise"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -187,10 +187,9 @@ func TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAnswer(t *testing.T
 }
 
 func TestAnAppServerSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
-	t.Setenv("ATTN_PTY_BACKEND", "worker")
-	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	t.Setenv("ATTN_PTY_HOST_BINARY", testworld.SharedHostBinary(t))
 	w := &world{World: prepareWorld(t, fakeagent.SampleServer)}
-	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	t.Cleanup(func() { ptyhost.ReapDataDir(w.Dir) })
 	shell := installBlockedLoginShell(t, w)
 	w.start()
 	app := w.App()
@@ -548,10 +547,9 @@ func TestWithNoPluginInstalledAnUnknownAgentFailsAsSoonAsTheCaptureEnds(t *testi
 }
 
 func TestAReloadWaitingForItsPluginHarnessLeavesTheSessionFreeToClose(t *testing.T) {
-	t.Setenv("ATTN_PTY_BACKEND", "worker")
-	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	t.Setenv("ATTN_PTY_HOST_BINARY", testworld.SharedHostBinary(t))
 	w, shell := plugWorldBehindALoginShell(t)
-	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	t.Cleanup(func() { ptyhost.ReapDataDir(w.Dir) })
 	session := w.Spawn(w.App(), fakeagent.Plug, w.Path("shop"))
 	w.Launched(session)
 

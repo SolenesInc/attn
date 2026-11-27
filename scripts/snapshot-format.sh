@@ -2,7 +2,7 @@
 # Prints the snapshot format tag: the identity of the terminal-snapshot wire
 # format this build encodes and decodes.
 #
-# A pty-worker outlives an install, so a session opened after an upgrade can be
+# A terminal host outlives an install, so a session opened after an upgrade can be
 # served a snapshot the running app cannot read. The tag is what lets the app
 # recognize that and fall back to a snapshot-less attach instead of decoding
 # garbage.

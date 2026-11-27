@@ -19,8 +19,6 @@ const MinCompatibleRPCMinor = 0
 
 const TeardownRPCTimeout = 15 * time.Second
 
-const ReadyLine = "ready\n"
-
 const (
 	MethodHello          = "hello"
 	MethodInfo           = "info"
@@ -37,7 +35,6 @@ const (
 	MethodRemove         = "remove"
 	MethodHealth         = "health"
 	MethodKittyImage     = "kitty_image"
-	MethodUpgrade        = "upgrade"
 )
 
 const (
@@ -126,34 +123,6 @@ type KittyPlacement struct {
 	ImageGeneration uint64 `json:"image_generation"`
 }
 
-func placementsToWire(placements []pty.KittyPlacement) []KittyPlacement {
-	if len(placements) == 0 {
-		return nil
-	}
-	out := make([]KittyPlacement, len(placements))
-	for i, p := range placements {
-		out[i] = KittyPlacement{
-			ImageID:         p.ImageID,
-			PlacementID:     p.PlacementID,
-			Virtual:         p.Virtual,
-			Z:               p.Z,
-			PixelWidth:      p.PixelWidth,
-			PixelHeight:     p.PixelHeight,
-			GridCols:        p.GridCols,
-			GridRows:        p.GridRows,
-			ViewportCol:     p.ViewportCol,
-			ViewportRow:     p.ViewportRow,
-			ViewportVisible: p.ViewportVisible,
-			SourceX:         p.SourceX,
-			SourceY:         p.SourceY,
-			SourceWidth:     p.SourceWidth,
-			SourceHeight:    p.SourceHeight,
-			ImageGeneration: p.ImageGeneration,
-		}
-	}
-	return out
-}
-
 func PlacementsFromWire(placements []KittyPlacement) []pty.KittyPlacement {
 	if len(placements) == 0 {
 		return nil
@@ -238,16 +207,6 @@ type AttachResult struct {
 	GhosttyScrollbackTruncated bool             `json:"ghostty_scrollback_truncated,omitempty"`
 }
 
-type UpgradeParams struct {
-	Executable string `json:"executable"`
-}
-
-type UpgradeResult struct {
-	ChildPID   int `json:"child_pid"`
-	DumpBytes  int `json:"dump_bytes"`
-	BlockCount int `json:"block_count"`
-}
-
 type ScreenSnapshotResult struct {
 	LastSeq        uint32  `json:"last_seq"`
 	Cols           uint16  `json:"cols"`
@@ -328,30 +287,6 @@ const (
 	kittyFormatGray      = "gray"
 )
 
-func kittyImageToWire(img pty.KittyImage) (KittyImageResult, error) {
-	var format string
-	switch img.Format {
-	case ghosttyvt.KittyImageRGB:
-		format = kittyFormatRGB
-	case ghosttyvt.KittyImageRGBA:
-		format = kittyFormatRGBA
-	case ghosttyvt.KittyImageGrayAlpha:
-		format = kittyFormatGrayAlpha
-	case ghosttyvt.KittyImageGray:
-		format = kittyFormatGray
-	default:
-		return KittyImageResult{}, fmt.Errorf("kitty image %d has unknown pixel format %d", img.ID, img.Format)
-	}
-	return KittyImageResult{
-		ImageID:    img.ID,
-		Width:      img.Width,
-		Height:     img.Height,
-		Format:     format,
-		Generation: img.Generation,
-		Data:       base64.StdEncoding.EncodeToString(img.Data),
-	}, nil
-}
-
 func (r KittyImageResult) Decode() (pty.KittyImage, error) {
 	var format ghosttyvt.KittyImageFormat
 	switch r.Format {
@@ -378,40 +313,6 @@ func (r KittyImageResult) Decode() (pty.KittyImage, error) {
 		Generation: r.Generation,
 		Data:       data,
 	}, nil
-}
-
-func IsCompatibleVersion(peerMajor, peerMinor int) bool {
-	if peerMajor != RPCMajor {
-		return false
-	}
-	if peerMinor < MinCompatibleRPCMinor {
-		return false
-	}
-	if peerMinor > RPCMinor {
-		return false
-	}
-	return true
-}
-
-func stateChangedEvent(sessionID string, obs pty.Observation) EventEnvelope {
-	claim := obs.Claim
-	source := string(obs.Source)
-	evt := EventEnvelope{
-		Type:        "evt",
-		Event:       EventStateChanged,
-		SessionID:   sessionID,
-		State:       &claim,
-		StateSource: &source,
-	}
-	if obs.Detail != "" {
-		detail := obs.Detail
-		evt.StateDetail = &detail
-	}
-	if !obs.At.IsZero() {
-		at := obs.At.Format(time.RFC3339Nano)
-		evt.StateObservedAt = &at
-	}
-	return evt
 }
 
 func ObservationFromEvent(evt EventEnvelope, claim string, fallbackAt time.Time) pty.Observation {

@@ -1088,7 +1088,6 @@ impl Session {
     pub fn mark_removing(&self) {
         self.removing.store(true, Ordering::Release);
     }
-
     pub fn is_removing(&self) -> bool {
         self.removing.load(Ordering::Acquire)
     }
@@ -1345,8 +1344,9 @@ impl Session {
         let line = Line::encode(&desync_event(&self.id, reason));
         let mut subscribers = self.subscribers.lock().expect("subscribers mutex poisoned");
         for (_, subscriber) in subscribers.drain() {
-            let _ = subscriber.sender.offer(&line);
-            let _ = subscriber.shutdown.shutdown(std::net::Shutdown::Both);
+            if subscriber.sender.offer(&line).is_err() || !subscriber.sender.close_after_queued() {
+                let _ = subscriber.shutdown.shutdown(std::net::Shutdown::Both);
+            }
         }
     }
 

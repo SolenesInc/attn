@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"testing"
 
@@ -90,13 +89,7 @@ func rerunInsideOwnPIDNamespace(t *testing.T) {
 		t.Skip("set ATTN_TEST_PTY_HOST")
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=^"+t.Name()+"$", "-test.v", "-test.count=1")
-	clockKey, _, _ := strings.Cut(testClock.Env(), "=")
-	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, clockKey+"=") {
-			cmd.Env = append(cmd.Env, entry)
-		}
-	}
-	cmd.Env = append(cmd.Env, insidePIDNamespaceEnv+"=1")
+	cmd.Env = append(os.Environ(), insidePIDNamespaceEnv+"=1")
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags:                 syscall.CLONE_NEWUSER | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
 		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}},

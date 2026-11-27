@@ -266,7 +266,7 @@ A branch counts as merged when GitHub shows its pull request merged, or when its
 <details>
 <summary>What happens to my agents when the daemon restarts or my machine reboots?</summary>
 
-Your agents run outside the daemon, so a daemon restart leaves them running. If the daemon can't start its terminal workers, it refuses to start, and `attn daemon ensure` and the app show why. After a reboot, Attn starts each agent's harness again on its desktop with the conversation resumed, without you opening anything. Agents on an outpost come back when the home reconnects to the outpost. Anything the agent was running stopped with the machine and nothing tells the agent to continue, so each agent waits at its prompt and is owed a turn. A shell stays marked recoverable until you open it, and then starts as a new shell.
+Your agents run outside the daemon, so a daemon restart leaves them running. If the daemon can't run its terminal host, new terminals fail to start, and the error says how to get the host back. After a reboot, Attn starts each agent's harness again on its desktop with the conversation resumed, without you opening anything. Agents on an outpost come back when the home reconnects to the outpost. Anything the agent was running stopped with the machine and nothing tells the agent to continue, so each agent waits at its prompt and is owed a turn. A shell stays marked recoverable until you open it, and then starts as a new shell.
 </details>
 
 <details>

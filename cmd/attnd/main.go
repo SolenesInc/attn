@@ -19,10 +19,8 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
-	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/probetui"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptyworker"
 	"golang.org/x/sys/unix"
 )
 
@@ -78,128 +76,6 @@ func runBuildInfoJSON() {
 		"dirty":             buildinfo.Dirty,
 		"snapshotFormat":    buildinfo.SnapshotFormat,
 	})
-}
-
-func runPTYWorker() {
-	fs := flag.NewFlagSet("pty-worker", flag.ExitOnError)
-	var cfg ptyworker.Config
-	var cols int
-	var rows int
-	var approvalRoute string
-	fs.StringVar(&cfg.DaemonInstanceID, "daemon-instance-id", "", "daemon instance id")
-	fs.StringVar(&cfg.SessionID, "session-id", "", "session id")
-	fs.StringVar(&cfg.Agent, "agent", "", "session agent")
-	fs.StringVar(&cfg.CWD, "cwd", "", "working directory")
-	fs.IntVar(&cols, "cols", 80, "terminal cols")
-	fs.IntVar(&rows, "rows", 24, "terminal rows")
-	fs.StringVar(&cfg.Model, "model", "", "recorded agent model")
-	fs.StringVar(&cfg.Effort, "effort", "", "recorded reasoning effort")
-	fs.StringVar(&cfg.Label, "label", "", "session label")
-	ignoreResumeFlagsOfPre5dDaemon(fs)
-	fs.BoolVar(&cfg.YoloMode, "yolo-mode", false, "launch agent in yolo mode")
-	fs.StringVar(&approvalRoute, "approval-route", "", "effective approval route recorded for daemon recovery")
-	fs.StringVar(&cfg.ThemeForeground, "theme-foreground", "", "terminal foreground color seeded for OSC 10/11/12 queries")
-	fs.StringVar(&cfg.ThemeBackground, "theme-background", "", "terminal background color seeded for OSC 10/11/12 queries")
-	fs.StringVar(&cfg.ThemeCursor, "theme-cursor", "", "terminal cursor color seeded for OSC 10/11/12 queries")
-	var themeANSIPaletteJSON string
-	fs.StringVar(&themeANSIPaletteJSON, "theme-ansi-palette-json", "", "JSON array of the 16 terminal ANSI palette colors")
-	fs.StringVar(&cfg.Executable, "executable", "", "selected agent executable override")
-	fs.StringVar(&cfg.ClaudeExecutable, "claude-executable", "", "claude executable override")
-	fs.StringVar(&cfg.CodexExecutable, "codex-executable", "", "codex executable override")
-	var unattendedLaunchJSON string
-	fs.BoolVar(&cfg.AgentLoginShell, "agent-login-shell", false, "run the prepared agent through a login shell")
-	fs.StringVar(&cfg.TitleSignals, "title-signals", "", "title parser for the harness's terminal titles")
-	fs.Func("agent-arg", "prepared agent argument (repeat for each argument)", func(value string) error { cfg.AgentArgv = append(cfg.AgentArgv, value); return nil })
-	fs.StringVar(&unattendedLaunchJSON, "unattended-launch-json", "", "immutable unattended launch contract as JSON")
-	fs.StringVar(&cfg.ExternalCWD, "external-cwd", "", "external plugin driver working directory")
-	fs.StringVar(&cfg.AdoptHandoff, "adopt-handoff", "", "handoff file left by the worker image this one replaces")
-	fs.IntVar(&cfg.AdoptPtmxFD, "adopt-ptmx-fd", 0, "inherited pty master descriptor")
-	fs.IntVar(&cfg.AdoptListenerFD, "adopt-listener-fd", 0, "inherited unix listener descriptor")
-	var readyFD int
-	fs.IntVar(&readyFD, "ready-fd", 0, "inherited descriptor the worker writes to once it accepts connections")
-	fs.StringVar(&cfg.RegistryPath, "registry-path", "", "registry path")
-	fs.StringVar(&cfg.SocketPath, "socket-path", "", "socket path")
-	fs.StringVar(&cfg.ControlToken, "control-token", "", "control token")
-	fs.IntVar(&cfg.OwnerPID, "owner-pid", 0, "daemon owner pid")
-	fs.StringVar(&cfg.OwnerStartedAt, "owner-started-at", "", "daemon owner started-at timestamp")
-	fs.StringVar(&cfg.OwnerNonce, "owner-nonce", "", "daemon owner nonce")
-
-	_ = parseFlags(fs, os.Args[2:])
-	if approvalRoute != "" {
-		cfg.ApprovalRoute = launchcontract.ApprovalRoute(approvalRoute)
-		if !cfg.ApprovalRoute.Valid() {
-			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --approval-route %q\n", approvalRoute)
-			exit(1)
-		}
-	}
-	if themeANSIPaletteJSON != "" {
-		if err := json.Unmarshal([]byte(themeANSIPaletteJSON), &cfg.ThemeANSIPalette); err != nil {
-			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --theme-ansi-palette-json: %v\n", err)
-			exit(1)
-		}
-	}
-
-	if unattendedLaunchJSON != "" {
-		if err := json.Unmarshal([]byte(unattendedLaunchJSON), &cfg.UnattendedLaunch); err != nil {
-			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --unattended-launch-json: %v\n", err)
-			exit(1)
-		}
-		if err := cfg.UnattendedLaunch.Validate(); err != nil {
-			fmt.Fprintf(os.Stderr, "pty-worker error: invalid --unattended-launch-json: %v\n", err)
-			exit(1)
-		}
-	}
-
-	if readyFD > 0 {
-		syscall.CloseOnExec(readyFD)
-		cfg.Ready = os.NewFile(uintptr(readyFD), "pty-worker-ready")
-	}
-
-	cfg.HostName = os.Getenv("ATTN_PTY_HOST_NAME")
-	if daemonEnvJSON := os.Getenv("ATTN_PTY_DAEMON_ENV"); daemonEnvJSON != "" {
-		if err := json.Unmarshal([]byte(daemonEnvJSON), &cfg.DaemonEnv); err != nil {
-			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_DAEMON_ENV: %v\n", err)
-			exit(1)
-		}
-	}
-	if agentEnvJSON := os.Getenv("ATTN_PTY_AGENT_ENV"); agentEnvJSON != "" {
-		if err := json.Unmarshal([]byte(agentEnvJSON), &cfg.AgentEnv); err != nil {
-			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_AGENT_ENV: %v\n", err)
-			exit(1)
-		}
-	}
-	if cols > 0 {
-		if cols > 65535 {
-			fmt.Fprintf(os.Stderr, "pty-worker error: --cols must be <= 65535 (got %d)\n", cols)
-			exit(1)
-		}
-		cfg.Cols = uint16(cols)
-	}
-	if rows > 0 {
-		if rows > 65535 {
-			fmt.Fprintf(os.Stderr, "pty-worker error: --rows must be <= 65535 (got %d)\n", rows)
-			exit(1)
-		}
-		cfg.Rows = uint16(rows)
-	}
-	cfg.Debug = config.DebugLevel() >= config.LogDebug
-	cfg.Logf = func(format string, args ...interface{}) {
-		fmt.Fprintf(os.Stderr, "[pty-worker] "+format+"\n", args...)
-	}
-
-	if scrubbed := config.ScrubInheritedAgentSessionEnv(); len(scrubbed) > 0 {
-		cfg.Logf("scrubbed inherited agent session env before startup: %v", scrubbed)
-	}
-
-	if err := ptyworker.Run(context.Background(), cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "pty-worker error: %v\n", err)
-		exit(1)
-	}
-}
-
-func ignoreResumeFlagsOfPre5dDaemon(fs *flag.FlagSet) {
-	fs.String("resume-session-id", "", "ignored")
-	fs.Bool("resume-picker", false, "ignored")
 }
 
 func runDaemonCommand() {

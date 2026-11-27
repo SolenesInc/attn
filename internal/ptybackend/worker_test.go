@@ -3,22 +3,14 @@ package ptybackend
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"github.com/victorarias/attn/internal/fakeagent"
-	"github.com/victorarias/attn/internal/procwait"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
-	"time"
 
-	"github.com/victorarias/attn/internal/procreap"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
@@ -36,30 +28,27 @@ func newWorkerBackendTestRoot(t *testing.T) string {
 	return root
 }
 
-func mustWorkerSocketPath(t *testing.T, backend *WorkerBackend, sessionID string) string {
+func mustHostSocketPath(t *testing.T, backend *WorkerBackend) string {
 	t.Helper()
-	path, err := backend.expectedSocketPath(sessionID)
+	path, err := ptyhost.SocketPath(backend.cfg.DataRoot, backend.cfg.DaemonInstanceID, "host-1")
 	if err != nil {
-		t.Fatalf("expectedSocketPath(%q) error: %v", sessionID, err)
+		t.Fatalf("ptyhost.SocketPath() error: %v", err)
 	}
 	return path
 }
 
 func TestWorkerBackend_Recover_QuarantinesOwnershipMismatch(t *testing.T) {
 	root := newWorkerBackendTestRoot(t)
-	backend, err := NewWorker(WorkerBackendConfig{
+	backend, err := NewSharedHost(WorkerBackendConfig{
 		DataRoot:         root,
 		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		BinaryPath:       "/bin/true",
 	})
 	if err != nil {
-		t.Fatalf("NewWorker() error: %v", err)
+		t.Fatalf("NewSharedHost() error: %v", err)
 	}
 
-	socketPath := mustWorkerSocketPath(t, backend, "sess-1")
-	if err := os.WriteFile(socketPath, []byte("stale"), 0600); err != nil {
-		t.Fatalf("WriteFile(stale socket) error: %v", err)
-	}
+	socketPath := mustHostSocketPath(t, backend)
 
 	registryPath := filepath.Join(backend.registryDir(), "sess-1.json")
 	entry := ptyworker.NewRegistryEntry(
@@ -93,144 +82,17 @@ func TestWorkerBackend_Recover_QuarantinesOwnershipMismatch(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("quarantine files = %d, want 1", len(files))
 	}
-	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
-		t.Fatalf("owned socket should be removed for ownership mismatch, stat err=%v", err)
-	}
-}
-
-func TestWorkerBackend_Recover_ReclaimsStaleOwnershipMismatch(t *testing.T) {
-	root := newWorkerBackendTestRoot(t)
-	backend, err := NewWorker(WorkerBackendConfig{
-		DataRoot:         root,
-		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		BinaryPath:       "/bin/true",
-	})
-	if err != nil {
-		t.Fatalf("NewWorker() error: %v", err)
-	}
-
-	sessionID := "sess-reclaim"
-	socketPath := mustWorkerSocketPath(t, backend, sessionID)
-	stopServer := startFakeWorkerRPCServer(
-		t,
-		"d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		sessionID,
-		"tok-reclaim",
-		socketPath,
-		"shell",
-		t.TempDir(),
-	)
-	defer stopServer()
-
-	oldWorker := exec.Command("sleep", "0.3")
-	if err := oldWorker.Start(); err != nil {
-		t.Fatalf("start old worker: %v", err)
-	}
-	go func() { _ = oldWorker.Wait() }()
-
-	registryPath := filepath.Join(backend.registryDir(), sessionID+".json")
-	entry := ptyworker.NewRegistryEntry(
-		"d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		sessionID,
-		oldWorker.Process.Pid,
-		os.Getpid(),
-		socketPath,
-		"shell",
-		t.TempDir(),
-		"tok-reclaim",
-	)
-	entry.OwnerPID = 2147483647
-	entry.OwnerStartedAt = time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
-	entry.OwnerNonce = "owner-old"
-	if err := ptyworker.WriteRegistryAtomic(registryPath, entry); err != nil {
-		t.Fatalf("WriteRegistryAtomic() error: %v", err)
-	}
-
-	report, err := backend.Recover(context.Background())
-	if err != nil {
-		t.Fatalf("Recover() error: %v", err)
-	}
-	if procreap.ProcessAlive(oldWorker.Process.Pid) {
-		t.Fatal("reclaim returned while the old worker was still running")
-	}
-	if report.Pruned != 1 {
-		t.Fatalf("pruned = %d, want 1", report.Pruned)
-	}
-	if report.Failed != 0 {
-		t.Fatalf("failed = %d, want 0", report.Failed)
-	}
-	if _, err := os.Stat(registryPath); !os.IsNotExist(err) {
-		t.Fatalf("registry should be removed after stale-owner reclaim, stat err=%v", err)
-	}
-	files, err := filepath.Glob(filepath.Join(backend.quarantineDir(), sessionID+".json.*"))
-	if err != nil {
-		t.Fatalf("Glob() error: %v", err)
-	}
-	if len(files) != 0 {
-		t.Fatalf("quarantine files = %d, want 0", len(files))
-	}
-}
-
-func TestWorkerBackend_Recover_PreservesLiveOwnerMismatch(t *testing.T) {
-	root := newWorkerBackendTestRoot(t)
-	backend, err := NewWorker(WorkerBackendConfig{
-		DataRoot:         root,
-		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		BinaryPath:       "/bin/true",
-	})
-	if err != nil {
-		t.Fatalf("NewWorker() error: %v", err)
-	}
-
-	sessionID := "sess-live-owner"
-	socketPath := mustWorkerSocketPath(t, backend, sessionID)
-	if err := os.WriteFile(socketPath, []byte("stale"), 0600); err != nil {
-		t.Fatalf("WriteFile(stale socket) error: %v", err)
-	}
-
-	registryPath := filepath.Join(backend.registryDir(), sessionID+".json")
-	entry := ptyworker.NewRegistryEntry(
-		"d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		sessionID,
-		os.Getpid(),
-		os.Getpid(),
-		socketPath,
-		"shell",
-		t.TempDir(),
-		"tok-live",
-	)
-	entry.OwnerPID = os.Getpid()
-	entry.OwnerStartedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	entry.OwnerNonce = "different-owner"
-	if err := ptyworker.WriteRegistryAtomic(registryPath, entry); err != nil {
-		t.Fatalf("WriteRegistryAtomic() error: %v", err)
-	}
-
-	report, err := backend.Recover(context.Background())
-	if err != nil {
-		t.Fatalf("Recover() error: %v", err)
-	}
-	if report.Failed != 1 {
-		t.Fatalf("failed = %d, want 1", report.Failed)
-	}
-	files, err := filepath.Glob(filepath.Join(backend.quarantineDir(), sessionID+".json.ownership_mismatch.*"))
-	if err != nil {
-		t.Fatalf("Glob() error: %v", err)
-	}
-	if len(files) != 1 {
-		t.Fatalf("quarantine files = %d, want 1", len(files))
-	}
 }
 
 func TestWorkerBackend_Recover_RejectsUnexpectedSocketPath(t *testing.T) {
 	root := newWorkerBackendTestRoot(t)
-	backend, err := NewWorker(WorkerBackendConfig{
+	backend, err := NewSharedHost(WorkerBackendConfig{
 		DataRoot:         root,
 		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		BinaryPath:       "/bin/true",
 	})
 	if err != nil {
-		t.Fatalf("NewWorker() error: %v", err)
+		t.Fatalf("NewSharedHost() error: %v", err)
 	}
 
 	externalSocketPath := filepath.Join(t.TempDir(), "external.sock")
@@ -273,113 +135,19 @@ func TestWorkerBackend_Recover_RejectsUnexpectedSocketPath(t *testing.T) {
 	}
 }
 
-func TestWorkerBackend_Recover_AcceptsLegacySocketPath(t *testing.T) {
-	root := newWorkerBackendTestRoot(t)
-	backend, err := NewWorker(WorkerBackendConfig{
-		DataRoot:         root,
-		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		BinaryPath:       "/bin/true",
-	})
-	if err != nil {
-		t.Fatalf("NewWorker() error: %v", err)
-	}
-
-	sessionID := "sess-legacy"
-	socketPath, err := backend.legacyExpectedSocketPath(sessionID)
-	if err != nil {
-		t.Fatalf("legacyExpectedSocketPath() error: %v", err)
-	}
-	registryPath := filepath.Join(backend.registryDir(), sessionID+".json")
-	entry := ptyworker.NewRegistryEntry(
-		backend.cfg.DaemonInstanceID,
-		sessionID,
-		os.Getpid(),
-		os.Getpid(),
-		socketPath,
-		"codex",
-		t.TempDir(),
-		"tok",
-	)
-	if err := ptyworker.WriteRegistryAtomic(registryPath, entry); err != nil {
-		t.Fatalf("WriteRegistryAtomic() error: %v", err)
-	}
-	stopServer := startFakeWorkerRPCServer(t, backend.cfg.DaemonInstanceID, sessionID, "tok", socketPath, "codex", t.TempDir())
-	defer stopServer()
-
-	report, err := backend.Recover(context.Background())
-	if err != nil {
-		t.Fatalf("Recover() error: %v", err)
-	}
-	if report.Recovered != 1 {
-		t.Fatalf("recovered = %d, want 1", report.Recovered)
-	}
-	if report.Failed != 0 {
-		t.Fatalf("failed = %d, want 0", report.Failed)
-	}
-}
-
-func TestWorkerBackend_Recover_RestoresSocketMismatchQuarantine(t *testing.T) {
-	root := newWorkerBackendTestRoot(t)
-	backend, err := NewWorker(WorkerBackendConfig{
-		DataRoot:         root,
-		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		BinaryPath:       "/bin/true",
-	})
-	if err != nil {
-		t.Fatalf("NewWorker() error: %v", err)
-	}
-
-	sessionID := "sess-quarantine-restore"
-	socketPath, err := backend.legacyExpectedSocketPath(sessionID)
-	if err != nil {
-		t.Fatalf("legacyExpectedSocketPath() error: %v", err)
-	}
-
-	quarantinePath := filepath.Join(backend.quarantineDir(), sessionID+".json.socket_path_mismatch.123")
-	entry := ptyworker.NewRegistryEntry(
-		backend.cfg.DaemonInstanceID,
-		sessionID,
-		os.Getpid(),
-		os.Getpid(),
-		socketPath,
-		"codex",
-		t.TempDir(),
-		"tok",
-	)
-	if err := ptyworker.WriteRegistryAtomic(quarantinePath, entry); err != nil {
-		t.Fatalf("WriteRegistryAtomic(quarantine) error: %v", err)
-	}
-	stopServer := startFakeWorkerRPCServer(t, backend.cfg.DaemonInstanceID, sessionID, "tok", socketPath, "codex", t.TempDir())
-	defer stopServer()
-
-	report, err := backend.Recover(context.Background())
-	if err != nil {
-		t.Fatalf("Recover() error: %v", err)
-	}
-	if report.Recovered != 1 {
-		t.Fatalf("recovered = %d, want 1", report.Recovered)
-	}
-	if _, err := os.Stat(filepath.Join(backend.registryDir(), sessionID+".json")); err != nil {
-		t.Fatalf("restored registry missing: %v", err)
-	}
-	if _, err := os.Stat(quarantinePath); err == nil {
-		t.Fatal("quarantine file should have been moved")
-	}
-}
-
 func TestWorkerBackend_SessionLikelyAlive_UsesValidatedRegistry(t *testing.T) {
 	root := newWorkerBackendTestRoot(t)
-	backend, err := NewWorker(WorkerBackendConfig{
+	backend, err := NewSharedHost(WorkerBackendConfig{
 		DataRoot:         root,
 		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		BinaryPath:       "/bin/true",
 	})
 	if err != nil {
-		t.Fatalf("NewWorker() error: %v", err)
+		t.Fatalf("NewSharedHost() error: %v", err)
 	}
 
 	registryPath := filepath.Join(backend.registryDir(), "sess-1.json")
-	socketPath := mustWorkerSocketPath(t, backend, "sess-1")
+	socketPath := mustHostSocketPath(t, backend)
 	entry := ptyworker.NewRegistryEntry(
 		"d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"sess-1",
@@ -419,13 +187,13 @@ func TestWorkerBackend_SessionLikelyAlive_UsesValidatedRegistry(t *testing.T) {
 
 func TestWorkerBackend_SessionLikelyAlive_MalformedRegistryReturnsError(t *testing.T) {
 	root := newWorkerBackendTestRoot(t)
-	backend, err := NewWorker(WorkerBackendConfig{
+	backend, err := NewSharedHost(WorkerBackendConfig{
 		DataRoot:         root,
 		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		BinaryPath:       "/bin/true",
 	})
 	if err != nil {
-		t.Fatalf("NewWorker() error: %v", err)
+		t.Fatalf("NewSharedHost() error: %v", err)
 	}
 
 	registryPath := filepath.Join(backend.registryDir(), "sess-bad.json")
@@ -439,77 +207,6 @@ func TestWorkerBackend_SessionLikelyAlive_MalformedRegistryReturnsError(t *testi
 	}
 	if err == nil {
 		t.Fatal("SessionLikelyAlive() error = nil, want non-nil for malformed registry")
-	}
-}
-
-func TestWorkerBackend_Spawn_CleansUpUnreadyWorkerProcess(t *testing.T) {
-	root := newWorkerBackendTestRoot(t)
-	pidFile := filepath.Join(root, "worker.pid")
-	if err := syscall.Mkfifo(pidFile, 0o600); err != nil {
-		t.Fatalf("Mkfifo(pid file) error: %v", err)
-	}
-	reported := make(chan string, 1)
-	go func() {
-		data, _ := os.ReadFile(pidFile)
-		reported <- strings.TrimSpace(string(data))
-	}()
-	scriptPath := filepath.Join(root, "fake-worker.sh")
-	script := "#!/bin/sh\n" +
-		"echo $$ > \"$ATTN_TEST_PID_FILE\"\n" +
-		"sleep 60\n"
-	if err := os.WriteFile(scriptPath, []byte(script), 0700); err != nil {
-		t.Fatalf("WriteFile(fake worker script) error: %v", err)
-	}
-
-	t.Setenv("ATTN_TEST_PID_FILE", pidFile)
-	backend, err := NewWorker(WorkerBackendConfig{
-		DataRoot:         root,
-		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		BinaryPath:       scriptPath,
-	})
-	if err != nil {
-		t.Fatalf("NewWorker() error: %v", err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	spawnDone := make(chan error, 1)
-	go func() {
-		spawnDone <- backend.Spawn(ctx, SpawnOptions{
-			ID:    "sess-timeout",
-			Agent: "codex",
-			CWD:   root,
-			Cols:  80,
-			Rows:  24,
-		})
-	}()
-
-	var pid int
-	select {
-	case err := <-spawnDone:
-		cancel()
-		t.Fatalf("Spawn() returned before worker started (pid file missing): %v", err)
-	case line := <-reported:
-		parsedPID, parseErr := strconv.Atoi(line)
-		if parseErr != nil {
-			t.Fatalf("Atoi(pid file %q) error: %v", line, parseErr)
-		}
-		pid = parsedPID
-	case <-time.After(fakeagent.HangGuard):
-		t.Fatalf("timed out waiting for fake worker pid file at %s", pidFile)
-	}
-
-	cancel()
-	select {
-	case err := <-spawnDone:
-		if err == nil || !errors.Is(err, context.Canceled) {
-			t.Fatalf("Spawn() error = %v, want context canceled", err)
-		}
-	case <-time.After(fakeagent.HangGuard):
-		t.Fatal("Spawn() did not return after context cancellation")
-	}
-
-	if exited, err := procwait.Exited(pid, 5*time.Second); err != nil || !exited {
-		t.Fatalf("worker pid %d still alive after spawn failure cleanup: %v", pid, err)
 	}
 }
 

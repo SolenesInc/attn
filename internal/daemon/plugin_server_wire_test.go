@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -293,9 +294,9 @@ func TestAPluginServerAliasSharesOneControlConnectionAndStatusWatch(t *testing.T
 }
 
 func TestAPluginServerWithLastRunRecoveryInterruptsOnClose(t *testing.T) {
-	t.Setenv("ATTN_PTY_BACKEND", "worker")
-	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	t.Setenv("ATTN_PTY_HOST_BINARY", testworld.SharedHostBinary(t))
 	w := newWorld(t, fakeagent.SampleServer)
+	t.Cleanup(func() { ptyhost.ReapDataDir(w.Dir) })
 	app := w.App()
 	declaration := serverDriverDeclaration(w)
 	declaration["on_close"] = "interrupt"

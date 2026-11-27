@@ -23,6 +23,7 @@ impl Line {
 struct Entry {
     line: Line,
     counted: usize,
+    close: bool,
 }
 
 #[derive(Clone)]
@@ -71,6 +72,17 @@ impl Outbox {
             .send(Entry {
                 line: Line::encode(value),
                 counted: 0,
+                close: false,
+            })
+            .is_ok()
+    }
+
+    pub fn close_after_queued(&self) -> bool {
+        self.sender
+            .send(Entry {
+                line: Line(Arc::from(&[][..])),
+                counted: 0,
+                close: true,
             })
             .is_ok()
     }
@@ -85,6 +97,7 @@ impl Outbox {
         let entry = Entry {
             line: line.clone(),
             counted: adding,
+            close: false,
         };
         self.sender.send(entry).map_err(|_| {
             self.queued.fetch_sub(adding, Ordering::AcqRel);
@@ -106,6 +119,10 @@ impl Writer {
                 .and_then(|()| writer.flush());
             self.queued.fetch_sub(entry.counted, Ordering::AcqRel);
             if written.is_err() {
+                return;
+            }
+            if entry.close {
+                let _ = writer.get_ref().shutdown(std::net::Shutdown::Both);
                 return;
             }
         }

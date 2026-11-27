@@ -146,7 +146,7 @@ func TestOutpostForwardReportsUnreachableWhenHomeDropsBeforeChannelOpens(t *test
 }
 
 func TestOutpostForwardCallerHangupCancelsTerminalWaitAtHome(t *testing.T) {
-	home, outpost := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	waiting := outpost.PauseAt(pausepoint.PtyWaitBlock)
 	outpost.Vars = append(outpost.Vars, "SHELL=/bin/bash")
@@ -177,7 +177,7 @@ func TestOutpostForwardCallerHangupCancelsTerminalWaitAtHome(t *testing.T) {
 }
 
 func TestTerminalTimeoutBoundsACallTheOutpostForwardHolds(t *testing.T) {
-	home, outpost := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	home.Vars = append(home.Vars, "SHELL=/bin/bash")
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	forwarding := home.PauseEvery(pausepoint.ForwardSocketCreated)

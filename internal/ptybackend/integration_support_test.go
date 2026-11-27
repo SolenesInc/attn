@@ -8,7 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/procwait"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -41,24 +40,6 @@ func awaitSharedHostRemoval(t *testing.T, backend *WorkerBackend, id harness.Ter
 	}
 }
 
-func buildAttnBinary(t *testing.T) string {
-	t.Helper()
-	if binary := os.Getenv("ATTN_E2E_BIN"); binary != "" {
-		return binary
-	}
-	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	binary := filepath.Join(t.TempDir(), "attn-test-bin")
-	cmd := exec.Command("go", "build", "-o", binary, "./cmd/attnd")
-	cmd.Dir = repoRoot
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("build attn binary: %v\n%s", err, string(output))
-	}
-	return binary
-}
 func kittyPlaceRGB(id uint32, w, h int) string {
 	pix := make([]byte, w*h*3)
 	for i := range pix {

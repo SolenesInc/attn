@@ -90,7 +90,7 @@ const (
 	deferredRecoveryMaxAttempts   = 3
 	deferredRecoveryRetryInterval = 10 * time.Second
 	deferredRecoveryRPCTimeout    = 5 * time.Second
-	workerStartupProbeTimeout     = 20 * time.Second
+	sharedHostProbeTimeout        = 20 * time.Second
 
 	warnWorkerRecoveryPartial     = "worker_recovery_partial"
 	warnStaleSessionsPruned       = "stale_sessions_pruned"
@@ -544,58 +544,6 @@ func New(socketPath string) *Daemon {
 }
 
 func (d *Daemon) startPTYBackend() error {
-	selected := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_PTY_BACKEND")))
-	switch selected {
-	case "worker":
-		return d.startDedicatedWorkers()
-	case "shared":
-		shared, err := d.newSharedPTYHost()
-		if err != nil {
-			return fmt.Errorf("start the shared PTY host: %w", err)
-		}
-		d.ptyBackend = shared
-		d.sharedPTYHost = shared
-		d.logf("using PTY backend: shared")
-		return nil
-	case "", "migrating":
-		return d.startMigratingPTYBackend()
-	default:
-		return fmt.Errorf("ATTN_PTY_BACKEND=%s is not supported: use worker, shared or migrating, or leave it unset", selected)
-	}
-}
-
-func (d *Daemon) newDedicatedWorkers() (*ptybackend.WorkerBackend, error) {
-	return ptybackend.NewWorker(ptybackend.WorkerBackendConfig{
-		DataRoot:         d.dataRoot,
-		DaemonInstanceID: d.daemonInstanceID,
-		BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_WORKER_BINARY")),
-		Logf:             d.logf,
-		OnTerminalBuild:  d.handleTerminalBuildChanged,
-	})
-}
-
-func (d *Daemon) startDedicatedWorkers() error {
-	workers, err := d.newDedicatedWorkers()
-	if err != nil {
-		return fmt.Errorf("start the PTY workers: %w", err)
-	}
-	if shouldRunWorkerStartupProbe() {
-		ctx, cancel := context.WithTimeout(context.Background(), workerStartupProbeTimeout)
-		defer cancel()
-		if err := workers.Probe(ctx); err != nil {
-			return fmt.Errorf("start the PTY workers: startup probe failed: %w", err)
-		}
-	}
-	d.ptyBackend = workers
-	d.logf("using PTY backend: worker")
-	return nil
-}
-
-func (d *Daemon) startMigratingPTYBackend() error {
-	legacy, err := d.newDedicatedWorkers()
-	if err != nil {
-		return fmt.Errorf("start the PTY workers: %w", err)
-	}
 	shared, err := d.newSharedPTYHost()
 	if err != nil {
 		return fmt.Errorf("start the shared PTY host: %w", err)
@@ -603,13 +551,9 @@ func (d *Daemon) startMigratingPTYBackend() error {
 	if candidateErr := shared.SharedCandidateError(); candidateErr != nil && !shared.SharedArtifactReady() {
 		d.logf("shared PTY host unavailable: %v; new terminals cannot start", candidateErr)
 	}
-	migrating, err := ptybackend.NewMigrating(legacy, shared)
-	if err != nil {
-		return fmt.Errorf("start the PTY migration router: %w", err)
-	}
-	d.ptyBackend = migrating
+	d.ptyBackend = shared
 	d.sharedPTYHost = shared
-	d.logf("using PTY backend: migrating (existing=owner, new=shared)")
+	d.logf("using PTY backend: shared")
 	return nil
 }
 
@@ -2587,7 +2531,7 @@ func (d *Daemon) logf(format string, args ...interface{}) {
 	}
 }
 
-func shouldRunWorkerStartupProbe() bool {
+func shouldProbeSharedHost() bool {
 	raw := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_PTY_SKIP_STARTUP_PROBE")))
 	switch raw {
 	case "1", "true", "yes", "on":

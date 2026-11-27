@@ -19,7 +19,6 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/ghosttyvt"
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/pausepoint"
 )
 
 type TerminalTheme struct {
@@ -178,7 +177,6 @@ func (s *Session) fanOut(data []byte, seq uint32) {
 			if sub.onDrop != nil {
 				sub.onDrop("buffer_overflow")
 			}
-			pausepoint.At(pausepoint.PtySubscriberDrop)
 		}
 	}
 
@@ -365,7 +363,6 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					s.writeColorSchemeResponses(queries.colorScheme, logf)
 				}
 
-				pausepoint.At(pausepoint.PtyOutputPending)
 				wire, resync := data, ""
 				var placements []KittyPlacement
 				placementsMoved := false
@@ -390,9 +387,6 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					if queries.da1 {
 						s.writeDeviceAttributesResponse(logf)
 					}
-				}
-				if len(wire) == 0 {
-					pausepoint.At(pausepoint.PtyOutputHeld)
 				}
 				if len(wire) > 0 {
 					s.fanOutOutput(wire, seq)
@@ -741,8 +735,6 @@ func (s *Session) info() AttachInfo {
 	}
 	replayWatermark := s.lastReplaySeq
 	s.replayMu.Unlock()
-
-	pausepoint.At(pausepoint.PtyAttachSnapshot)
 
 	return AttachInfo{
 		LastSeq:                    replayWatermark,

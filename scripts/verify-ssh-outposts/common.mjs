@@ -21,7 +21,7 @@ export async function world(o) {
   fs.mkdirSync(o.out, { recursive: true });
   const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('ATTN_') && key !== 'CODEX_THREAD_ID'));
   const env = { ...baseEnv, ATTN_INSTANCE: o.instance, ATTN_HARNESS_INSTANCE: o.instance, ATTN_HARNESS_BIN: o.macBin,
-    ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off', ATTN_PTY_BACKEND: 'worker' };
+    ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off' };
   for (const key of Object.keys(process.env)) if (key.startsWith('ATTN_')) delete process.env[key];
   Object.assign(process.env, env);
   const started = performance.now();

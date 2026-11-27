@@ -7,7 +7,6 @@ import (
 	"maps"
 	"os"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
@@ -15,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/ptyhost"
 )
 
 const (
@@ -158,7 +156,7 @@ func (d *Daemon) sampleProcessMemory(ctx context.Context, apps connectedApps) []
 	}
 	for _, pid := range d.ptyProcessIDs(ctx) {
 		if process, ok := diag.ReadProcess(pid); ok {
-			roles.Add(ptyProcessRole(process), process)
+			roles.Add(diag.RolePTYHost, process)
 		}
 	}
 	for _, app := range apps.processes {
@@ -183,11 +181,4 @@ func (d *Daemon) ptyProcessIDs(ctx context.Context) []int {
 		seen[pid] = struct{}{}
 	}
 	return slices.Collect(maps.Keys(seen))
-}
-
-func ptyProcessRole(process diag.Process) string {
-	if strings.HasPrefix(process.Name, ptyhost.BinaryName) {
-		return diag.RolePTYHost
-	}
-	return diag.RolePTYWorker
 }

@@ -232,9 +232,8 @@ try {
   });
 
   const processes = registeredTerminalProcesses(dataDir, agent.runtime, runner.sessionDir);
-  runner.assert(processes?.workerPid > 1, 'the terminal registry names the worker and child before close', { processes });
-  const endsWithTheTerminal = processes.sharedHost ? [processes.childPid] : [processes.workerPid, processes.childPid];
-  const exited = await observeProcessExits(endsWithTheTerminal, { env: instanceCliEnv(instance), timeoutMs: 8_000 });
+  runner.assert(processes?.childPid > 1, 'the terminal registry names the child before close', { processes });
+  const exited = await observeProcessExits([processes.childPid], { env: instanceCliEnv(instance), timeoutMs: 8_000 });
 
   let closeElapsedMs;
   await runner.step('the_agent_tile_leaves_at_once', async () => {

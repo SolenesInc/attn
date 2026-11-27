@@ -38,7 +38,7 @@ ATTN_PPROF=6060 attn daemon ensure
   (a copy's idle numbers therefore exclude monitors).
 - `ATTN_PPROF=<port>` serves `/debug/vars` (`ws_addr`, `worker_pids`,
   `doc_subscriptions`) and `/debug/pprof/{heap,allocs,profile}` on loopback.
-  Per-session memory lives in workers/PTY hosts, not the daemon heap.
+  Per-session memory lives in the PTY host, not the daemon heap.
 - Before repeating a daemon run on a copy, back up and restore the copied DB
   with `sqlite3 <dataDir>/attn.db ".backup <file>"`.
 

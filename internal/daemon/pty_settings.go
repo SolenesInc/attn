@@ -55,10 +55,10 @@ func (d *Daemon) handleSharedArtifactRejected(rejection ptybackend.SharedArtifac
 
 func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 	host := d.sharedPTYHost
-	if host == nil || !shouldRunWorkerStartupProbe() {
+	if host == nil || !shouldProbeSharedHost() {
 		return
 	}
-	ctx, cancel := context.WithTimeout(d.life.Context(), workerStartupProbeTimeout)
+	ctx, cancel := context.WithTimeout(d.life.Context(), sharedHostProbeTimeout)
 	defer cancel()
 	if err := host.ValidateSharedCandidate(ctx, false); err != nil {
 		d.logf("shared PTY host candidate validation: %v", err)

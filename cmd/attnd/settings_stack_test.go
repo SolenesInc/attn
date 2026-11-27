@@ -45,7 +45,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	for _, tc := range []struct{ key, value, reason string }{
 		{"theme", "purple", "invalid theme"},
 		{"unknown.key", "value", "unknown.key"},
-		{"pty_backend_mode", "migrating", "read-only"},
+		{"update_current_version", "1.0.0", "read-only"},
 		{"default_model_<harness>", "some-model", "concrete key"},
 	} {
 		r := s.Attn("settings", "set", tc.key, tc.value)
@@ -61,10 +61,10 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	}
 	plain := s.Attn("settings", "list")
 	requireStdout(t, plain, "home", "theme", "App color theme", "new_session_launcher_enabled")
-	if strings.Contains(plain.Stdout, "pty_backend_mode") {
+	if strings.Contains(plain.Stdout, "update_current_version") {
 		t.Fatal("list includes read-only values")
 	}
-	requireStdout(t, s.Attn("settings", "list", "--all"), "pty_backend_mode", "headless_tasks.enabled.stored")
+	requireStdout(t, s.Attn("settings", "list", "--all"), "update_current_version", "headless_tasks.enabled.stored")
 	var computed protocol.SettingEntry
 	s.Attn("settings", "get", "headless_tasks.enabled.stored", "--json").JSON(t, &computed)
 	if !protocol.Deref(computed.ReadOnly) || protocol.Deref(computed.Value) != "true" {

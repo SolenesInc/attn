@@ -263,7 +263,7 @@ model Session {
   usage?: SessionUsage;         // Primary native conversation plus native subagents. Visible attn delegations remain separate sessions.
   automation?: AutomationProvenance; // Present when this session was launched by an automation; latest run wins for a continuity thread.
   pull_requests?: SessionPullRequest[]; // Pull requests this session's agent opened, newest first. Joined at broadcast from the session_pull_requests table, never stored on the session row.
-  terminal_build_stale?: boolean; // True when this session's pty-worker was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the worker reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
+  terminal_build_stale?: boolean; // True when the terminal host running this session was built against a different libghostty-vt than the daemon, which happens when the app updates under a running session and the terminal stays on its old host build. The two then hold different terminal implementations and stop agreeing about the grid, so the app offers a reload. Derived at broadcast from the format tag the host reports at its handshake; never stored, and absent for every same-build session, which is all of them outside an upgrade window.
   terminal_exit?: TerminalExit; // How the agent last exited while the session keeps its final screen; absent while it runs and after Resume. Joined at broadcast from the session_exit_screens table.
   succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger, unless it is a shared Codex session, which stays open. Durable: it stays set after the predecessor is reopened.
   hidden?: boolean;             // True while this open shared Codex session has no terminal tile: its terminal moved to another conversation. It keeps its state and takes input; desktop_show_session gives it a tile again. Derived at broadcast; absent otherwise.
@@ -5453,12 +5453,11 @@ model AttachSnapshot {
   cols: int32;
   rows: int32;
   snapshot_b64: string;          // base64 ghostty snapshot record stream
-  // The wire format snapshot_b64 is written in. A pty-worker outlives an
+  // The wire format snapshot_b64 is written in. A terminal host outlives an
   // install, so these bytes can be encoded by a build the client's decoder does
   // not match; the client compares this against its own and falls back to a
   // snapshot-less attach rather than decoding a format it cannot read. Absent
-  // from a worker that predates the field, which is also a format nobody
-  // speaks.
+  // from a host that predates the field, which is also a format nobody speaks.
   format?: string;
   blocks?: AttachBlock[];        // OSC 133 command blocks, empty/absent if none
   // Kitty placements on the screen the snapshot carries, captured in the same

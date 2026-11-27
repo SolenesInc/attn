@@ -98,9 +98,8 @@ To see where a terminal runs, type this in it:
 sh -c 'ps -o comm= -p $(ps -o ppid= -p $PPID)'
 ```
 
-It prints `attn-pty-host` for the shared terminal host, where every new
-terminal starts, and `attn` for a terminal an older build started in a dedicated
-worker.
+It prints `attn-pty-host`, the shared terminal host where every terminal
+runs.
 
 After pairing, a reconnect never installs a build. If the installed build
 differs or is missing, the row shows why and offers Update.

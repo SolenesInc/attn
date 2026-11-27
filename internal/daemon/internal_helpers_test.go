@@ -84,7 +84,7 @@ func TestMain(m *testing.M) {
 	}
 	sessionmonitor.SubmitDelay = 0
 	os.Exit(testworld.Main(m,
-		"ATTN_PTY_BACKEND=",
+		"ATTN_PTY_HOST_BINARY=",
 		"ATTN_PTY_SKIP_STARTUP_PROBE=1",
 		"ATTN_CLIENT_TOKEN=daemon-test-client-token",
 		"ATTN_MOCK_GH_URL=http://127.0.0.1:1",

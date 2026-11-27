@@ -79,7 +79,7 @@ try {
   remoteEnv = instanceCliEnv(instance, {
     ATTN_DATA_DIR: data, ATTN_HARNESS_DATA_DIR: data, ATTN_HARNESS_NOTEBOOK_ROOT: path.join(data, 'notebook'),
     ATTN_WS_PORT: String(wsPort), ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off',
-    ATTN_PTY_BACKEND: 'worker', ATTN_CACHED_SHELL_ENV: '[]', ATTN_CODEX_SHARED_PROFILE: '', CODEX_THREAD_ID: '',
+    ATTN_CODEX_SHARED_PROFILE: '', CODEX_THREAD_ID: '',
   });
   target = await ssh.route('scenario-outpost', remoteEnv, binary);
   fs.unlinkSync(target);

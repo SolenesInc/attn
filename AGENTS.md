@@ -278,10 +278,10 @@ Follow [Testing](docs/internal/testing.md). In short:
 
 ## Ownership
 
-- New terminals run in the shared host (`pty-host`). On a machine with no usable
-  host, a new terminal fails to start. Terminals an older build started in a
-  dedicated worker (`internal/ptyworker`, using `internal/pty`) stay there until
-  they end or reload. A running terminal stays with the runtime that started it.
+- Every terminal runs in the shared host (`pty-host`). On a machine with no
+  usable host, a new terminal fails to start. attn no longer lists a terminal
+  that an older build started in a dedicated worker, and leaves its worker
+  running.
 - `internal/store` owns SQLite/cache; `internal/attention` owns turn predicates.
   Derive `turn_owed` from persisted opened/settled timestamps.
 - `internal/jobs` owns background duties and most periodic ticks. The PR poll,
@@ -458,9 +458,6 @@ entry names:
 
 - Daemon: `<data-dir>/daemon.log`, or
   `attn debug daemon-log --since 10m --grep PATTERN`.
-- Dedicated PTY worker:
-  `<data-dir>/workers/<daemon-instance>/log/<terminal>.log`, the pane's
-  `runtime_id`.
 - Shared PTY host: `<data-dir>/pty-hosts/<daemon-instance>/log/host.log`.
 - `attn debug incidents|diagnostics|input`: the app's terminal logs;
   `attn debug ls` lists them.

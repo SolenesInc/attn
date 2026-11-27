@@ -27,13 +27,13 @@ func AttnBinaryWithSnapshotFormat(t testing.TB, format string) string {
 func (s *Stack) StartBinary(binary string, vars ...string) {
 	s.T.Helper()
 	s.binary = binary
-	s.start(append([]string{"ATTN_PTY_WORKER_BINARY=" + binary}, vars...)...)
+	s.start(vars...)
 }
 
 func (s *Stack) StartBinaryHeldAt(binary string, p *Pause) {
 	s.T.Helper()
 	s.binary = binary
-	s.launch("ATTN_PTY_WORKER_BINARY=" + binary)
+	s.launch()
 	p.Await()
 }
 

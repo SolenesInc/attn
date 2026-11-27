@@ -72,9 +72,9 @@ the build stored with its record, which an upload batch names.
 | `c_heap_in_use_bytes`, `c_heap_free_bytes` | Linux only: the daemon's C memory, mostly SQLite, that glibc malloc holds in use, and the freed C memory it keeps without returning it to the system |
 | `workload.sessions`, `workload.agents` | Sessions the daemon holds, in every profile, and those among them that run a harness rather than a shell |
 | `workload.terminals` | Terminals the daemon runs |
-| `workload.panes_drawn` | Terminals a connected app is attached to, which are the terminals it draws. The app also stays attached to some hidden terminals that an older build started in a dedicated worker |
+| `workload.panes_drawn` | Terminals a connected app is attached to, which are the terminals it draws |
 | `workload.desktops`, `workload.seeds` | Desktops, and seeds in any state, in every profile |
-| `processes[].role` | `daemon`, `pty_worker`, `pty_host`, `app`, `webkit_content`, `webkit_gpu` or `webkit_networking`. The `webkit_*` roles are the WebKit processes the app's browser tiles run. A role with no running process has no entry, so an outpost, which has no app, lists only the first three |
+| `processes[].role` | `daemon`, `pty_host`, `app`, `webkit_content`, `webkit_gpu` or `webkit_networking`. The `webkit_*` roles are the WebKit processes the app's browser tiles run. A role with no running process has no entry, so an outpost, which has no app, lists only the first three |
 | `processes[].shell` | For `app`, `native` |
 | `processes[].count` | How many processes hold the role |
 | `processes[].resident_bytes` | Their total resident memory |

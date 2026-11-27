@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -133,7 +136,7 @@ func TestRemoteShellRunsThroughTheHome(t *testing.T) {
 
 func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	a := testworld.NewSSH(t)
-	remote, home := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
+	remote, home := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	for _, s := range []*testworld.Stack{remote, home} {
 		a.Use(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
@@ -223,7 +226,7 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	mark = len(app.Log())
 	remote.Stop()
 	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
-	killWorker(t, remote.Dir, string(terminal))
+	killTerminalHost(t, remote.Dir, string(terminal))
 	mark = len(app.Log())
 	remote.Start()
 	stopRetries = home.FireTimers(bridge.RetryTimer)
@@ -254,7 +257,7 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	}
 	echo("echo revived-$((5+5))", "revived-10")
 	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State != protocol.SessionStateRecoverable })
-	t.Log("lost bridge refused input/resize/close/split/kill/reload/attach; live shell survived both daemon restarts; missing worker became recoverable")
+	t.Log("lost bridge refused input/resize/close/split/kill/reload/attach; live shell survived both daemon restarts; missing host became recoverable")
 }
 
 func TestATerminalOpenedWhileItsOutpostRecoversOpensOnceRecoveryEnds(t *testing.T) {
@@ -286,63 +289,6 @@ func TestATerminalOpenedWhileItsOutpostRecoversOpensOnceRecoveryEnds(t *testing.
 		t.Fatalf("attach sent while the outpost recovers: %s", protocol.Deref(result.Error))
 	}
 	fresh.AwaitScreen(shell, "during-4")
-}
-
-func TestRemoteOutputResumesAfterAWorkerUpgradeWithoutDroppingTheBridge(t *testing.T) {
-	old := testworld.AttnBinaryWithSnapshotFormat(t, "remote-stream-old")
-	current := testworld.AttnBinaryWithSnapshotFormat(t, "remote-stream-current")
-	a := testworld.NewSSH(t)
-	remote, home := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
-	for _, s := range []*testworld.Stack{remote, home} {
-		a.Use(s.World)
-		s.Vars = append(s.Vars, "SHELL=/bin/bash")
-	}
-	upgrade := remote.PauseAt(pausepoint.PtyWorkerUpgrade)
-	terminalCopy := home.PauseAt(pausepoint.OutboxSessionRead)
-	remote.StartBinary(old)
-	home.StartBinary(current)
-	address := bridgeAddress(t)
-	a.Route(address, remote)
-	app := enableOutposts(t, home)
-	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
-	host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
-	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
-	terminal := protocol.TerminalID(app.Terminal(id))
-	app.TypeLine(id, "echo before-upgrade-$((1+1))")
-	app.AwaitScreen(id, "before-upgrade-2")
-	terminalCopy.Await()
-	mark := len(app.Log())
-	remote.Stop()
-	terminalCopy.Release()
-	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
-	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
-	mark = len(app.Log())
-	remote.StartBinaryHeldAt(current, upgrade)
-	stopRetries := home.FireTimers(bridge.RetryTimer)
-	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
-	stopRetries()
-	mark = len(app.Log())
-	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal})
-	upgrade.Release()
-	attached := testworld.AwaitSince(app, mark, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
-	if !attached.Success {
-		t.Fatalf("attach sent during the worker handoff: %s", protocol.Deref(attached.Error))
-	}
-	app.TypeLine(id, "echo after-upgrade-$((2+2))")
-	app.AwaitScreen(id, "after-upgrade-4")
-	if swapped := initialSession(t, remote.App(), id); swapped.TerminalBuildStale != nil {
-		t.Fatalf("after the handoff the outpost reports the terminal on a stale build: %+v", swapped)
-	}
-	for _, frame := range app.Log()[mark:] {
-		var update protocol.OutpostsUpdatedMessage
-		if json.Unmarshal(frame, &update) == nil && update.Event == protocol.EventOutpostsUpdated {
-			for _, row := range update.Outposts {
-				if row.ID == host && row.State != protocol.OutpostStateConnected {
-					t.Fatalf("worker upgrade interrupted the bridge: %s", row.State)
-				}
-			}
-		}
-	}
 }
 
 func TestRemovingAnOutpostClosesItsTerminals(t *testing.T) {
@@ -423,7 +369,7 @@ func outpostStateSince(p *testworld.Peer, name string, state protocol.OutpostSta
 
 func TestRemoteWaitLetsInputFinishTheShell(t *testing.T) {
 	a := testworld.NewSSH(t)
-	remote, home := testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY)), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
+	remote, home := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	waiting := remote.PauseAt(pausepoint.PtyWaitBlock)
 	for _, s := range []*testworld.Stack{remote, home} {
 		a.Use(s.World)
@@ -711,5 +657,22 @@ func TestRemoteReloadDoesNotSendQueuedInputToTheReplacementShell(t *testing.T) {
 	screen := string(app.Screen(id))
 	if !strings.Contains(screen, "__old_input_receipt=old") && !strings.Contains(screen, "__old_input_receipt=absent") {
 		t.Fatalf("queued input ran in the replacement shell: %s", screen)
+	}
+}
+
+func killTerminalHost(t *testing.T, dataDir, terminal string) {
+	t.Helper()
+	paths, _ := filepath.Glob(filepath.Join(dataDir, "pty-hosts", "*", "registry", terminal+".json"))
+	if len(paths) != 1 {
+		t.Fatalf("host registry entries for %s: %v, want one", terminal, paths)
+	}
+	entry, err := ptyworker.ReadRegistry(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pid := range []int{entry.ChildPID, entry.WorkerPID} {
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+			t.Fatalf("killing pid %d of terminal %s: %v", pid, terminal, err)
+		}
 	}
 }

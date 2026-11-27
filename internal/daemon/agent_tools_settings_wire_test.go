@@ -24,7 +24,7 @@ func TestEverySettingsCommandReturnsToAScriptWhatItsCLIPrints(t *testing.T) {
 		t.Errorf("settings_get answered %v, want dark", got)
 	}
 	listed := tools.object("settings_list", map[string]any{"all": true})
-	if !strings.Contains(fmt.Sprint(listed["entries"]), "pty_backend_mode") {
+	if !strings.Contains(fmt.Sprint(listed["entries"]), "outpost_state") {
 		t.Errorf("settings_list with all answered %v, want the read-only values too", listed)
 	}
 	tools.finish("settings_")

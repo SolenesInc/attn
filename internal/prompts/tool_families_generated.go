@@ -44,7 +44,6 @@ var catalogFamilies = map[string]bool{
 	"profile":          false,
 	"profile-env":      false,
 	"prompts":          false,
-	"pty-worker":       false,
 	"review":           true,
 	"seed":             true,
 	"send":             false,

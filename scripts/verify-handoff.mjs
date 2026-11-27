@@ -31,7 +31,8 @@ Object.assign(env, {
   ATTN_DATA_DIR: data, ATTN_TOOL_HOME: path.join(root, 'tools'),
   CODEX_HOME: path.join(root, 'tools', '.codex'), ATTN_WRAPPER_PATH: binary,
   ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off',
-  ATTN_PTY_BACKEND: 'worker', ATTN_CLAUDE_EXECUTABLE: mock, ATTN_CODEX_EXECUTABLE: mock, ATTN_WS_PORT: '0',
+  ATTN_PTY_HOST_BINARY: process.env.ATTN_PTY_HOST_BINARY || execFileSync('bash', [fileURLToPath(new URL('./lib/rust-build-store.sh', import.meta.url)), 'provide', 'attn-pty-host'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }).trim(),
+  ATTN_CLAUDE_EXECUTABLE: mock, ATTN_CODEX_EXECUTABLE: mock, ATTN_WS_PORT: '0',
 });
 const output = [`Copied ${source} to ${home}. Source is read-only.`, `Runtime: ${root}`];
 const log = fs.openSync(path.join(receipts, 'daemon-stderr.log'), 'a');

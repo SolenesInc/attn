@@ -107,7 +107,7 @@ func TestATerminalRunWhoseTimeoutPassesBeforeItTypesNeverTypes(t *testing.T) {
 }
 
 func TestTerminalToolsAnswerWithoutWaitingOnTheShell(t *testing.T) {
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Vars = append(s.Vars, "SHELL=/bin/bash")
 	waiting := s.PauseEvery(pausepoint.PtyWaitBlock)
 	s.Start()
@@ -157,134 +157,122 @@ func TestTerminalToolsAnswerWithoutWaitingOnTheShell(t *testing.T) {
 }
 
 func TestTerminalWaitUntilPromptWaitsForTheCommandATerminalOpenToolTyped(t *testing.T) {
-	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
-			const slowToStartEachCommand = "PS0=$(sleep 1)"
-			s.Vars = append(s.Vars, "SHELL=/bin/bash", slowToStartEachCommand)
-			s.Start()
-			app := s.App()
-			mark := app.EventCount()
-			requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
-			testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-				return m.Settings["agent_tools_enabled"] == "true"
-			})
-			session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
-			tools := claudeToolEndpoint(t, s.LaunchedCarrying(app.Terminal(session)))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	const slowToStartEachCommand = "PS0=$(sleep 1)"
+	s.Vars = append(s.Vars, "SHELL=/bin/bash", slowToStartEachCommand)
+	s.Start()
+	app := s.App()
+	mark := app.EventCount()
+	requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
+	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["agent_tools_enabled"] == "true"
+	})
+	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	tools := claudeToolEndpoint(t, s.LaunchedCarrying(app.Terminal(session)))
 
-			var opened protocol.TerminalOpenResult
-			tools.structured(t, "terminal_open", map[string]any{"command": []string{"printf 'opened-%s\\n' ran"}}, &opened)
-			app.AwaitScreen(string(opened.SessionID), "printf 'opened-%s\\n' ran")
-			shell := string(opened.TerminalID)
-			if atPrompt := s.Run(testworld.Invocation{Session: session, Args: []string{"terminal", "wait", shell, "--until", "prompt"}}); atPrompt.Code != 0 {
-				t.Fatalf("attn terminal wait --until prompt while the opened command is typed but not yet started: %+v", atPrompt)
-			}
-			var last protocol.TerminalReadResult
-			tools.structured(t, "terminal_read", map[string]any{"terminal": shell, "mode": "last"}, &last)
-			if last.Block == nil || strings.TrimSpace(last.Block.Output) != "opened-ran" {
-				t.Fatalf("terminal_read last after the wait = %+v, want the opened command's finished block", last)
-			}
-			tools.structured(t, "terminal_run", map[string]any{"terminal": shell, "command": "printf next"}, &protocol.TerminalRunResult{})
-		})
+	var opened protocol.TerminalOpenResult
+	tools.structured(t, "terminal_open", map[string]any{"command": []string{"printf 'opened-%s\\n' ran"}}, &opened)
+	app.AwaitScreen(string(opened.SessionID), "printf 'opened-%s\\n' ran")
+	shell := string(opened.TerminalID)
+	if atPrompt := s.Run(testworld.Invocation{Session: session, Args: []string{"terminal", "wait", shell, "--until", "prompt"}}); atPrompt.Code != 0 {
+		t.Fatalf("attn terminal wait --until prompt while the opened command is typed but not yet started: %+v", atPrompt)
 	}
+	var last protocol.TerminalReadResult
+	tools.structured(t, "terminal_read", map[string]any{"terminal": shell, "mode": "last"}, &last)
+	if last.Block == nil || strings.TrimSpace(last.Block.Output) != "opened-ran" {
+		t.Fatalf("terminal_read last after the wait = %+v, want the opened command's finished block", last)
+	}
+	tools.structured(t, "terminal_run", map[string]any{"terminal": shell, "command": "printf next"}, &protocol.TerminalRunResult{})
 }
 
 func TestACommandTerminalOpenAcceptedBeforeADaemonRestartIsNoticedNotTyped(t *testing.T) {
-	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
-			bash := filepath.Join(s.Dir, "bash")
-			const heldUntilEnter = `#!/bin/sh
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	bash := filepath.Join(s.Dir, "bash")
+	const heldUntilEnter = `#!/bin/sh
 if [ -n "${ATTN_SHELL_INIT_DIR-}" ]; then
     printf 'held-before-the-first-prompt\n'
     IFS= read -r release
 fi
 exec /bin/bash "$@"
 `
-			if err := os.WriteFile(bash, []byte(heldUntilEnter), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			s.Vars = append(s.Vars, "SHELL="+bash)
-			s.Start()
-			app := s.App()
-			mark := app.EventCount()
-			requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
-			testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-				return m.Settings["agent_tools_enabled"] == "true"
-			})
-			session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
-			tools := claudeToolEndpoint(t, s.LaunchedCarrying(app.Terminal(session)))
-			const accepted = "printf '%s-%s\\n' accepted ran"
-			var opened protocol.TerminalOpenResult
-			tools.structured(t, "terminal_open", map[string]any{"command": []string{accepted}}, &opened)
-			app.AwaitScreen(string(opened.SessionID), "held-before-the-first-prompt")
+	if err := os.WriteFile(bash, []byte(heldUntilEnter), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s.Vars = append(s.Vars, "SHELL="+bash)
+	s.Start()
+	app := s.App()
+	mark := app.EventCount()
+	requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
+	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["agent_tools_enabled"] == "true"
+	})
+	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	tools := claudeToolEndpoint(t, s.LaunchedCarrying(app.Terminal(session)))
+	const accepted = "printf '%s-%s\\n' accepted ran"
+	var opened protocol.TerminalOpenResult
+	tools.structured(t, "terminal_open", map[string]any{"command": []string{accepted}}, &opened)
+	app.AwaitScreen(string(opened.SessionID), "held-before-the-first-prompt")
 
-			s.Signal(syscall.SIGTERM)
-			s.AwaitStopped()
-			s.Start()
-			app = s.App()
-			run := func(args ...string) testworld.Result {
-				return s.Run(testworld.Invocation{Session: session, Args: args})
-			}
-			terminal := string(opened.TerminalID)
-			inbox := run("agent", "inbox")
-			if inbox.Code != 0 || !strings.Contains(inbox.Stdout, "The command you opened terminal "+terminal+" with was not typed: the daemon restarted before attn typed "+accepted) {
-				t.Fatalf("the opener's inbox after a restart before the first prompt = %+v, want the not-typed notice naming the terminal and the command", inbox)
-			}
+	s.Signal(syscall.SIGTERM)
+	s.AwaitStopped()
+	s.Start()
+	app = s.App()
+	run := func(args ...string) testworld.Result {
+		return s.Run(testworld.Invocation{Session: session, Args: args})
+	}
+	terminal := string(opened.TerminalID)
+	inbox := run("agent", "inbox")
+	if inbox.Code != 0 || !strings.Contains(inbox.Stdout, "The command you opened terminal "+terminal+" with was not typed: the daemon restarted before attn typed "+accepted) {
+		t.Fatalf("the opener's inbox after a restart before the first prompt = %+v, want the not-typed notice naming the terminal and the command", inbox)
+	}
 
-			app.AwaitScreen(string(opened.SessionID), "held-before-the-first-prompt")
-			if got := run("terminal", "send", terminal, "--keys", "Enter"); got.Code != 0 {
-				t.Fatalf("releasing the first prompt: %+v", got)
-			}
-			if got := run("terminal", "run", terminal, "printf '%s-%s\\n' shell survived", "--wait"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "shell-survived" {
-				t.Fatalf("a command in the recovered shell = %+v", got)
-			}
-			if screen := run("terminal", "read", terminal, "--scrollback"); screen.Code != 0 || strings.Contains(screen.Stdout, "accepted-ran") {
-				t.Fatalf("the recovered shell's scrollback = %+v, want the accepted command never typed", screen)
-			}
-		})
+	app.AwaitScreen(string(opened.SessionID), "held-before-the-first-prompt")
+	if got := run("terminal", "send", terminal, "--keys", "Enter"); got.Code != 0 {
+		t.Fatalf("releasing the first prompt: %+v", got)
+	}
+	if got := run("terminal", "run", terminal, "printf '%s-%s\\n' shell survived", "--wait"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "shell-survived" {
+		t.Fatalf("a command in the recovered shell = %+v", got)
+	}
+	if screen := run("terminal", "read", terminal, "--scrollback"); screen.Code != 0 || strings.Contains(screen.Stdout, "accepted-ran") {
+		t.Fatalf("the recovered shell's scrollback = %+v, want the accepted command never typed", screen)
 	}
 }
 
 func TestACommandTerminalOpenWasTypingWhenTheDaemonRestartedIsNoticedAsMayHaveRun(t *testing.T) {
-	for _, backend := range testworld.WorkerAndSharedHost {
-		t.Run(string(backend), func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
-			s.Vars = append(s.Vars, "SHELL=/bin/bash")
-			typed := s.PauseAt(pausepoint.TerminalOpenCommandTyped)
-			s.Start()
-			app := s.App()
-			mark := app.EventCount()
-			requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
-			testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-				return m.Settings["agent_tools_enabled"] == "true"
-			})
-			session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
-			tools := claudeToolEndpoint(t, s.LaunchedCarrying(app.Terminal(session)))
-			appended := filepath.Join(s.Dir, "appended")
-			accepted := "printf 'appended\\n' >> " + appended
-			var opened protocol.TerminalOpenResult
-			tools.structured(t, "terminal_open", map[string]any{"command": []string{accepted}}, &opened)
-			typed.Await()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	typed := s.PauseAt(pausepoint.TerminalOpenCommandTyped)
+	s.Start()
+	app := s.App()
+	mark := app.EventCount()
+	requireStdout(t, s.Attn("settings", "set", "agent_tools_enabled", "true"), "true")
+	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["agent_tools_enabled"] == "true"
+	})
+	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	tools := claudeToolEndpoint(t, s.LaunchedCarrying(app.Terminal(session)))
+	appended := filepath.Join(s.Dir, "appended")
+	accepted := "printf 'appended\\n' >> " + appended
+	var opened protocol.TerminalOpenResult
+	tools.structured(t, "terminal_open", map[string]any{"command": []string{accepted}}, &opened)
+	typed.Await()
 
-			s.Signal(syscall.SIGTERM)
-			s.AwaitStopped()
-			s.Start()
-			run := func(args ...string) testworld.Result {
-				return s.Run(testworld.Invocation{Session: session, Args: args})
-			}
-			terminal := string(opened.TerminalID)
-			inbox := run("agent", "inbox")
-			want := "The daemon restarted while attn was typing the command you opened terminal " + terminal + " with, so the command may have run: " + accepted + "."
-			if inbox.Code != 0 || !strings.Contains(inbox.Stdout, want) || strings.Contains(inbox.Stdout, "was not typed") {
-				t.Fatalf("the opener's inbox after a restart while attn typed the command = %+v, want the notice that it may have run", inbox)
-			}
-			if got := run("terminal", "wait", terminal, "--until", "prompt"); got.Code != 0 {
-				t.Fatalf("waiting for the recovered shell's prompt: %+v", got)
-			}
-			if got, err := os.ReadFile(appended); err != nil || string(got) != "appended\n" {
-				t.Fatalf("the file the command appends to = %q (%v), want one line: the command ran once and was not replayed", got, err)
-			}
-		})
+	s.Signal(syscall.SIGTERM)
+	s.AwaitStopped()
+	s.Start()
+	run := func(args ...string) testworld.Result {
+		return s.Run(testworld.Invocation{Session: session, Args: args})
+	}
+	terminal := string(opened.TerminalID)
+	inbox := run("agent", "inbox")
+	want := "The daemon restarted while attn was typing the command you opened terminal " + terminal + " with, so the command may have run: " + accepted + "."
+	if inbox.Code != 0 || !strings.Contains(inbox.Stdout, want) || strings.Contains(inbox.Stdout, "was not typed") {
+		t.Fatalf("the opener's inbox after a restart while attn typed the command = %+v, want the notice that it may have run", inbox)
+	}
+	if got := run("terminal", "wait", terminal, "--until", "prompt"); got.Code != 0 {
+		t.Fatalf("waiting for the recovered shell's prompt: %+v", got)
+	}
+	if got, err := os.ReadFile(appended); err != nil || string(got) != "appended\n" {
+		t.Fatalf("the file the command appends to = %q (%v), want one line: the command ran once and was not replayed", got, err)
 	}
 }

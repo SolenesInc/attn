@@ -99,7 +99,7 @@ async function main() {
     const appPid = client.readManifest().pid;
     const daemonPid = readLiveDaemonPid(instance);
     if (!daemonPid) {
-      console.warn('[perf] WARNING: no live daemon pid file found; daemon + pty-worker RSS are NOT included in this run');
+      console.warn('[perf] WARNING: no live daemon pid file found; daemon + PTY host RSS are NOT included in this run');
     }
 
     for (let cycle = 0; cycle < options.cycles; cycle += 1) {

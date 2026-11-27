@@ -9,7 +9,6 @@ import (
 
 const (
 	RoleDaemon           = "daemon"
-	RolePTYWorker        = "pty_worker"
 	RolePTYHost          = "pty_host"
 	RoleApp              = "app"
 	RoleWebKitContent    = "webkit_content"

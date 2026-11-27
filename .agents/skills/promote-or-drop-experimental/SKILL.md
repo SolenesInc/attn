@@ -125,7 +125,7 @@ compiler catches the first layer only, so keep going until a pass finds nothing:
 
    ```sh
    scripts/build-libghostty-vt.sh
-   go run golang.org/x/tools/cmd/deadcode@latest ./cmd/attn | sort > /tmp/deadcode-<key>-before
+   go run golang.org/x/tools/cmd/deadcode@latest ./cmd/attnd | sort > /tmp/deadcode-<key>-before
    ```
 
 2. After the removal, run it again and read `comm -13` of the two reports.

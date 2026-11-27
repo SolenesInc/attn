@@ -560,7 +560,7 @@ func (b *WorkerBackend) notifySharedHostSessionLost(session *workerSession) {
 	b.evictLostSession(session)
 }
 
-func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) error {
+func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	if err := opts.Validate(); err != nil {
 		return err
 	}
@@ -649,7 +649,7 @@ func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost
 
 		result, err := b.spawnAndCommit(ctx, host, session, params)
 		if err == nil {
-			b.startMonitor(session)
+			b.startSharedHostMonitor(session)
 			b.cfg.Logf("shared PTY host spawn ready: session=%s host_pid=%d child_pid=%d", session.SessionID, session.WorkerPID, result.ChildPID)
 			return result, nil
 		}
@@ -778,7 +778,7 @@ func (b *WorkerBackend) prepareSharedHostLaunch(artifact ptyhost.Artifact) (shar
 		return sharedHostLaunch{}, fmt.Errorf("open shared PTY host log: %w", err)
 	}
 	cmd.Stdout, cmd.Stderr = logFile, logFile
-	cmd.Env = append(withoutEnvironmentKeys(os.Environ(), "ATTN_PTY_WORKER", "ATTN_PTY_HOST"), "ATTN_PTY_HOST=1")
+	cmd.Env = append(withoutEnvironmentKeys(os.Environ(), "ATTN_PTY_HOST"), "ATTN_PTY_HOST=1")
 	return sharedHostLaunch{cmd: cmd, logFile: logFile, incarnation: incarnation, socketPath: socketPath, registryPath: registryPath, token: token}, nil
 }
 

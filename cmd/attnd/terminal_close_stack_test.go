@@ -7,11 +7,9 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -23,10 +21,10 @@ func TestTerminalCloseStopsEveryShellPromptly(t *testing.T) {
 				if err != nil {
 					t.Skipf("%s unavailable: %v", name, err)
 				}
-				home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(testworld.WorkerPTY))
+				home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 				machine := home
 				if placement == "outpost" {
-					machine = testworld.NewStack(t, testworld.OnPTYBackend(testworld.WorkerPTY))
+					machine = testworld.NewStack(t)
 				}
 				shell, fifo := machine.Path("bin", name), machine.Path("shell-held")
 				if err := os.MkdirAll(filepath.Dir(shell), 0o700); err != nil {
@@ -71,12 +69,8 @@ func TestTerminalCloseStopsEveryShellPromptly(t *testing.T) {
 				if got.Code != 0 {
 					t.Fatalf("close: %+v", got)
 				}
-				machine.AwaitTimer(pty.KillDeadlineTimer)
-				machine.Advance(shellCloseGrace)
 				awaitPipeReleased(t, held, name)
 			})
 		}
 	}
 }
-
-const shellCloseGrace = 500 * time.Millisecond

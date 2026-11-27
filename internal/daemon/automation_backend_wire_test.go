@@ -7,15 +7,14 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptyworker"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestAnAutomationAgentGetsItsLaunchContractOnThePtyWorkers(t *testing.T) {
-	t.Setenv("ATTN_PTY_BACKEND", "worker")
-	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+func TestAnAutomationAgentGetsItsLaunchContractOnThePtyHost(t *testing.T) {
+	t.Setenv("ATTN_PTY_HOST_BINARY", testworld.SharedHostBinary(t))
 	w := newWorld(t, fakeagent.Claude)
-	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	t.Cleanup(func() { ptyhost.ReapDataDir(w.Dir) })
 	app, cli := w.App(), w.Client()
 	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
 		t.Fatal(err)

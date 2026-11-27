@@ -1,16 +1,19 @@
 package daemon_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestEveryTerminalComesBackWhenItsSharedHostDies(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex), testworld.OnPTYBackend(testworld.SharedHostPTY))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
 	s.Start()
 	app := s.App()
 	shop := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
@@ -125,12 +128,12 @@ func TestAnAppServerSessionStillWaitsOnItsQuestionAfterItsTUIRuntimeDies(t *test
 
 func appServerAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeagent.AppServer, string) {
 	t.Helper()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma), testworld.OnPTYBackend(testworld.WorkerPTY))
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Sigma))
 	s.Start()
 	app := s.App()
 	setSetting(t, app, "sigma_enabled", "true")
-	s.Spawn(app, fakeagent.Sigma, s.Path("server-on-an-older-builds-worker"))
-	s.RestartOnTheSharedHost()
+	s.Spawn(app, fakeagent.Sigma, s.Path("server-on-an-older-host-build"))
+	restartOnANewerHostBuild(t, s)
 	app = s.App()
 	session := s.Spawn(app, fakeagent.Sigma, s.Path("shop"))
 	tui := s.Launched(session)
@@ -142,6 +145,30 @@ func appServerAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testwor
 	server.Prompted(conversation)
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
 	return s, app, session, server, conversation
+}
+
+func restartOnANewerHostBuild(t *testing.T, s *testworld.Stack) {
+	t.Helper()
+	s.Stop()
+	s.UseSharedHostBinary(nextSharedHostBuild(t))
+	s.Vars = append(s.Vars, "ATTN_PTY_SKIP_STARTUP_PROBE=")
+	promoted := s.PauseAt(pausepoint.PtyHostPromoted)
+	s.Start()
+	promoted.Await()
+	promoted.Release()
+}
+
+func nextSharedHostBuild(t *testing.T) string {
+	t.Helper()
+	current, err := os.ReadFile(testworld.SharedHostBinary(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := filepath.Join(t.TempDir(), "attn-pty-host")
+	if err := os.WriteFile(next, append(current, 0), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return next
 }
 
 func TestASigmaSessionComesBackFromAStartupWithoutItsViewRuntimeStillWaitingOnItsApproval(t *testing.T) {

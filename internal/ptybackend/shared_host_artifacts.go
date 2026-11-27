@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -188,6 +189,7 @@ func (b *WorkerBackend) promoteSharedArtifact(artifact ptyhost.Artifact) {
 	b.artifactMu.Unlock()
 	if previous != artifact.ID {
 		b.cfg.Logf("shared PTY host artifact promoted: %s (previous %q)", artifact.ID, previous)
+		pausepoint.At(pausepoint.PtyHostPromoted)
 	}
 }
 

@@ -64,7 +64,7 @@ func newRealOutpostClaude(t *testing.T, willClose bool, vars ...string) *realOut
 			"DISABLE_AUTOUPDATER=1",
 		)
 		outpost.Vars = append(outpost.Vars, vars...)
-	}, testworld.OnPTYBackend(testworld.WorkerPTY))
+	})
 	c := &realOutpostClaude{home: home, outpost: outpost, pair: pair, model: model, onOutpost: outpost.App(), ptyExit: ptyExit, configDir: configDir}
 	c.session = home.Spawn(pair.App, fakeagent.Claude, work, func(msg *protocol.SpawnSessionMessage) { msg.Host = &pair.Host })
 	c.terminal = pair.App.Terminal(c.session)

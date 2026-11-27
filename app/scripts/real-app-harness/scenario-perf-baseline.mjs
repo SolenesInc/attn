@@ -210,14 +210,14 @@ async function main() {
       }
     }
 
-    // The daemon is detached/reparented, so its pty-workers are NOT descendants
+    // The daemon is detached/reparented, so its PTY host is NOT a descendant
     // of the app pid; resolve its pid from the instance pid file.
     if (!daemonPid) {
       daemonPid = readLiveDaemonPid(instanceForAppPath(options.appPath));
       if (daemonPid) {
-        console.log(`[perf] resolved daemon pid=${daemonPid} from pid file (daemon + pty-workers included)`);
+        console.log(`[perf] resolved daemon pid=${daemonPid} from pid file (daemon + PTY host included)`);
       } else {
-        console.warn('[perf] WARNING: no live daemon pid file found; daemon + pty-worker RSS are NOT included in this baseline (app-tree numbers remain valid)');
+        console.warn('[perf] WARNING: no live daemon pid file found; daemon + PTY host RSS are NOT included in this baseline (app-tree numbers remain valid)');
       }
     }
     summary.daemonPid = daemonPid;
@@ -366,9 +366,7 @@ async function main() {
       app: classRssMb(idle, 'app'),
       webkit: ['webkit_webcontent', 'webkit_gpu', 'webkit_networking'].reduce((sum, k) => sum + classRssMb(idle, k), 0),
       daemon: classRssMb(idle, 'daemon'),
-      ptyWorkers: classRssMb(idle, 'pty_worker'),
-      ptyWorkerCount: idle.byClass.pty_worker?.count ?? 0,
-      perWorkerAvgMb: idle.byClass.pty_worker?.count ? Number((classRssMb(idle, 'pty_worker') / idle.byClass.pty_worker.count).toFixed(1)) : 0,
+      ptyHost: classRssMb(idle, 'pty_host'),
     };
     const fingerprint = getMachineFingerprint();
     const baseline = loadBaseline(fingerprint.key);

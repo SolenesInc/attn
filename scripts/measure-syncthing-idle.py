@@ -20,6 +20,7 @@ args = p.parse_args()
 args.out = args.out.resolve()
 args.out.mkdir(parents=True, exist_ok=True)
 binaries = dict(item.split('=', 1) for item in args.binaries)
+pty_host = os.environ.get('ATTN_PTY_HOST_BINARY') or subprocess.run(['bash', str(Path(__file__).resolve().parent / 'lib' / 'rust-build-store.sh'), 'provide', 'attn-pty-host'], check=True, capture_output=True, text=True).stdout.strip()
 base = {k: v for k, v in os.environ.items() if not k.startswith('ATTN_') and k != 'GODEBUG'}
 rows = {label: [] for label in binaries}
 for repeat in range(3):
@@ -29,7 +30,7 @@ for repeat in range(3):
         shutil.copytree(args.fixture, root / 'notebook')
         env = base | {'ATTN_DATA_DIR': str(root), 'ATTN_HARNESS_DATA_DIR': str(root), 'ATTN_HARNESS_NOTEBOOK_ROOT': str(root / 'notebook'),
                       'ATTN_WS_PORT': '19429', 'ATTN_PPROF': '19430', 'ATTN_HEADLESS_TASKS': 'off', 'ATTN_GITHUB_POLLING': 'off',
-                      'ATTN_HARNESS_SKILL_SYNC': 'off', 'ATTN_PTY_BACKEND': 'worker', 'ATTN_CACHED_SHELL_ENV': '[]'}
+                      'ATTN_HARNESS_SKILL_SYNC': 'off', 'ATTN_PTY_HOST_BINARY': pty_host}
         read, write = os.pipe()
         lifeline, holder = os.pipe()
         log = (root / 'stderr.log').open('w')

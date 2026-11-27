@@ -37,7 +37,7 @@ endif
 INSTANCE_ROUTING_VARS = ATTN_DATA_DIR ATTN_SOCKET_PATH ATTN_DB_PATH ATTN_CONFIG_PATH ATTN_PLUGIN_DIR ATTN_WS_PORT
 # Routing env that must NOT leak from a parent attn terminal into an isolated
 # instance daemon we (re)start. Shared by every non-default instance install.
-INSTANCE_DAEMON_UNSET = $(foreach var,$(INSTANCE_ROUTING_VARS),-u $(var)) -u ATTN_WRAPPER_PATH -u ATTN_INSIDE_APP -u ATTN_PTY_WORKER -u ATTN_TERMINAL_ID -u ATTN_SESSION_ID -u ATTN_AGENT
+INSTANCE_DAEMON_UNSET = $(foreach var,$(INSTANCE_ROUTING_VARS),-u $(var)) -u ATTN_WRAPPER_PATH -u ATTN_INSIDE_APP -u ATTN_TERMINAL_ID -u ATTN_SESSION_ID -u ATTN_AGENT
 # An install takes INSTANCE=<name> as the intent and drops the inherited routing,
 # but the shell it ran from still points somewhere else — say so, because every
 # other attn command in that shell will refuse (config.ValidateInstanceRouting).

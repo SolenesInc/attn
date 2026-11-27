@@ -67,7 +67,6 @@ func TestASharedCodexRestartWithNoUsableHostIsRefusedAndItsSessionKeepsAnswering
 func anAgentOnTheHostAfterAnUpdateWithoutTheHost(t *testing.T, h fakeagent.Harness, pauseAt string) (*releaseUpdate, *testworld.Peer, releaseAgent, *testworld.Pause) {
 	t.Helper()
 	s := testworld.NewStack(t, testworld.WithAgents(h))
-	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating")
 	s.StartBinary(testworld.AttnBinaryWithSnapshotFormat(t, "current"), "ATTN_PTY_HOST_BINARY="+ptyhosttest.Variant(t, "current"))
 	u := &releaseUpdate{Stack: s, t: t}
 	live := u.spawnAgent(s.App(), h)

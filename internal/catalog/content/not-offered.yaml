@@ -30,8 +30,7 @@ commands:
   - {name: ticket, summary: "the retired name of seed; points at the seed command", hidden: true, offered: false, reason: "The retired name of seed. It only prints the seed command to run."}
   - {name: profile, summary: "the retired name of instance; says the new command", hidden: true, offered: false, reason: "The retired name of instance. It only prints the new command to run."}
   - {name: profile-env, summary: "the retired name of instance-env; says the new command", hidden: true, offered: false, reason: "The retired name of instance-env. It only prints the new command to run."}
-  - {name: pty-worker, summary: "run one terminal's PTY worker", hidden: true, offered: false, reason: &plumbing "attn runs it itself, to start or move its own processes."}
-  - {name: _bridge, summary: "carry the bridge to an outpost", hidden: true, offered: false, reason: *plumbing}
+  - {name: _bridge, summary: "carry the bridge to an outpost", hidden: true, offered: false, reason: &plumbing "attn runs it itself, to start or move its own processes."}
   - {name: _outpost-install, summary: "install attn on an outpost", hidden: true, offered: false, reason: *plumbing}
   - {name: _outpost-switch, summary: "switch an outpost to its installed build", hidden: true, offered: false, reason: *plumbing}
   - {name: _update-apply, summary: "apply a staged update", hidden: true, offered: false, reason: *plumbing}

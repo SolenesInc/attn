@@ -55,11 +55,7 @@ func ReapDataDir(dataDir string) []ReapResult {
 			results = append(results, ReapResult{SessionID: strings.TrimSuffix(filepath.Base(registryPath), ".json"), Outcome: ReapFailed, Err: fmt.Errorf("unreadable registry %s: %w", path, err)})
 			continue
 		}
-		res := reapEntry(entry, registryPath)
-		if res.Outcome == ReapRemoved || res.Outcome == ReapAlreadyGone {
-			RemoveHandoff(registryPath, entry.SessionID)
-		}
-		results = append(results, res)
+		results = append(results, reapEntry(entry, registryPath))
 	}
 	return results
 }

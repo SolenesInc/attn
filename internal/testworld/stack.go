@@ -40,7 +40,6 @@ type Stack struct {
 type stackSetup struct {
 	harnesses       []fakeagent.Harness
 	withoutAgentKit bool
-	backend         PTYBackend
 }
 
 type StackOption func(*stackSetup)
@@ -59,7 +58,7 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 		t.Skip("a stack test runs the built attn binary, which -short does not build")
 	}
 	RemoveTempDirsAfterTheDaemon(t)
-	setup := stackSetup{backend: SharedHostPTY}
+	var setup stackSetup
 	for _, opt := range opts {
 		opt(&setup)
 	}
@@ -91,7 +90,7 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	t.Cleanup(s.reap)
 	t.Cleanup(s.Stop)
 	s.pauses = s.listenForPauses()
-	s.usePTYBackend(setup.backend)
+	s.UseSharedHostBinary(SharedHostBinary(t))
 	return s
 }
 

@@ -40,7 +40,8 @@ Object.assign(env, {
   CLAUDE_CODE_OAUTH_TOKEN: evalToken,
   CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION: 'false',
   ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off',
-  ATTN_PTY_BACKEND: 'worker', ATTN_WS_PORT: '0',
+  ATTN_PTY_HOST_BINARY: process.env.ATTN_PTY_HOST_BINARY || execFileSync('bash', [fileURLToPath(new URL('./lib/rust-build-store.sh', import.meta.url)), 'provide', 'attn-pty-host'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }).trim(),
+  ATTN_WS_PORT: '0',
 });
 const output = [`Copied ${source}/CHARTER.md to ${home}/CHARTER.md. Source is read-only.`, `Runtime: ${root}`];
 console.log(output.join('\n'));

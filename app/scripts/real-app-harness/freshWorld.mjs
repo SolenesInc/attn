@@ -115,7 +115,6 @@ export function instanceProcesses({ appPath, dataDir, commandLineFor = commandLi
   const running = {
     app: runningPids([readPid(readFileOrEmpty(path.join(dataDir, 'app.pid')))], appExecutableInAppTree(appPath), commandLineFor),
     daemon: runningPids([readPid(readFileOrEmpty(path.join(dataDir, 'attn.pid')))], attn, commandLineFor),
-    'pty-worker': runningPids(registeredPids(dataDir, 'workers', 'registry', 'worker_pid'), attn, commandLineFor),
     'attn-pty-host': registeredPtyHostPids({ dataDir, commandLineFor }),
   };
   return Object.entries(running).flatMap(([name, pids]) => pids.map((pid) => ({ name, pid })));
@@ -161,7 +160,7 @@ export async function ensureFreshWorld({
   if (stopResult.status !== 0) {
     throw new Error(`fresh-world preflight failed: attn daemon stop --terminals exited ${stopResult.status}: ${stopResult.error?.message ?? stopResult.stderr}`);
   }
-  for (const name of ['pty-worker', 'attn-pty-host']) {
+  for (const name of ['attn-pty-host']) {
     const leaked = processes().filter((entry) => entry.name === name).map(({ pid }) => pid);
     if (leaked.length > 0) {
       throw new Error(`fresh-world preflight failed: ${name} pids=[${leaked.join(', ')}] still run after attn daemon stop --terminals; check each with ps and stop it by pid`);
