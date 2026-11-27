@@ -1,0 +1,13 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "TestHomeMoveKeepsTerminalsAndMovesBack moves back while the Notebook is syncing: awaitMachineNotebook matches an in_sync row from before the disconnect, and the home keeps the outpost's Notebook report across a dropped stream",
+  "at": "2026-11-27T18:13:57.313Z",
+  "severity": "p1",
+  "source": "agent",
+  "location": {
+    "path": "cmd/attnd/notebook_sync_stack_test.go",
+    "line": 68
+  },
+  "culprit": "cb30ec600d503ec09247e4f5e0dd2ef011eecd2a"
+}
