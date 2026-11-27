@@ -361,9 +361,11 @@ on `attn terminal open` and `attn delegate`, and in a bed's repository
 addresses. Machine names match whole and ignore case, so names that contain `@`
 or `:`, such as `user@host`, work as typed. An outpost's id works too. The
 home's machine is named after its short host name, and each of these takes that
-name as well as `home`. Two machines that share a name from an earlier Attn
-are refused by name with both ids; the launcher lists both under that name and puts the id of the one you
-pick into the input.
+name as well as `home`, and `home` names the home even beside an outpost that
+an earlier Attn let take that name. Two machines that share a name from an
+earlier Attn are refused by name with both ids. The launcher lists both under
+that name and puts into the input the id of the outpost you pick, or `home:`
+for the home.
 
 - With `ai-sandbox:~/projects/`, the launcher lists folders on ai-sandbox. It
   browses for anything that starts with `~` or `/`.
