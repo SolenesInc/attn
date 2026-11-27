@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Queue bar keeps Runs hidden after desktop crowding clears",
+  "at": "2026-11-27T00:38:42.702Z",
+  "detail": "The queue bar keeps controls hidden after a mixed desktop becomes automation-only. Start on Home with the collapsed queue bar crowded enough to hide Runs. Close the last unrelated agent on the sole unslotted mixed desktop while its automation run remains. The rendered +N desktop chip disappears but the saved width identity still uses raw desktop count and run presence. The Runs control and owed count remain hidden even with room until resize or reopen. Track the rendered chip projection in the measurement key. Independently source-confirmed at b6978240b. Wire probe pending on s-tj3x62.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/sidebar/crowding.rs",
+    "line": 63
+  },
+  "culprit": "b6978240b51f4605d7272ef9bbadd85ef281f433"
+}
