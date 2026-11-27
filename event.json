@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: Profile cycling from a tile window never selects the next profile",
+  "at": "2026-11-27T10:07:53.870Z",
+  "detail": "With a popped-out terminal tile focused, hold the profile shortcut modifiers, tap its key, and release. At  d6ac6618 the tile-window shortcut forwards only the action and dispatches it in the main window without the originating gesture. The switcher highlights the current profile and release does not advance it. Preserve the gesture and have the switcher receive completion when the modifiers are released.\n"
+}
