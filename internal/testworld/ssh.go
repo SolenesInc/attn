@@ -31,7 +31,6 @@ type SSH struct {
 }
 
 type sshMachine struct {
-	delay      time.Duration
 	drain      func()
 	stack      *Stack
 	stop       func()
@@ -115,53 +114,6 @@ func (s *SSH) Pause(destination string) func() {
 func (s *SSH) PauseInput(destination string) (resume func()) {
 	s.t.Helper()
 	return s.machine(destination).homeWrites.hold()
-}
-
-// Delay holds every write between the home and destination for d each way, as a slow link does, for the commands
-// that start after it.
-func (s *SSH) Delay(destination string, d time.Duration) {
-	s.t.Helper()
-	machine := s.machine(destination)
-	s.mu.Lock()
-	machine.delay = d
-	s.mu.Unlock()
-}
-
-type delayedWriter struct {
-	delay  time.Duration
-	chunks chan delayedChunk
-	done   chan struct{}
-}
-
-type delayedChunk struct {
-	at   time.Time
-	data []byte
-}
-
-func newDelayedWriter(w io.Writer, d time.Duration) *delayedWriter {
-	dw := &delayedWriter{delay: d, chunks: make(chan delayedChunk, 1<<14), done: make(chan struct{})}
-	go func() {
-		defer close(dw.done)
-		failed := false
-		for chunk := range dw.chunks {
-			time.Sleep(time.Until(chunk.at))
-			if !failed {
-				_, err := w.Write(chunk.data)
-				failed = err != nil
-			}
-		}
-	}()
-	return dw
-}
-
-func (dw *delayedWriter) Write(p []byte) (int, error) {
-	dw.chunks <- delayedChunk{at: time.Now().Add(dw.delay), data: append([]byte(nil), p...)}
-	return len(p), nil
-}
-
-func (dw *delayedWriter) flush() {
-	close(dw.chunks)
-	<-dw.done
 }
 
 func NewSSH(t testing.TB) *SSH {
@@ -252,7 +204,6 @@ func (s *SSH) Route(destination string, remote *Stack) {
 	}
 	machineEnv := []string{"PATH=" + bin + ":" + path, "ATTN_HARNESS_OUTPOST_INSTALL_ROOT=" + root}
 	link, homeWrites := newSSHLink(), newSSHLink()
-	machine := &sshMachine{stack: remote, link: link, homeWrites: homeWrites}
 	socket := filepath.Join(s.Dir, fmt.Sprintf("machine-%d.sock", s.nextMachine))
 	s.nextMachine++
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
@@ -314,23 +265,17 @@ func (s *SSH) Route(destination string, remote *Stack) {
 				}
 				defer input.Close()
 				defer inputWriter.Close()
-				s.mu.Lock()
-				delay := machine.delay
-				s.mu.Unlock()
-				toMachine, fromMachine := newDelayedWriter(inputWriter, delay), newDelayedWriter(conn, delay)
 				copied := make(chan struct{})
 				go func() {
 					defer close(copied)
-					_, _ = io.Copy(sshLinkWriter{requestCtx, link, sshLinkWriter{requestCtx, homeWrites, toMachine}}, conn)
-					toMachine.flush()
+					_, _ = io.Copy(sshLinkWriter{requestCtx, link, sshLinkWriter{requestCtx, homeWrites, inputWriter}}, conn)
 					inputWriter.Close()
 				}()
 				cmd.Stdin = input
-				cmd.Stdout = sshLinkWriter{requestCtx, link, fromMachine}
+				cmd.Stdout = sshLinkWriter{requestCtx, link, conn}
 				var stderr bytes.Buffer
 				cmd.Stderr = &stderr
 				err = cmd.Run()
-				fromMachine.flush()
 				requestCancel()
 				conn.CloseRead()
 				input.Close()
@@ -359,8 +304,7 @@ func (s *SSH) Route(destination string, remote *Stack) {
 		lifeline.Close()
 	})
 	s.t.Cleanup(stopMachine)
-	machine.stop, machine.drain = stopMachine, workers.Wait
-	s.machines[destination] = machine
+	s.machines[destination] = &sshMachine{stack: remote, stop: stopMachine, link: link, homeWrites: homeWrites, drain: workers.Wait}
 	s.routes[destination] = socket
 	s.reachable[destination] = socket
 	s.save()

@@ -1,11 +1,8 @@
 package main_test
 
 import (
-	"fmt"
-	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -13,50 +10,28 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-// linkDelay stands for a laptop reaching its home over the internet: an echo through the home costs at least
-// two of them.
-const linkDelay = 50 * time.Millisecond
-
-func echoTimes(t *testing.T, p *testworld.Peer, terminal, tag string) []time.Duration {
-	t.Helper()
-	p.AwaitTerminalScreen(terminal, "")
-	var samples []time.Duration
-	for i := range 7 {
-		token := fmt.Sprintf("%s%dq", tag, i)
-		started := time.Now()
-		p.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: token, Source: protocol.Ptr("keyboard")})
-		p.AwaitTerminalScreen(terminal, token)
-		samples = append(samples, time.Since(started))
-	}
-	slices.Sort(samples)
-	return samples
-}
-
-func median(samples []time.Duration) time.Duration { return samples[len(samples)/2] }
-
 func TestTheAppMachinesTerminalsEchoWithoutTheHome(t *testing.T) {
 	w := newReverseWorld(t)
-	w.ssh.Delay("home", linkDelay)
 	row := w.join()
 	shell := fakeagent.Harness(protocol.SessionAgentShell)
 	onLaptop := w.home.Spawn(w.app, shell, w.laptop.Path("on-laptop"), func(m *protocol.SpawnSessionMessage) { m.Host = &row.ID })
 	atHome := w.home.Spawn(w.app, shell, w.home.Path("at-home"))
 	laptopTerminal, homeTerminal := w.app.Terminal(onLaptop), w.app.Terminal(atHome)
-
 	relayed := w.laptop.TrustedApp()
 	machine := w.laptop.MachineApp()
-	local := echoTimes(t, machine, laptopTerminal, "ml")
-	home := echoTimes(t, relayed, homeTerminal, "hr")
-	through := echoTimes(t, relayed, laptopTerminal, "lr")
-	t.Logf("one-way link delay %s; keystroke echo medians: the laptop's terminal on its own daemon %s, a home terminal through the relay %s, the laptop's terminal through the relay %s",
-		linkDelay, median(local).Round(time.Millisecond), median(home).Round(time.Millisecond), median(through).Round(time.Millisecond))
-	if median(home) < 2*linkDelay {
-		t.Fatalf("a home terminal echoed through the relay in %v, under the round trip of %s the link costs: the delay is not on the link", median(home), 2*linkDelay)
+	relayed.AwaitTerminalScreen(homeTerminal, "")
+	machine.AwaitTerminalScreen(laptopTerminal, "")
+
+	resume := w.ssh.Pause("home")
+	relayed.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(homeTerminal), Data: "athome", Source: protocol.Ptr("keyboard")})
+	machine.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(laptopTerminal), Data: "onlaptop", Source: protocol.Ptr("keyboard")})
+	machine.AwaitTerminalScreen(laptopTerminal, "onlaptop")
+	if shown := relayed.Screen(atHome); strings.Contains(string(shown), "athome") {
+		t.Fatalf("the home terminal echoed while the link to the home was held: the hold is not on its path:\n%s", shown)
 	}
-	if median(local)+linkDelay >= median(home) {
-		t.Fatalf("the laptop's terminal echoed in %v on its own daemon against %v for a home terminal through the relay, want it faster by more than one link crossing (%s): the link is in its path: %v", median(local), median(home), linkDelay, local)
-	}
-	t.Log("(1) the laptop's terminal echoes within a local round trip on its own daemon, and a home terminal's echo keeps the link's round trip")
+	resume()
+	relayed.AwaitTerminalScreen(homeTerminal, "athome")
+	t.Log("(1) with the link to the home held, the laptop's terminal echoes on its own daemon, and a home terminal's echo waits for the link")
 }
 
 func TestTheAppMachinesTerminalsStayUsableWhileTheHomeIsAway(t *testing.T) {
