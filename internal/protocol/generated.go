@@ -8387,6 +8387,9 @@ type OpenMarkdownResultMessage struct {
 }
 
 type OpenResult struct {
+	// Commands corresponds to the JSON schema field "commands".
+	Commands []ViewRunCommand `json:"commands,omitempty,omitzero"`
+
 	// Opened corresponds to the JSON schema field "opened".
 	Opened string `json:"opened"`
 
@@ -15329,6 +15332,9 @@ type TileDocumentsWatchMessage struct {
 
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`
+
+	// Started corresponds to the JSON schema field "started".
+	Started []ViewStartedCommand `json:"started,omitempty,omitzero"`
 }
 
 type TileWindowFrame struct {
@@ -15789,6 +15795,9 @@ type ViewCommandCall struct {
 }
 
 type ViewDocument struct {
+	// Commands corresponds to the JSON schema field "commands".
+	Commands []ViewRunCommand `json:"commands"`
+
 	// Language corresponds to the JSON schema field "language".
 	Language int `json:"language"`
 
@@ -16130,6 +16139,29 @@ type ViewResponsesWritten struct {
 	Path string `json:"path"`
 }
 
+type ViewRunCommand struct {
+	// Change corresponds to the JSON schema field "change".
+	Change *string `json:"change,omitempty,omitzero"`
+
+	// Every corresponds to the JSON schema field "every".
+	Every *string `json:"every,omitempty,omitzero"`
+
+	// Line corresponds to the JSON schema field "line".
+	Line string `json:"line"`
+
+	// ScriptSHA256 corresponds to the JSON schema field "script_sha256".
+	ScriptSHA256 string `json:"script_sha256"`
+
+	// State corresponds to the JSON schema field "state".
+	State ViewRunState `json:"state"`
+}
+
+type ViewRunState string
+
+const ViewRunStateChanged ViewRunState = "changed"
+const ViewRunStateStarted ViewRunState = "started"
+const ViewRunStateWaiting ViewRunState = "waiting"
+
 type ViewSendMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -16203,7 +16235,32 @@ type ViewSourceState string
 
 const ViewSourceStateFailed ViewSourceState = "failed"
 const ViewSourceStateOk ViewSourceState = "ok"
+const ViewSourceStateOutOfDate ViewSourceState = "out_of_date"
+const ViewSourceStateRunning ViewSourceState = "running"
 const ViewSourceStateUnavailable ViewSourceState = "unavailable"
+const ViewSourceStateWaiting ViewSourceState = "waiting"
+
+type ViewStartMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+}
+
+type ViewStartedCommand struct {
+	// Line corresponds to the JSON schema field "line".
+	Line string `json:"line"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// ScriptSHA256 corresponds to the JSON schema field "script_sha256".
+	ScriptSHA256 string `json:"script_sha256"`
+}
 
 type ViewStep string
 

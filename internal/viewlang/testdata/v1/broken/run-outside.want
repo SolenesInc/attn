@@ -1,0 +1,6 @@
+line 1: run= names "../tools/status.py", which is outside the view's folder
+fix: Put the files a command runs in the view's folder, and name them from there, such as "scripts/status.sh".
+line 1: run= names "/tmp/token", which is outside the view's folder
+fix: Put the files a command runs in the view's folder, and name them from there, such as "scripts/status.sh".
+
+data on line 1 shows the problem of line 1

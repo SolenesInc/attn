@@ -1,0 +1,4 @@
+line 1: every="500ms" reruns the command more often than once a second
+fix: Write every="1s" or longer.
+
+data on line 1 shows the problem of line 1

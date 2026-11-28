@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -37,6 +38,8 @@ type heldTileDocument struct {
 	err     error
 	// The draft generation an annotation change outside the app reached.
 	annotations int
+	// The profiles whose windows show it, whose started commands its machine runs.
+	profiles []string
 }
 
 type deliveredTileFile struct {
@@ -182,7 +185,7 @@ func (d *Daemon) deliverDesktopTileContent() {
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
 	connected := map[*wsClient]bool{}
-	shown := map[tileDocument]bool{}
+	shown := map[tileDocument][]string{}
 	for _, client := range clients {
 		connected[client] = true
 		d.deliverToClient(client, shown)
@@ -192,15 +195,22 @@ func (d *Daemon) deliverDesktopTileContent() {
 			delete(delivery.delivered, client)
 		}
 	}
-	for document := range delivery.documents {
-		if !shown[document] {
+	for document, held := range delivery.documents {
+		profiles, isShown := shown[document]
+		if !isShown {
 			delete(delivery.documents, document)
+			delivery.signalHostLocked(document.host)
+			continue
+		}
+		slices.Sort(profiles)
+		if profiles = slices.Compact(profiles); !slices.Equal(profiles, held.profiles) {
+			held.profiles = profiles
 			delivery.signalHostLocked(document.host)
 		}
 	}
 }
 
-func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument]bool) {
+func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument][]string) {
 	delivery := &d.desktopTiles
 	client.arrangementMu.Lock()
 	defer client.arrangementMu.Unlock()
@@ -208,7 +218,7 @@ func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument]bool) 
 	onShown := map[desktopTileKey]bool{}
 	for _, tile := range client.shownTiles {
 		onShown[tile.key] = true
-		shown[tile.document] = true
+		shown[tile.document] = append(shown[tile.document], client.selectedProfile())
 		held := delivery.documents[tile.document]
 		if held == nil {
 			held = d.holdTileDocumentLocked(tile.document)
@@ -270,7 +280,7 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 	delivery.watching[host] = watcher
 	for document, held := range delivery.documents {
 		if document.host == host {
-			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, view: held.view, answers: held.answers, err: held.err, annotations: held.annotations}
+			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, view: held.view, answers: held.answers, err: held.err, annotations: held.annotations, profiles: held.profiles}
 		}
 	}
 	delivery.mu.Unlock()
@@ -288,12 +298,15 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 	for {
 		delivery.mu.Lock()
 		message := protocol.TileDocumentsWatchMessage{Cmd: protocol.CmdTileDocumentsWatch, Documents: []string{}}
-		for document := range delivery.documents {
+		showing := map[string][]string{}
+		for document, held := range delivery.documents {
 			if document.host == host {
 				message.Documents = append(message.Documents, document.path)
+				showing[document.path] = held.profiles
 			}
 		}
 		delivery.mu.Unlock()
+		message.Started = d.startedViewCommands(host, showing)
 		if host != "" {
 			message.Host = protocol.Ptr(host)
 		}
@@ -314,6 +327,66 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 			return
 		}
 	}
+}
+
+// startedViewCommands is the commands the user started in the views on host
+// that windows show, in the profiles that show each.
+func (d *Daemon) startedViewCommands(host string, showing map[string][]string) []protocol.ViewStartedCommand {
+	var started []protocol.ViewStartedCommand
+	for path, profiles := range showing {
+		commands, err := d.store.StartedViewCommands(path, d.machineFor(host).ID(), profiles)
+		if err != nil {
+			d.logf("started commands of %s: %v", path, err)
+			continue
+		}
+		for _, command := range commands {
+			started = append(started, protocol.ViewStartedCommand{Path: path, Line: command.Line, ScriptSHA256: command.ScriptSHA256})
+		}
+	}
+	return started
+}
+
+// handleViewStart starts the commands of the view a tile shows, as the tile
+// was last sent them, in the profile of the tile's desktop.
+func (d *Daemon) handleViewStart(client *wsClient, msg *protocol.ViewStartMessage) {
+	if err := d.startView(msg.DesktopID, msg.TileID); err != nil {
+		d.logf("view_start %s on %s: %v", msg.TileID, msg.DesktopID, err)
+	}
+}
+
+func (d *Daemon) startView(desktopID, tileID string) error {
+	desktop, err := d.store.GetDesktop(desktopID)
+	if err != nil {
+		return err
+	}
+	tile, found := tileLeafByID(desktop.Tree, tileID)
+	if !found || tile.TileKind != string(layouttree.TileKindMarkdown) {
+		return fmt.Errorf("no markdown tile %s on desktop %s", tileID, desktopID)
+	}
+	document, err := d.markdownTileDocument(tile.TileParams)
+	if err != nil {
+		return err
+	}
+	delivery := &d.desktopTiles
+	delivery.mu.Lock()
+	held := delivery.documents[document]
+	var commands []store.StartedViewCommand
+	if held != nil && held.view != nil {
+		for _, command := range held.view.Commands {
+			commands = append(commands, store.StartedViewCommand{Line: command.Line, ScriptSHA256: command.ScriptSHA256})
+		}
+	}
+	delivery.mu.Unlock()
+	if len(commands) == 0 {
+		return fmt.Errorf("the tile shows no view with commands")
+	}
+	if err := d.store.StartViewCommands(desktop.ProfileID, document.path, d.machineFor(document.host).ID(), commands, time.Now()); err != nil {
+		return err
+	}
+	delivery.mu.Lock()
+	delivery.signalHostLocked(document.host)
+	delivery.mu.Unlock()
+	return nil
 }
 
 func callTileDocuments[R any](ctx context.Context, d *Daemon, conn *bridge.Conn, msg protocol.Placed) (R, error) {

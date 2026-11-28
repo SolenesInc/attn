@@ -146,15 +146,21 @@ func observeTileContent(path string, sig tileContentSig, now time.Time) (tileCon
 	return next, next.hasHash != sig.hasHash || next.hash != sig.hash
 }
 
-// openMarkdownTile answers the problems of a review document beside the tile,
-// so whoever opened it hears what `attn review check` would say.
-func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.SessionID, focus bool) (desktopID, tileID string, problems []protocol.ReviewProblem, err error) {
+// openedDocument is what whoever opened a document hears beside the tile: the
+// problems `attn review check` would report for a review document or a view,
+// and the commands a view waits for the user to start.
+type openedDocument struct {
+	problems []protocol.ReviewProblem
+	commands []protocol.ViewRunCommand
+}
+
+func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.SessionID, focus bool) (desktopID, tileID string, found openedDocument, err error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return "", "", nil, fmt.Errorf("path is required")
+		return "", "", found, fmt.Errorf("path is required")
 	}
 	if !filepath.IsAbs(path) {
-		return "", "", nil, fmt.Errorf("path must be absolute: %s", path)
+		return "", "", found, fmt.Errorf("path must be absolute: %s", path)
 	}
 	host = d.machineFor(host).Outpost()
 	document := tileDocument{host: host, path: filepath.Clean(path)}
@@ -164,17 +170,18 @@ func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.Se
 	}
 	opened, err := Call[protocol.TileDocument](d.life.Context(), d.router(), read)
 	if err != nil {
-		return "", "", nil, d.tileDocumentError(host, err)
+		return "", "", found, d.tileDocumentError(host, err)
 	}
 	switch {
 	case opened.Review != nil:
-		problems = opened.Review.Problems
+		found.problems = opened.Review.Problems
 	case opened.View != nil:
-		problems = openProblems(opened.View)
+		found.problems = openProblems(opened.View)
+		found.commands = opened.View.Commands
 	}
 	location, err := d.currentAgent(callerSessionID)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", found, err
 	}
 	d.openTileMu.Lock()
 	defer d.openTileMu.Unlock()
@@ -185,10 +192,10 @@ func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.Se
 		sessionID: location.sessionID,
 	}, focus)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", found, err
 	}
 	d.store.RecordFileActivity(store.FileActivity{Host: d.machineFor(host).ID(), Path: document.path, Source: store.FileActivitySourceOpened, SessionID: location.sessionID, At: time.Now()})
-	return desktop.ID, tileID, problems, nil
+	return desktop.ID, tileID, found, nil
 }
 
 func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID, standalone, focus bool, selectedProfile ...string) (desktopID, tileID string, err error) {
@@ -279,21 +286,21 @@ func (d *Daemon) openMarkdownFor(ctx context.Context, c command.Caller, path str
 	if origin, remote := OriginOf(ctx); remote {
 		host = origin.Host
 	}
-	_, _, problems, err := d.openMarkdownTile(host, path, c.Session, false)
+	_, _, found, err := d.openMarkdownTile(host, path, c.Session, false)
 	if err != nil {
 		return nil, fmt.Errorf("open_markdown: %w", err)
 	}
-	return protocol.OpenResult{Opened: filepath.Clean(path), Problems: problems}, nil
+	return protocol.OpenResult{Opened: filepath.Clean(path), Problems: found.problems, Commands: found.commands}, nil
 }
 
 func (d *Daemon) handleOpenMarkdown(ctx context.Context, conn net.Conn, msg *protocol.OpenMarkdownMessage) {
-	desktopID, tileID, problems, err := d.openMarkdownTile(markdownOpenHost(ctx, msg), msg.Path, protocol.Deref(msg.SessionID), false)
+	desktopID, tileID, found, err := d.openMarkdownTile(markdownOpenHost(ctx, msg), msg.Path, protocol.Deref(msg.SessionID), false)
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_markdown: %v", err))
 		return
 	}
 	d.logf("open_markdown: %s as %s on desktop %s", strings.TrimSpace(msg.Path), tileID, desktopID)
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, ReviewProblems: problems})
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, ReviewProblems: found.problems})
 }
 
 func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {

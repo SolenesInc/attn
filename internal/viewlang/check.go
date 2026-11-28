@@ -565,6 +565,12 @@ type shape struct {
 
 var unknown = &shape{}
 
+// ShortestEvery is the most often a run= command reruns. Starting a trivial
+// process costs 1.3 ms on ai-sandbox (100 in 132 ms, 2026-11-27), so a second
+// keeps attn's own cost near 0.1%; the outside service a command calls is the
+// real limiter, and the views reference tells agents its cost.
+const ShortestEvery = time.Second
+
 func object(name string) *shape { return &shape{known: true, name: name, fields: map[string]*shape{}} }
 
 func (c *checker) resolve(line int, segments []string, sc *shape) *shape {
@@ -1008,8 +1014,15 @@ func (c *checker) source(line int, part catalog.Part, args map[string]string) st
 	default:
 		c.report(line, "Give each source its own \":::data\" part.", "\":::data\" names %d sources: %s", len(given), strings.Join(given, ", "))
 	}
-	if _, ok := args["every"]; ok && len(given) == 1 && given[0] != "run" {
+	for _, word := range strings.Fields(args["run"]) {
+		if !filepath.IsLocal(word) {
+			c.report(line, "Put the files a command runs in the view's folder, and name them from there, such as \"scripts/status.sh\".", "run= names %q, which is outside the view's folder", word)
+		}
+	}
+	if every, ok := args["every"]; ok && len(given) == 1 && given[0] != "run" {
 		c.report(line, "Remove every=, or use run=.", "every= reruns a run= command, and this part has none")
+	} else if d, err := time.ParseDuration(every); ok && err == nil && d > 0 && d < ShortestEvery {
+		c.report(line, "Write every=\"1s\" or longer.", "every=%q reruns the command more often than once a second", every)
 	}
 	if name := args["as"]; name != "" {
 		return name

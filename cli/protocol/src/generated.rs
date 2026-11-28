@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "d13822e32af3";
+pub const PROTOCOL_VERSION: &str = "7cf6c9980182";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -7639,6 +7639,8 @@ impl OpenMarkdownResultMessage {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OpenResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commands: Option<Vec<ViewRunCommand>>,
     pub opened: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub problems: Option<Vec<ReviewProblem>>,
@@ -13537,6 +13539,8 @@ pub struct TileDocumentsWatchMessage {
     pub documents: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started: Option<Vec<ViewStartedCommand>>,
 }
 
 impl TileDocumentsWatchMessage {
@@ -13948,6 +13952,8 @@ pub struct ViewCommandCall {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewDocument {
+    #[serde(deserialize_with = "null_as_default")]
+    pub commands: Vec<ViewRunCommand>,
     pub language: i64,
     #[serde(deserialize_with = "null_as_default")]
     pub parts: Vec<ViewPart>,
@@ -14203,6 +14209,17 @@ pub struct ViewResponsesWritten {
     pub path: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewRunCommand {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub every: Option<String>,
+    pub line: String,
+    pub script_sha256: String,
+    pub state: ViewRunState,
+}
+pub type ViewRunState = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewSendMessage {
     pub cmd: String,
     pub desktop_id: String,
@@ -14258,6 +14275,28 @@ pub struct ViewSource {
 }
 pub type ViewSourceKind = String;
 pub type ViewSourceState = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewStartMessage {
+    pub cmd: String,
+    pub desktop_id: String,
+    pub tile_id: String,
+}
+
+impl ViewStartMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "view_start".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewStartedCommand {
+    pub line: String,
+    pub path: String,
+    pub script_sha256: String,
+}
 pub type ViewStep = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewStoreField {

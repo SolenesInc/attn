@@ -92,15 +92,9 @@ func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocument
 	w := &d.tileDocuments
 	now := time.Now()
 	kinds := d.documentKinds()
-	var unlisted map[string]bool
-	answer := protocol.TileDocumentVersions{Documents: make([]protocol.TileDocumentVersion, 0, len(msg.Documents))}
+	d.viewRuns.setStarted(msg.Started)
 	w.mu.Lock()
 	listed := make(map[string]*watchedTileDocument, len(msg.Documents))
-	defer func() {
-		for path := range unlisted {
-			d.releaseCodeNavigation(path)
-		}
-	}()
 	for _, path := range msg.Documents {
 		doc := w.watched[path]
 		if doc == nil {
@@ -109,16 +103,30 @@ func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocument
 			doc.watchShown(path, kinds, now)
 		}
 		listed[path] = doc
-		answer.Documents = append(answer.Documents, protocol.TileDocumentVersion{Path: path, Version: doc.version})
 	}
-	unlisted = map[string]bool{}
+	var unlisted []string
 	for path := range w.watched {
 		if listed[path] == nil {
-			unlisted[path] = true
+			unlisted = append(unlisted, path)
 		}
 	}
 	w.watched = listed
 	w.mu.Unlock()
+	for _, path := range unlisted {
+		d.releaseCodeNavigation(path)
+		d.followViewRuns(path)
+	}
+	var changed []string
+	for _, path := range msg.Documents {
+		if d.followViewRuns(path) {
+			changed = append(changed, path)
+		}
+	}
+	w.bump(changed)
+	answer := protocol.TileDocumentVersions{Documents: make([]protocol.TileDocumentVersion, 0, len(msg.Documents))}
+	for _, path := range msg.Documents {
+		answer.Documents = append(answer.Documents, protocol.TileDocumentVersion{Path: path, Version: w.version(path)})
+	}
 	select {
 	case w.wake <- struct{}{}:
 	default:
@@ -213,7 +221,11 @@ func (d *Daemon) runTileDocumentWatcher(done <-chan struct{}) {
 			continue
 		case <-ticker.C:
 		}
-		d.reportTileDocuments(w.observe(d.documentKinds(), time.Now()))
+		changed := w.observe(d.documentKinds(), time.Now())
+		for _, document := range changed {
+			d.followViewRuns(document.Path)
+		}
+		d.reportTileDocuments(changed)
 	}
 }
 
@@ -234,7 +246,7 @@ func (d *Daemon) readTileDocument(ctx context.Context, msg protocol.TileDocument
 	kinds := d.documentKinds()
 	if kinds.view && viewlang.IsView(content) {
 		d.releaseCodeNavigation(msg.Path)
-		answer.View = readView(msg.Path, content)
+		answer.View = d.readView(msg.Path, content)
 		return answer, nil
 	}
 	if !kinds.review || !review.IsReview(content) {

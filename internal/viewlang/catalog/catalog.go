@@ -140,8 +140,8 @@ var Parts = []Part{
 	{Name: "compare", Colons: 3, Summary: "Two media lines side by side, or one flipped over the other.", Body: MediaPairBody, Keys: "f flips", Example: "compare.md"},
 	{Name: "data", Colons: 3, Summary: "Names one source of the view's values. It draws nothing.", Args: []Arg{
 		{Name: "attn", Kind: ChoiceArg, Source: true, Choices: dataSetNames(), Placeholder: "data set", Doc: "one of attn's own data sets"},
-		{Name: "run", Kind: TextArg, Source: true, Placeholder: "program and arguments", Doc: "a program and its arguments that prints one JSON object. attn runs it in the view's folder, never through a shell"},
-		{Name: "every", Kind: DurationArg, Placeholder: "duration", Doc: "how often attn reruns `run`, such as 30s or 10m"},
+		{Name: "run", Kind: TextArg, Source: true, Placeholder: "program and arguments", Doc: "a program and its arguments that prints one JSON object. attn runs it in the view's folder, never through a shell. Name the files it runs from the view's folder, such as `scripts/status.sh`"},
+		{Name: "every", Kind: DurationArg, Placeholder: "duration", Doc: "how often attn reruns `run`, such as 30s or 10m, and at most once a second. Without it, attn runs the command once each time the view is shown"},
 		{Name: "file", Kind: FileArg, Source: true, Doc: "a JSON or JSON Lines file in the view's folder"},
 		{Name: "store", Kind: TextArg, Source: true, Doc: "the name of a store: values a kept view owns. Its body lists the store's fields, one `name: type` per line, and its values appear under the store's name. `store=\"view/set\"` shows another kept view's store and takes no body"},
 		{Name: "as", Kind: TextArg, Placeholder: "field", Doc: "the field the values appear under"},

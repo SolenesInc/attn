@@ -37,11 +37,12 @@ func (d *Daemon) storedViewTileParams(view string) (string, error) {
 }
 
 // readView checks the view at path, whose text is content, and reads the
-// values of the files it names from its folder.
-func readView(path, content string) *protocol.ViewDocument {
+// values of the files it names from its folder and of its commands' last runs.
+func (d *Daemon) readView(path, content string) *protocol.ViewDocument {
 	checked := viewlang.Check(content)
-	sources, values := viewSources(filepath.Dir(path), checked.Parts)
-	return &protocol.ViewDocument{Language: checked.Language, Parts: checked.Parts, Problems: checked.Problems, Sources: sources, Values: values}
+	commands := viewCommands(checked.Parts)
+	sources, values := d.viewSources(path, checked.Parts, commands)
+	return &protocol.ViewDocument{Language: checked.Language, Parts: checked.Parts, Problems: checked.Problems, Sources: sources, Values: values, Commands: d.viewRunCommands(path, commands)}
 }
 
 // viewFiles is the files the view at path shows besides itself.

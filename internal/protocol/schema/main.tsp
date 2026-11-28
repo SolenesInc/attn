@@ -3966,6 +3966,17 @@ model TileDocumentsWatchMessage {
   cmd: "tile_documents_watch";
   host?: string;
   documents: string[];
+  // The commands of the views among documents that the user started, so the
+  // machine runs them while the documents stay listed.
+  started?: ViewStartedCommand[];
+}
+
+// A command of the view at path that the user started: its line, and the
+// sha256 of the files of the view's folder that the line names.
+model ViewStartedCommand {
+  path: string;
+  line: string;
+  script_sha256: string;
 }
 
 model TileDocumentVersion {
@@ -4020,6 +4031,33 @@ model ViewDocument {
   problems: ViewProblem[];
   sources: ViewSource[];
   values: ViewValues[];
+  // The commands the view runs, which run only once the user starts them.
+  commands: ViewRunCommand[];
+}
+
+// A run= command of a view, as the user sees it before and after starting it.
+model ViewRunCommand {
+  line: string;
+  every?: string;
+  // The sha256 of the files of the view's folder that the line names, which
+  // view_start records.
+  script_sha256: string;
+  state: ViewRunState;
+  // What changed since the user started it, while state is changed.
+  change?: string;
+}
+
+enum ViewRunState {
+  waiting,
+  started,
+  changed,
+}
+
+// The user's key on a view's tile: starts the commands the tile was last sent.
+model ViewStartMessage {
+  cmd: "view_start";
+  desktop_id: string;
+  tile_id: string;
 }
 
 // One place a view's values come from. A file's id is its path from the
@@ -4046,6 +4084,12 @@ enum ViewSourceState {
   ok,
   failed,
   unavailable,
+  // A command the user has not started, which has no values yet.
+  waiting,
+  // A command's first run since it started, before it has values.
+  running,
+  // A command that stopped, whose last values are kept.
+  out_of_date,
 }
 
 model ViewValues {
@@ -4247,6 +4291,8 @@ model ReviewNavigation {
 model OpenResult {
   opened: string;
   problems?: ReviewProblem[];
+  // A view's commands, which wait for the user to start them on the tile.
+  commands?: ViewRunCommand[];
 }
 
 model ReviewProblem {

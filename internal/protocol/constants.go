@@ -324,6 +324,7 @@ const (
 	CmdDesktopBringBackLeaf = "desktop_bring_back_leaf"
 	CmdDesktopDockTile      = "desktop_dock_tile"
 	CmdDesktopUpdateTile    = "desktop_update_tile"
+	CmdViewStart            = "view_start"
 )
 
 const (

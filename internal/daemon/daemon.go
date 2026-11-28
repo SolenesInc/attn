@@ -289,6 +289,7 @@ type Daemon struct {
 
 	desktopTiles   desktopTileDelivery
 	tileDocuments  tileDocumentWatch
+	viewRuns       viewRuns
 	codeNav        *codenav.Manager
 	codeNavOutside codeNavOutside
 	codeNavSetups  codeNavSetups
@@ -529,6 +530,7 @@ func New(socketPath string) *Daemon {
 		startedAt:           time.Now(),
 		desktopTiles:        newDesktopTileDelivery(),
 		tileDocuments:       newTileDocumentWatch(),
+		viewRuns:            newViewRuns(),
 		logger:              logger,
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
