@@ -6,6 +6,147 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 
 ---
 
+## [2026-11-28]
+
+### Added
+- **A fork shows a notice that opens its original beside it.** After Codex
+  `/fork`, Sigma `/fork` or Claude Code `/branch`, attn still follows the
+  harness to the new conversation. The fork's tile now reads "Forked from
+  …" and offers **Open original beside this**. The original then opens in
+  the next column with the keyboard in it. Dismiss the notice and it is gone
+  from every window, including after an app restart. The palette offers both
+  actions for the active tile. `/new`, `/clear`, `/resume`, Codex `/side` and
+  Claude's background `/fork` leave no notice.
+- **An ask's commands open in a terminal beside the question.** Each shell
+  code block in an ask now has **Open in terminal**, or `t` for the first
+  one, and shows the machine and folder it runs in. This includes blocks
+  inside lists and quotes. The command arrives typed but not run, and a block
+  of several lines keeps its lines when the shell supports bracketed paste.
+  While a command runs, Send reads **Send and stop**. **Move to desktop**
+  gives the shell a tile of its own. When the ask closes, its shells end. On
+  the phone, each command shows **Copy** and where it runs. Agents now offer
+  commands this way.
+- **Asks fill the window, with a panel for what an ask links to.** Asks now
+  opens under the title bar like the Notebook. A seed or markdown file that
+  an ask links to opens in a tab beside the question, read from the machine
+  the link names. On macOS, web pages open there too. The tabs look like the
+  shelf. ⌘⇧] and ⌘⇧[ move between them, and ⌘W closes one. Holding ⌘L
+  (Ctrl+Shift+L on Linux) labels the ask's files, links and commands as well
+  as its ids.
+- **Seed tiles and the Garden read with vim keys, and seeds have find.**
+  A seed tile takes the same reading keys as a markdown tile. Its find bar
+  (`/` in vim mode, ⌘F always) searches the seed's plan. In the Garden, j, k,
+  gg and G walk the list, `/` goes to search, and l or Enter hands the keys to
+  the open seed. Your saved shortcuts still win over vim keys.
+- **Open the agent's stake from the command palette.** While the agent on
+  screen has a stake, the palette offers "Open <agent>'s stake". It opens the
+  seed in a tile beside the agent with the keyboard in it, or focuses the
+  tile already open.
+- **Cycle profiles by holding ⌘⇧ and tapping U.** It works like ⌘Tab: each U
+  moves to the next profile, and letting go switches to it. Escape cancels.
+  It also works from a popped-out tile. On Linux the chord is Ctrl+Alt+U.
+- **Experimental: run the home on another machine.** Behind **Remote home**
+  in Settings → Experimental, a machine without sshd, such as a laptop, can
+  join a home with `attn enrollment join`. Its app then reaches the home
+  through its own daemon. That machine's own terminals stay fast and usable
+  while the home is away. Opening files and folders works on the right
+  machine. Installing a build updates the home and its outposts. `attn home
+  move`, or **Move home here** in Settings → Machines, moves the home role to
+  a connected outpost without losing anything, and `attn home rollback` undoes
+  it.
+- **Experimental: show Sessions, Pull requests or attn's line in a tile.**
+  Behind `views_enabled`, the palette puts any of Home's three views on the
+  current desktop. Every control works there as it does on Home.
+
+### Changed
+- **The desktop sidebar is quieter, and automations gather in one place.**
+  Crew members are compact pills and empty desktops fold away. The desktop an
+  automation or crew member launches into by default is now temporary. attn
+  removes it shortly after it empties, unless you named it, gave it a slot or
+  shared it. Automation runs, with the agents they delegate to and the shells
+  they split, sit together under one Automations section. Finished runs fold
+  behind a disclosure. Runs on an outpost that is offline stay visible but
+  are skipped when you jump to the next waiting run. Queue flow uses the same
+  Crew pills and flat Automations list.
+- **Review documents take vim keys, and code navigation moved to gd, gr and
+  K.** j/k, h/l, [[/]], Ctrl-d/Ctrl-u, gg/G and V now work in a review
+  whether or not vim mode is on. Arrow, page, Home and End keys do the same
+  things. Code navigation moved from f, r and h to gd, gr and K, so h and l
+  are free to step. ⌘, Ctrl and Alt arrows reach the app's shortcuts again.
+- **Settings → Outposts is now Settings → Machines.** It lists the home's
+  machine, this machine and each outpost, with one status line each. Only the
+  chosen row shows its buttons. U updates it and D opens its details.
+- **A machine name means the same thing everywhere.** `--host`, `delegate
+  --host`, bed repo paths and the launcher all read names the same way. Case
+  doesn't matter, an id works, and `home` always means the home. A name two
+  machines share is refused, and the error lists both ids. Adding or joining
+  a machine refuses `home` and names already taken. `attn enrollment join
+  --name` gets you past a taken hostname.
+- **The tile follows Claude Code's `/branch` right away.** The branch takes
+  the tile as soon as `/branch` runs. The original closes into the Ledger
+  with its history. `/resume` back brings it into the tile again.
+- **Seed search answers with short rows.** Search results and similar-seed
+  lists no longer carry each seed's full body. An agent searching a large
+  garden used to get nothing back because the result was too big. `attn seed
+  search` prints the same as before.
+
+### Fixed
+- **Reloading a terminal no longer ends it when the shared terminal host is
+  missing.** A reload, the context-cap reload and a shared Codex restart now
+  check for a usable host before stopping anything. If there is none, attn
+  refuses with how to fix it, and the terminal or Codex server keeps running.
+- **Removing an outpost stops it promptly.** Notebook sync stopped slowly
+  while a large Notebook was still syncing. Remove then gave up with "could
+  not stop it over ssh" and left the outpost's daemon running.
+- **An outpost's Notebook sync state stays current.** `notebook_sync_state`
+  on an outpost could stay at `first_sync` or `syncing` long after the home
+  counted it in sync. The outpost row could also say "in sync" while the
+  machine was disconnected.
+- **The Garden keeps closed history current and keeps your place.** Archived
+  pages refresh when the garden changes, and the reader stays where it was
+  through a refresh. Folded plot lanes count only their direct children.
+  Crew's planted-seed rows stay up to date, and open archived seed previews
+  show edits.
+- **Markdown find opens folded sections to show a match.** A match inside a
+  collapsed details block is revealed before attn scrolls to it. Saved
+  shortcuts now win over Markdown vim keys.
+- **The palette from a popped-out tile acts on that tile.** Entries such as
+  Mark as priority and Pop out tile used to act on the main window's active
+  tile instead.
+- **A new editor tile's finder keeps the keyboard.** When the app was slow to
+  hear back, opening an editor tile could leave its finder open but deaf to
+  typing and Escape.
+- **Dragging a desktop in the sidebar keeps folded desktops in their order.**
+  The Chief's session also stays reachable while its settings save.
+- **An outpost session's transcript stays readable after it closes.** Codex
+  could archive the transcript between attn finding it and reading it,
+  leaving "The target transcript is unavailable".
+- **A CLI older than its daemon says the command ran.** When the CLI can't
+  read a successful reply, it now says the change was made and that its
+  protocol is out of date. Before, it printed a decode error, and retrying
+  `seed plant` planted a duplicate.
+
+### Removed
+- **attn runs every terminal in the shared terminal host.** Before updating,
+  close any terminal still running in a dedicated worker. If you're unsure
+  where a terminal runs, close it before updating. On v0.15.0, you can move
+  an open agent session to the shared host by reloading it before you update.
+  First turn on **Shared terminal host** in **Settings → Agents and models**.
+  Run `attn settings get pty_shared_host_active` on the machine where the
+  session runs, and reload the session once it prints `true`. If you already
+  updated with a terminal still in a dedicated worker, the old program may
+  still be running. End it before recovering the session, or two agents will
+  run on the same conversation. The **Shared terminal host** switch is gone.
+  On a machine without the host, a new terminal fails with how to get it.
+- **The Direct agent launches setting is gone.** Every agent now starts
+  directly as its harness's own command. Agents a previous release started
+  keep running, and reloading one starts it directly. `attn -s` typed in a
+  shell still opens the app.
+
+<!-- changelog-commits: 639d8c06c18276edfce9bd712bd394f628f49a25..9cc02060889ca1d19a5912a0c5adbeccfb333845 -->
+
+---
+
 ## [2026-11-26]
 
 ### Added
