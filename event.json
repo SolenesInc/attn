@@ -1,0 +1,13 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "CLI parsed file-path flags (seed plot -f, automation run --input-file) as JSON",
+  "at": "2026-11-28T06:12:00.252Z",
+  "severity": "p1",
+  "source": "agent",
+  "location": {
+    "path": "cli/attn/src/command/mod.rs",
+    "line": 637
+  },
+  "culprit": "afbb46e6b30c3574bf3824f1f7b023a60ca6245e"
+}
