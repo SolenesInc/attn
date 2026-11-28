@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,49 @@ func (d *Daemon) viewAnswersKey(document tileDocument) store.HostPath {
 	return store.HostPath{Host: d.machineFor(document.host).ID(), Path: document.path}
 }
 
+// viewFilesOwner owns the files the user gives the view at key: the view
+// itself, as its drafts are keyed.
+func viewFilesOwner(key store.HostPath) protocol.AttachmentOwner {
+	return protocol.AttachmentOwner{Kind: protocol.AttachmentOwnerKindView, ID: key.Host + ":" + key.Path}
+}
+
+// viewAnswers is what the user answered the view in document, with the files
+// the answers give.
+func (d *Daemon) viewAnswers(document tileDocument) (protocol.ViewAnswers, error) {
+	key := d.viewAnswersKey(document)
+	answers, err := d.store.ViewAnswers(key)
+	if err != nil {
+		return answers, err
+	}
+	answers.Owner = viewFilesOwner(key)
+	answers.Files = []protocol.Attachment{}
+	for _, draft := range answers.Drafts {
+		for _, id := range draft.Attachments {
+			a, err := d.store.Attachment(id)
+			if err != nil {
+				return answers, err
+			}
+			if a != nil && a.Owner == answers.Owner {
+				answers.Files = append(answers.Files, a.Attachment)
+			}
+		}
+	}
+	return answers, nil
+}
+
+// showsViewOwning says whether a tile shows the view whose files owner owns.
+func (d *Daemon) showsViewOwning(owner protocol.AttachmentOwner) bool {
+	delivery := &d.desktopTiles
+	delivery.mu.Lock()
+	defer delivery.mu.Unlock()
+	for document, held := range delivery.documents {
+		if held.view != nil && viewFilesOwner(d.viewAnswersKey(document)) == owner {
+			return true
+		}
+	}
+	return false
+}
+
 func (d *Daemon) handleViewAnswer(client *wsClient, msg *protocol.ViewAnswerMessage) {
 	result := protocol.ViewAnswerResultMessage{Event: protocol.EventViewAnswerResult, RequestID: msg.RequestID}
 	if err := d.answerView(client.selectedProfile(), msg); err != nil {
@@ -65,16 +109,71 @@ func (d *Daemon) answerView(profileID string, msg *protocol.ViewAnswerMessage) e
 	if msg.Answer.Step != nil && msg.Answer.Row == nil {
 		return errors.New("a step is on a row: name it")
 	}
-	if err := d.store.SaveViewAnswer(d.viewAnswersKey(tile.document), msg.Answer); err != nil {
+	key := d.viewAnswersKey(tile.document)
+	if err := d.checkViewFiles(profileID, viewFilesOwner(key), msg.Answer.Attachments); err != nil {
 		return err
+	}
+	before, err := d.store.ViewAnswers(key)
+	if err != nil {
+		return err
+	}
+	if err := d.store.SaveViewAnswer(key, msg.Answer); err != nil {
+		return err
+	}
+	for _, draft := range before.Drafts {
+		if protocol.Deref(draft.Row) == protocol.Deref(msg.Answer.Row) && protocol.Deref(draft.Part) == protocol.Deref(msg.Answer.Part) {
+			d.discardViewFiles(draft.Attachments, msg.Answer.Attachments)
+		}
 	}
 	d.viewAnswersChanged(tile.document)
 	return nil
 }
 
+// checkViewFiles refuses an answer whose files were not uploaded, whole, for
+// the view owner owns.
+func (d *Daemon) checkViewFiles(profileID string, owner protocol.AttachmentOwner, ids []string) error {
+	for _, id := range ids {
+		a, err := d.store.Attachment(id)
+		if err != nil {
+			return err
+		}
+		if a == nil || a.ProfileID != profileID || a.Owner != owner {
+			return fmt.Errorf("attachment %s was not uploaded for this view", id)
+		}
+		if a.State != store.AttachmentReady && a.State != store.AttachmentCommitted {
+			return fmt.Errorf("attachment %s (%q) is %s, expected ready", id, a.Attachment.Name, a.State)
+		}
+	}
+	return nil
+}
+
+// discardViewFiles forgets the files of an answer the user replaced that the
+// new answer does not keep, unless a send already gave them to the agent.
+func (d *Daemon) discardViewFiles(replaced, kept []string) {
+	d.attachmentMu.Lock()
+	defer d.attachmentMu.Unlock()
+	for _, id := range replaced {
+		if slices.Contains(kept, id) {
+			continue
+		}
+		a, err := d.store.Attachment(id)
+		if err != nil || a == nil || a.State == store.AttachmentCommitted {
+			continue
+		}
+		a.State = store.AttachmentDiscarded
+		if err := d.store.SaveAttachment(*a); err != nil && !errors.Is(err, store.ErrAttachmentNotSaved) {
+			d.logf("view answers: discarding the file %s: %v", id, err)
+			continue
+		}
+		if err := d.removeAttachmentFiles(*a); err != nil {
+			d.logf("view answers: removing the file %s: %v", id, err)
+		}
+	}
+}
+
 // viewAnswersChanged gives the tiles that show document its answers again.
 func (d *Daemon) viewAnswersChanged(document tileDocument) {
-	answers, err := d.store.ViewAnswers(d.viewAnswersKey(document))
+	answers, err := d.viewAnswers(document)
 	if err != nil {
 		d.logf("view answers of %s: %v", document.path, err)
 		return
@@ -123,12 +222,15 @@ func (d *Daemon) sendView(profileID string, msg *protocol.ViewSendMessage) (prot
 		return protocol.ViewSent{}, fmt.Errorf("%s is not shown as a view, so there is nothing to send", tile.document.path)
 	}
 	key := d.viewAnswersKey(tile.document)
-	answers, err := d.store.ViewAnswers(key)
+	answers, err := d.viewAnswers(tile.document)
 	if err != nil {
 		return protocol.ViewSent{}, err
 	}
+	if err := d.store.CommitViewFiles(answers.Owner, answers.Files); err != nil {
+		return protocol.ViewSent{}, err
+	}
 	now := time.Now().UTC()
-	responses, summary := viewResponses(tile.document.path, view, answers.Drafts, now)
+	responses, summary := viewResponses(tile.document.path, view, answers, now)
 	encoded, err := json.MarshalIndent(responses, "", "  ")
 	if err != nil {
 		return protocol.ViewSent{}, err
@@ -217,6 +319,7 @@ type viewQuestions map[string]viewQuestion
 
 type viewQuestion struct {
 	several bool
+	files   bool
 	// valued is a question-text with a Value:, which the user may change.
 	valued bool
 }
@@ -231,6 +334,8 @@ func questionsAmong(parts []protocol.ViewPart) viewQuestions {
 			questions[part.QuestionMulti.Name] = viewQuestion{several: true}
 		case part.QuestionText != nil:
 			questions[part.QuestionText.Name] = viewQuestion{valued: part.QuestionText.Value != nil}
+		case part.QuestionFile != nil:
+			questions[part.QuestionFile.Name] = viewQuestion{files: true}
 		}
 	}
 	return questions
@@ -238,7 +343,11 @@ func questionsAmong(parts []protocol.ViewPart) viewQuestions {
 
 // viewResponses joins the user's answers to the view at path into its
 // responses file, and says in one clause what the user did.
-func viewResponses(path string, view *protocol.ViewDocument, drafts []protocol.ViewAnswer, now time.Time) (viewResponsesFile, string) {
+func viewResponses(path string, view *protocol.ViewDocument, answers protocol.ViewAnswers, now time.Time) (viewResponsesFile, string) {
+	files := map[string]protocol.Attachment{}
+	for _, file := range answers.Files {
+		files[file.ID] = file
+	}
 	responses := viewResponsesFile{View: viewTitle(path, view), Path: path, SentAt: now.Format(time.RFC3339), Answers: map[string]any{}, Rows: map[string]*viewResponseRow{}}
 	var rows []viewRow
 	viewRows(view.Parts, newViewScope(view), &rows)
@@ -250,7 +359,7 @@ func viewResponses(path string, view *protocol.ViewDocument, drafts []protocol.V
 	steps := map[string]protocol.ViewStep{}
 	changedRows := map[string]bool{}
 	topAnswers := 0
-	for _, draft := range drafts {
+	for _, draft := range answers.Drafts {
 		row := protocol.Deref(draft.Row)
 		questions := top
 		if row != "" {
@@ -270,14 +379,14 @@ func viewResponses(path string, view *protocol.ViewDocument, drafts []protocol.V
 			continue
 		}
 		if row == "" {
-			responses.Answers[part] = viewAnswerValue(draft, question)
+			responses.Answers[part] = viewAnswerValue(draft, question, files)
 			topAnswers++
 			continue
 		}
 		if responses.Rows[row] == nil {
 			responses.Rows[row] = &viewResponseRow{Answers: map[string]any{}}
 		}
-		responses.Rows[row].Answers[part] = viewAnswerValue(draft, question)
+		responses.Rows[row].Answers[part] = viewAnswerValue(draft, question, files)
 		if question.valued && draft.Text != nil {
 			changedRows[row] = true
 		}
@@ -341,9 +450,18 @@ func countOf(n int, one, many string) string {
 }
 
 // viewAnswerValue is how the responses file says an answer: the picked label
-// of a choice question, the list of labels of a question-multi, or the text.
-func viewAnswerValue(answer protocol.ViewAnswer, question viewQuestion) any {
+// of a choice question, the list of labels of a question-multi, the text, or
+// for a question-file the line that retrieves each file.
+func viewAnswerValue(answer protocol.ViewAnswer, question viewQuestion, files map[string]protocol.Attachment) any {
 	switch {
+	case question.files:
+		lines := []string{}
+		for _, id := range answer.Attachments {
+			if file, held := files[id]; held {
+				lines = append(lines, strings.TrimSpace(inbox.FileLines([]protocol.Attachment{file})))
+			}
+		}
+		return lines
 	case answer.Text != nil:
 		return *answer.Text
 	case question.several:

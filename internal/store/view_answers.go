@@ -53,7 +53,7 @@ func (s *Store) SaveViewAnswer(view HostPath, answer protocol.ViewAnswer) error 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	row, part := protocol.Deref(answer.Row), protocol.Deref(answer.Part)
-	if answer.Picked == nil && answer.Text == nil && answer.Step == nil {
+	if answer.Picked == nil && answer.Text == nil && answer.Attachments == nil && answer.Step == nil {
 		_, err := s.db.Exec("DELETE FROM view_drafts WHERE host = ? AND path = ? AND row = ? AND part = ?", view.Host, view.Path, row, part)
 		return err
 	}
@@ -65,6 +65,19 @@ func (s *Store) SaveViewAnswer(view HostPath, answer protocol.ViewAnswer) error 
 		ON CONFLICT (host, path, row, part) DO UPDATE SET answer_json = excluded.answer_json`,
 		view.Host, view.Path, row, part, string(encoded))
 	return err
+}
+
+// CommitViewFiles marks the files a send gives the agent as sent, so a later
+// answer that replaces them no longer removes them.
+func (s *Store) CommitViewFiles(owner protocol.AttachmentOwner, files []protocol.Attachment) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, file := range files {
+		if _, err := s.db.Exec("UPDATE attachments SET state = 'committed' WHERE attachment_id = ? AND owner_kind = ? AND owner_id = ? AND state = 'ready'", file.ID, owner.Kind, owner.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // RecordViewSent keeps when the user last sent the view's answers.

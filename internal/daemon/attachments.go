@@ -110,6 +110,11 @@ func (d *Daemon) checkAttachmentOwner(profileID string, owner protocol.Attachmen
 			return errAskGone
 		}
 		return nil
+	case protocol.AttachmentOwnerKindView:
+		if !d.showsViewOwning(owner) {
+			return fmt.Errorf("no tile shows the view %s", owner.ID)
+		}
+		return nil
 	}
 	return fmt.Errorf("unknown attachment owner kind %q", owner.Kind)
 }

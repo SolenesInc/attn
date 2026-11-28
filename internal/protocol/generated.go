@@ -1253,6 +1253,7 @@ type AttachmentOwnerKind string
 
 const AttachmentOwnerKindAsk AttachmentOwnerKind = "ask"
 const AttachmentOwnerKindQuickCapture AttachmentOwnerKind = "quick_capture"
+const AttachmentOwnerKindView AttachmentOwnerKind = "view"
 
 type AttachmentPutMessage struct {
 	// AttachmentID corresponds to the JSON schema field "attachment_id".
@@ -15742,6 +15743,9 @@ type VentsUpdatedMessage struct {
 }
 
 type ViewAnswer struct {
+	// Attachments corresponds to the JSON schema field "attachments".
+	Attachments []string `json:"attachments,omitempty,omitzero"`
+
 	// Part corresponds to the JSON schema field "part".
 	Part *string `json:"part,omitempty,omitzero"`
 
@@ -15792,6 +15796,12 @@ type ViewAnswerResultMessage struct {
 type ViewAnswers struct {
 	// Drafts corresponds to the JSON schema field "drafts".
 	Drafts []ViewAnswer `json:"drafts"`
+
+	// Files corresponds to the JSON schema field "files".
+	Files []Attachment `json:"files"`
+
+	// Owner corresponds to the JSON schema field "owner".
+	Owner AttachmentOwner `json:"owner"`
 
 	// Sent corresponds to the JSON schema field "sent".
 	Sent *ViewSent `json:"sent,omitempty,omitzero"`

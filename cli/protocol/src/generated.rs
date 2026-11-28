@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "cf31e8d41b92";
+pub const PROTOCOL_VERSION: &str = "5ae515ca0565";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -13903,6 +13903,8 @@ impl VentsUpdatedMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewAnswer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub picked: Option<Vec<String>>,
@@ -13953,6 +13955,9 @@ impl ViewAnswerResultMessage {
 pub struct ViewAnswers {
     #[serde(deserialize_with = "null_as_default")]
     pub drafts: Vec<ViewAnswer>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub files: Vec<Attachment>,
+    pub owner: AttachmentOwner,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sent: Option<ViewSent>,
 }

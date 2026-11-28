@@ -456,7 +456,7 @@ func (d *Daemon) readStaleTileDocumentLocked(document tileDocument, held *heldTi
 		}
 		var answers *protocol.ViewAnswers
 		if answer.View != nil {
-			if read, readErr := d.store.ViewAnswers(d.viewAnswersKey(document)); readErr != nil {
+			if read, readErr := d.viewAnswers(document); readErr != nil {
 				d.logf("view answers of %s: %v", document.path, readErr)
 			} else {
 				answers = &read

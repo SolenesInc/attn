@@ -1087,7 +1087,7 @@ model QuickCaptureResult {
   record?: QuickCaptureRecord;
   list?: QuickCaptureListResult;
 }
-enum AttachmentOwnerKind { quick_capture, ask }
+enum AttachmentOwnerKind { quick_capture, ask, view }
 model AttachmentOwner {
   kind: AttachmentOwnerKind;
   id: string;
@@ -4122,6 +4122,8 @@ model ViewAnswer {
   row?: string;
   picked?: string[];
   text?: string;
+  // The files the user gave a question-file, by attachment id.
+  attachments?: string[];
   step?: ViewStep;
 }
 
@@ -4133,6 +4135,10 @@ enum ViewStep {
 model ViewAnswers {
   drafts: ViewAnswer[];
   sent?: ViewSent;
+  // The owner a file given to the view uploads as.
+  owner: AttachmentOwner;
+  // The files the drafts give, as the home holds them.
+  files: Attachment[];
 }
 
 // The last time the user sent a view's answers. told is false when the agent
