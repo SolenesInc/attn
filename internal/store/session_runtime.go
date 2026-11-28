@@ -27,6 +27,8 @@ type SessionRuntimeState struct {
 	ConversationNativeID       string
 	ConversationTranscriptPath string
 	ServerCompletion           int64
+	Background                 string
+	NotificationStop           bool
 }
 
 func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeState) bool {
@@ -87,6 +89,8 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 		records.ConversationNativeID = state.ConversationNativeID
 		records.ConversationTranscriptPath = state.ConversationTranscriptPath
 		records.ServerCompletion = state.ServerCompletion
+		records.Background = state.Background
+		records.NotificationStop = state.NotificationStop
 		s.runtimeRecords[id] = records
 		return true
 	}
@@ -101,8 +105,8 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 	result, err := s.db.Exec(`INSERT INTO session_runtime (session_id, state, state_since, state_updated_at,
 		turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, turn_requested_at, turn_capture_at, last_model_request_at,
 		agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_metadata, agent_driver_transcript_path, agent_driver_route,
-		branch, is_worktree, main_repo, repository, repository_origin, harness_title, last_seen, pull_requests, conversation_native_id, conversation_transcript_path, home_id, agent, live, server_completion)
-		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, copied_from, agent, ?, ?
+		branch, is_worktree, main_repo, repository, repository_origin, harness_title, last_seen, pull_requests, conversation_native_id, conversation_transcript_path, home_id, agent, live, server_completion, background, notification_stop)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, copied_from, agent, ?, ?, ?, ?
 		FROM sessions
 		WHERE id = ? AND closed_at = ''
 		ON CONFLICT (session_id) DO UPDATE SET state = excluded.state, state_since = excluded.state_since, state_updated_at = excluded.state_updated_at,
@@ -115,11 +119,11 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 		last_seen = CASE WHEN excluded.last_seen = '' THEN session_runtime.last_seen ELSE excluded.last_seen END,
 		pull_requests = excluded.pull_requests, home_id = excluded.home_id, agent = excluded.agent, live = excluded.live,
 		conversation_native_id = excluded.conversation_native_id, conversation_transcript_path = excluded.conversation_transcript_path,
-		server_completion = excluded.server_completion`,
+		server_completion = excluded.server_completion, background = excluded.background, notification_stop = excluded.notification_stop`,
 		id, string(state.State), string(protocol.NewTimestamp(state.Since)), string(protocol.NewTimestamp(state.Updated)),
 		turnStamp(state.Turn.OpenedAt), turnStamp(state.Turn.SettledAt), turnStamp(state.Turn.SnoozedUntil), turnStamp(state.Turn.AgentAt), turnStamp(state.Turn.RequestedAt), turnStamp(state.Turn.CaptureAt), request,
 		state.Driver.PluginName, state.Driver.RunID, state.Driver.Seq, state.DriverMetadata, state.DriverTranscript, state.Driver.Route,
-		state.Branch.Branch, boolToInt(state.Branch.IsWorktree), state.Branch.MainRepo, state.Branch.Repository, state.Branch.Origin, state.HarnessTitle, lastSeen, state.PullRequests, state.ConversationNativeID, state.ConversationTranscriptPath, boolToInt(state.Live), state.ServerCompletion, id)
+		state.Branch.Branch, boolToInt(state.Branch.IsWorktree), state.Branch.MainRepo, state.Branch.Repository, state.Branch.Origin, state.HarnessTitle, lastSeen, state.PullRequests, state.ConversationNativeID, state.ConversationTranscriptPath, boolToInt(state.Live), state.ServerCompletion, state.Background, boolToInt(state.NotificationStop), id)
 	if err != nil {
 		log.Printf("[store] save session runtime: session=%s: %v", id, err)
 		return false
@@ -166,6 +170,8 @@ type SessionRuntimeRecords struct {
 	ServerCompletion           int64
 	ServerEntry                int64
 	ServerUsageBaseline        string
+	Background                 string
+	NotificationStop           bool
 }
 
 func (s *Store) SessionRuntimeRecords(id protocol.SessionID) SessionRuntimeRecords {
@@ -175,7 +181,7 @@ func (s *Store) SessionRuntimeRecords(id protocol.SessionID) SessionRuntimeRecor
 		return s.runtimeRecords[id]
 	}
 	var records SessionRuntimeRecords
-	if err := s.db.QueryRow(`SELECT pending_conversations, pull_requests, file_reports, home_id, agent, live, conversation_native_id, conversation_transcript_path, server_completion FROM session_runtime WHERE session_id = ?`, id).Scan(&records.PendingConversations, &records.PullRequests, &records.FileReports, &records.HomeID, &records.Agent, &records.Live, &records.ConversationNativeID, &records.ConversationTranscriptPath, &records.ServerCompletion); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := s.db.QueryRow(`SELECT pending_conversations, pull_requests, file_reports, home_id, agent, live, conversation_native_id, conversation_transcript_path, server_completion, background, notification_stop FROM session_runtime WHERE session_id = ?`, id).Scan(&records.PendingConversations, &records.PullRequests, &records.FileReports, &records.HomeID, &records.Agent, &records.Live, &records.ConversationNativeID, &records.ConversationTranscriptPath, &records.ServerCompletion, &records.Background, &records.NotificationStop); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		log.Printf("[store] session %s runtime records: %v", id, err)
 	}
 	return records

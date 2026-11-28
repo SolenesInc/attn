@@ -248,8 +248,9 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 		m.pendingSession = start.Session
 	}
 	if start.Candidate == nil {
-		m.initializeLocked(start)
+		launch := m.initializeLocked(start)
 		m.input = m.freshLaneLocked()
+		m.input.stoppedAfterNotification = launch.NotificationStop
 		m.saved.cost = sessioncost.Checkpoint{Initialized: m.costInitialized, Sources: m.cost}
 	} else {
 		m.policy = start.Policy
@@ -321,10 +322,10 @@ func (m *Monitor) TakeUserSubmit(previous *Monitor) {
 	}
 }
 
-func (m *Monitor) initializeLocked(start Start) {
+func (m *Monitor) initializeLocked(start Start) Launch {
 	m.policy = start.Policy
 	if m.initialized {
-		return
+		return Launch{}
 	}
 	launch := start.Launch()
 	m.agent = launch.Agent
@@ -349,7 +350,9 @@ func (m *Monitor) initializeLocked(start Start) {
 	m.pullRequests = launch.PullRequests
 	m.sentFiles = launch.SentFiles
 	m.editedFiles = launch.EditedFiles
+	m.backgroundReported, m.backgroundTasks = launch.Background.Reported, launch.Background.Tasks
 	m.initialized = launch.Known
+	return launch
 }
 
 func (m *Monitor) Forget() {

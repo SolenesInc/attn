@@ -229,6 +229,8 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 		PendingConversations: decodePendingConversations(records.PendingConversations),
 		PullRequests:         decodePullRequests(records.PullRequests),
 		ServerCompletion:     records.ServerCompletion,
+		Background:           decodeBackground(records.Background),
+		NotificationStop:     records.NotificationStop,
 	}
 	files := decodeFileReports(records.FileReports)
 	launch.SentFiles, launch.EditedFiles = files.Sent, files.Edited

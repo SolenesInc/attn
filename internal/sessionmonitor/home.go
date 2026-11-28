@@ -64,6 +64,13 @@ type Launch struct {
 	SentFiles            map[string]FileReport
 	EditedFiles          map[string]FileReport
 	ServerCompletion     int64
+	Background           Background
+	NotificationStop     bool
+}
+
+type Background struct {
+	Reported bool             `json:"reported"`
+	Tasks    []BackgroundTask `json:"tasks,omitempty"`
 }
 
 func (m *Monitor) SetPolicy(policy Policy) {

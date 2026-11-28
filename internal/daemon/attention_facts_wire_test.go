@@ -8,11 +8,13 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 type attentionFacts struct {
 	State                string `json:"state"`
+	RunStartedBy         string `json:"run_started_by"`
 	TurnOwed             bool   `json:"turn_owed"`
 	ReportUnread         bool   `json:"report_unread"`
 	UserFocusedAfterStop bool   `json:"user_focused_after_stop"`
@@ -189,6 +191,42 @@ func TestAttentionFactsDropBackgroundTasksWhenTheAgentReloads(t *testing.T) {
 		if facts, raw := attentionFactsOf(t, cli, claude.id); len(facts.Background) != 0 {
 			t.Errorf("after a reload ended the process that ran the deploy, the facts are %s, want no background task", raw)
 		}
+	})
+}
+
+func TestARestartKeepsTheBackgroundTasksAndRunStarterOfAWaitingAgent(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.TrustedApp(), w.Client()
+		setSetting(t, app, "queue_mode_enabled", "true")
+		registerSessions(t, w, cli, "peer")
+		claude := w.bubbleClaude(t, app, "shop")
+		if booted := queriedSession(t, cli, claude.id); protocol.Deref(booted.TurnOwed) {
+			settleFromApp(app, booted)
+		}
+		sendAgentMessage(t, cli, "peer", claude.id, "deploy staging when you can")
+		w.advance(sessionmonitor.QuietWindow)
+		pasted := claude.term.Pasted()
+		if len(pasted) != 1 {
+			t.Fatalf("attn pasted %q, want one doorbell", pasted)
+		}
+		claude.take(pasted[0])
+		readInbox(t, cli, claude.id, 0)
+		claude.transcript.Answer("Deploying staging; I'll report when it ends. <!-- attn:state=idle -->")
+		deploy := protocol.BackgroundTask{ID: protocol.Ptr("bdeploy"), Kind: protocol.Ptr("shell"), Description: protocol.Ptr("Deploy staging"), Command: protocol.Ptr("./deploy.sh staging"), Wakes: protocol.Ptr(protocol.BackgroundTaskWakeExit)}
+		if err := cli.SendStop(protocol.TerminalID(claude.self), claude.transcript.Path, client.StopFacts{BackgroundTasks: []protocol.BackgroundTask{deploy}}); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(10 * time.Minute)
+		waiting := func(phase string) {
+			t.Helper()
+			facts, raw := attentionFactsOf(t, w.Client(), claude.id)
+			if len(facts.Background) != 1 || facts.Background[0].ID != "bdeploy" || facts.Background[0].Age != "10m0s" || facts.RunStartedBy != "notification" {
+				t.Errorf("%s, the facts are %s, want the deploy aged 10m and the run started by the doorbell", phase, raw)
+			}
+		}
+		waiting("before the restart")
+		w.restart()
+		waiting("after the restart")
 	})
 }
 

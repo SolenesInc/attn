@@ -246,7 +246,28 @@ func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
 		ConversationNativeID:       view.Conversation.V.NativeID,
 		ConversationTranscriptPath: view.Conversation.V.TranscriptPath,
 		ServerCompletion:           view.ServerCompletion.V,
+		Background:                 encodeBackground(view.BackgroundReported.V, view.BackgroundTasks.V),
+		NotificationStop:           view.NotificationStop.V,
 	}
+}
+
+func encodeBackground(reported bool, tasks []sessionmonitor.BackgroundTask) string {
+	if !reported && len(tasks) == 0 {
+		return ""
+	}
+	encoded, err := json.Marshal(sessionmonitor.Background{Reported: reported, Tasks: tasks})
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
+func decodeBackground(raw string) sessionmonitor.Background {
+	var background sessionmonitor.Background
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &background)
+	}
+	return background
 }
 
 func encodePendingConversations(pending []sessionmonitor.Conversation) string {
