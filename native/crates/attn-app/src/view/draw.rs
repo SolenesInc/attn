@@ -4,9 +4,11 @@ use attn_protocol::{ViewCommandCall, ViewPart, ViewProblem, ViewTemplatePiece};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Card, Chart, DataTable, Facts, Inline, Notice, Reader, Standing};
 use attn_ui::system::{
-    Button, DotShape, DotSize, GroupHead, ListRow, Look, Reveal, Size, Tone, Type, dot, tag, words,
+    Button, Choice, DotShape, DotSize, FieldState, GroupHead, ListRow, Look, Reveal, Size, Tone,
+    Type, answers, area_box, checks, dot, keys_hint, tag, words,
 };
-use rune::{El, col, row};
+use rune::{El, Key, KeyEvent, Tx, col, row};
+use rune_kit::TextArea;
 use serde_json::Value;
 
 use super::{Doors, not_yet, parts};
@@ -102,17 +104,159 @@ pub(crate) fn tasks(part: &ViewPart, doors: &Doors<'_>) -> Block {
     prose(&lines.join("\n"), doors)
 }
 
+/// A question's text field: its key under the question's.
+pub(crate) fn field_key(question: &str) -> String {
+    format!("{question}.text")
+}
+
 pub(crate) fn question(part: &ViewPart, doors: &Doors<'_>) -> Block {
-    let _ = doors.answers.taken();
-    let asked = (part.question.as_ref().map(|q| &q.question))
-        .or(part.question_multi.as_ref().map(|q| &q.question))
-        .or(part.question_text.as_ref().map(|q| &q.question))
-        .or(part.question_file.as_ref().map(|q| &q.question));
-    let prompt = asked.map_or("", |q| q.prompt.as_str());
-    not_yet(
-        &doors.room.key,
-        &format!("Answering \"{prompt}\" in a view"),
-        doors.room.t,
+    let (key, t) = (&doors.room.key, doors.room.t);
+    if let Some(file) = &part.question_file {
+        let prompt = &file.question.prompt;
+        return not_yet(
+            key,
+            &format!("Answering \"{prompt}\" with a file in a view"),
+            t,
+        );
+    }
+    let (name, asked, many) = match (&part.question, &part.question_multi, &part.question_text) {
+        (Some(q), _, _) => (&q.name, &q.question, false),
+        (_, Some(q), _) => (&q.name, &q.question, true),
+        (_, _, Some(q)) => (&q.name, &q.question, false),
+        _ => return Block::custom(key.clone(), col()),
+    };
+    let prompt = doors.values.text(&[attn_protocol::ViewTemplatePiece {
+        text: Some(asked.prompt.clone()),
+        ..Default::default()
+    }]);
+    let shown = match &part.question_text {
+        Some(text) => written(name, &prompt, text.value.as_ref(), doors),
+        None => choices(name, &prompt, asked, many, doors),
+    };
+    let heading = words(prompt.clone(), Type::Name, t.text_primary).key(format!("{key}.prompt"));
+    Block::custom(
+        format!("{key}.slot"),
+        col()
+            .key(key.clone())
+            .role("group")
+            .label(prompt)
+            .w_full()
+            .child(
+                attn_ui::blocks::Stack::tight()
+                    .w_full()
+                    .child(heading)
+                    .child(shown),
+            ),
+    )
+}
+
+fn choices(
+    name: &str,
+    prompt: &str,
+    asked: &attn_protocol::AskQuestion,
+    many: bool,
+    doors: &Doors<'_>,
+) -> El {
+    let (key, t) = (&doors.room.key, doors.room.t);
+    let active = doors.tile.reaches(key);
+    let picked = doors.answers.picked(name);
+    let n = asked.choices.len();
+    let options = asked.choices.iter().enumerate().map(|(i, choice)| {
+        let mut shown = Choice::new(format!("{key}.choice.{i}"), choice.label.clone())
+            .many(many)
+            .chosen(picked.contains(&choice.label))
+            .selectable(true);
+        if let Some(note) = choice.description.as_deref().filter(|d| !d.is_empty()) {
+            shown = shown.note(note.to_owned());
+        }
+        if i < 9 {
+            let cap = attn_ui::keycap::Keys::ledged(&[(i + 1).to_string()])
+                .build(t)
+                .a11y_hidden();
+            shown = shown.trailing(if active { cap } else { cap.opacity(0.0) });
+        }
+        El::from(shown.build((i, n), t, doors.answers.pick(name, &choice.label, many)))
+    });
+    let group = if many {
+        checks(format!("{key}.choices"), prompt)
+    } else {
+        answers(format!("{key}.choices"), prompt)
+    };
+    group.children(options)
+}
+
+fn written(
+    name: &str,
+    prompt: &str,
+    value: Option<&Vec<ViewTemplatePiece>>,
+    doors: &Doors<'_>,
+) -> El {
+    let (key, t) = (&doors.room.key, doors.room.t);
+    let value = value.map(|v| doors.values.text(v));
+    let starting = value.clone().unwrap_or_default();
+    let edit = doors
+        .answers
+        .written(name)
+        .unwrap_or_else(|| rune::TextEdit::new(&starting));
+    let area = TextArea::new(&edit)
+        .key(field_key(key))
+        .label(prompt.to_owned())
+        .placeholder("Your answer…".to_owned())
+        .auto_grow(2, 12)
+        .on_edit(doors.answers.writes(name, &edit.text, value))
+        .on_blur(doors.answers.wrote(name))
+        .on_key(leave_field);
+    area_box(area, FieldState::Ready, t).into()
+}
+
+/// Escape leaves a view's text field, which keeps what was written.
+fn leave_field(_: &mut crate::State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if ev.key != Key::Escape {
+        return false;
+    }
+    tx.blur();
+    true
+}
+
+/// Send, at the end of a view that asks something, and what the last send did.
+pub(crate) fn sending(key: &str, send_key: Option<&str>, doors: &Doors<'_>) -> Block {
+    let t = doors.room.t;
+    let sent = doors.answers.sent();
+    let place = doors.answers.place.clone();
+    let button = Button::new(if sent.is_some() { "Send again" } else { "Send" })
+        .look(Look::Primary)
+        .size(Size::Compact)
+        .on_press_tx(move |state: &mut crate::State, tx: &mut Tx| {
+            super::answers::send(state, &place, tx)
+        })
+        .build(t);
+    let button = El::from(button).key(format!("{key}.button"));
+    let said = match sent {
+        None => "Sends your answers to the agent that opened this view.".to_owned(),
+        Some(sent) if sent.told => {
+            format!("Sent. The agent has your answers in {}.", sent.responses)
+        }
+        Some(sent) => format!(
+            "Sent, but the agent that opened this view is gone, so no agent was told. Your answers are in {}.",
+            sent.responses
+        ),
+    };
+    let tone = match sent {
+        Some(sent) if !sent.told => t.warning,
+        _ => t.text_secondary,
+    };
+    Block::custom(
+        format!("{key}.slot"),
+        Inline::loose()
+            .key(key.to_owned())
+            .w_full()
+            .child(button)
+            .children(send_key.map(|k| keys_hint([k], "sends", t)))
+            .child(
+                words(said, Type::Small, tone)
+                    .key(format!("{key}.said"))
+                    .grow(1.0),
+            ),
     )
 }
 
@@ -423,9 +567,10 @@ pub(crate) fn chart(part: &ViewPart, doors: &Doors<'_>) -> Block {
     Block::custom(format!("{key}.slot"), shown.el(doors.room.t))
 }
 
-/// `blocks` drawn once for `item`, as the `n`th of a container's items.
+/// `blocks` drawn once for `item`, as the `n`th of a container's items, its answers in its row.
 fn item(blocks: &[ViewPart], item: &Value, n: usize, doors: &Doors<'_>) -> El {
-    let inner = doors.inner(n, doors.values.within(item), None);
+    let mut inner = doors.inner(n, doors.values.within(item), None);
+    inner.answers = inner.answers.within(super::values::row_id(item, n));
     Reader::new()
         .push_all(parts(blocks, &inner))
         .bare(doors.room.t)
@@ -459,32 +604,43 @@ pub(crate) fn one_by_one(part: &ViewPart, doors: &Doors<'_>) -> Block {
     }
     let (key, t) = (&doors.room.key, doors.room.t);
     let items = doors.values.items(&steps.items);
-    let at = doors.tile.steps(key);
+    let rows: Vec<String> = (items.iter().enumerate())
+        .map(|(n, item)| super::values::row_id(item, n))
+        .collect();
+    let at = super::keys::resting(doors.tile.steps(key).at, &rows, &doors.answers);
     let held = doors.tile.highlighted(key);
-    let progress = if at.at < items.len() {
-        format!("{} of {}", at.at + 1, items.len())
+    let verdicts: Vec<Option<&str>> = (rows.iter())
+        .map(|row| super::keys::verdict(&steps.blocks, &doors.answers, row))
+        .collect();
+    let counted = |word: &str| verdicts.iter().filter(|v| **v == Some(word)).count();
+    let progress = if at < items.len() {
+        format!("{} of {}", at + 1, items.len())
     } else {
-        format!(
-            "All {} seen: {} kept, {} skipped",
+        let unseen = verdicts.iter().filter(|v| v.is_none()).count();
+        let mut said = format!(
+            "All {}: {} kept, {} changed, {} skipped",
             items.len(),
-            at.kept.len(),
-            at.skipped.len()
-        )
+            counted("kept"),
+            counted("changed"),
+            counted("skipped")
+        );
+        if unseen > 0 {
+            said.push_str(&format!(", {unseen} not answered"));
+        }
+        said
     };
-    let verdict = if at.kept.contains(&at.at) {
-        " · kept"
-    } else if at.skipped.contains(&at.at) {
-        " · skipped"
-    } else {
-        ""
-    };
+    let verdict = verdicts
+        .get(at)
+        .copied()
+        .flatten()
+        .map_or(String::new(), |v| format!(" · {v}"));
     let head = row()
         .key(format!("{key}.progress"))
         .w_full()
         .items_center()
         .child(words(format!("{progress}{verdict}"), Type::Name, t.text_primary).grow(1.0))
         .child(words(
-            "↩ keep · s skip · ← →",
+            super::keys::steps_hint(&steps.blocks),
             Type::Small,
             if held {
                 t.text_secondary
@@ -493,8 +649,8 @@ pub(crate) fn one_by_one(part: &ViewPart, doors: &Doors<'_>) -> Block {
             },
         ));
     let shown = items
-        .get(at.at)
-        .map(|value| item(&steps.blocks, value, at.at, doors));
+        .get(at)
+        .map(|value| item(&steps.blocks, value, at, doors));
     let card = Card::new(key.clone())
         .standing(if held {
             Standing::Picked

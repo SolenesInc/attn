@@ -1,6 +1,7 @@
 //! A view drawn in its markdown tile: the parts the daemon checked, each by its draw function,
 //! from the values of the view's sources.
 
+mod answers;
 mod draw;
 mod keys;
 mod values;
@@ -8,6 +9,7 @@ mod values;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
 
+use attn_client::TileKey;
 use attn_protocol::{ViewCommandCall, ViewDocument, ViewPart, ViewParts};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Notice, Reader, Surface};
@@ -17,7 +19,8 @@ use rune_kit::ScrollBar;
 use crate::State;
 use crate::markdown::Document;
 
-pub(crate) use keys::on_key;
+pub(crate) use answers::Answers;
+pub(crate) use keys::{on_key, send_key};
 pub(crate) use values::{Data, Scope};
 
 /// Each view tile's tile state, by tile, for as long as the window lives.
@@ -26,6 +29,10 @@ pub struct Tiles {
     /// Rises with every change, so the tiles a view draws in build again.
     pub(crate) revision: u64,
     tiles: HashMap<String, TileState>,
+    /// The text being written into each tile's questions.
+    pub(crate) writing: answers::Writing,
+    /// Why the home last refused an answer or a send, by tile, until it takes one.
+    refusals: HashMap<String, String>,
 }
 
 impl Tiles {
@@ -41,6 +48,19 @@ impl Tiles {
     /// Forgets the tile state of tiles that closed.
     pub(crate) fn keep_only(&mut self, shown: &std::collections::HashSet<String>) {
         self.tiles.retain(|tile, _| shown.contains(tile));
+        self.refusals.retain(|tile, _| shown.contains(tile));
+        self.writing.keep_only(shown);
+    }
+
+    /// Keeps why the home refused the tile's last answer or send, or forgets it once one is taken.
+    fn refused(&mut self, tile: &str, why: Option<String>) {
+        let changed = match why {
+            Some(why) => self.refusals.insert(tile.to_owned(), why.clone()) != Some(why),
+            None => self.refusals.remove(tile).is_some(),
+        };
+        if changed {
+            self.revision += 1;
+        }
     }
 }
 
@@ -53,12 +73,11 @@ pub(crate) struct TileState {
     steps: BTreeMap<String, Steps>,
 }
 
-/// How far the user is in a `one-by-one`, and which items they kept and skipped.
+/// Where the user moved a `one-by-one` to, once they move it. Until then it rests on the first
+/// item they have not kept or skipped. What they did with each item is an answer.
 #[derive(Clone, Default, Hash, PartialEq)]
 pub(crate) struct Steps {
-    at: usize,
-    kept: BTreeSet<usize>,
-    skipped: BTreeSet<usize>,
+    at: Option<usize>,
 }
 
 /// A part's way to draw itself: from its five doors and nothing else.
@@ -95,7 +114,7 @@ pub(crate) struct Doors<'a> {
     /// View commands: which run, and the calls out.
     pub(crate) commands: Commands,
     /// Answers: what the user answered, and the drafts out.
-    pub(crate) answers: Answers,
+    pub(crate) answers: Answers<'a>,
     /// Tile state: what the tile remembers about the part, and its changes.
     pub(crate) tile: TileDoor<'a>,
     /// Its box: where it stands, the theme, and what it draws pictures and links with.
@@ -112,15 +131,6 @@ impl Commands {
     }
 }
 
-/// The answers a part holds. None is kept yet: answers come with the child that sends them.
-pub(crate) struct Answers;
-
-impl Answers {
-    pub(crate) fn taken(&self) -> bool {
-        false
-    }
-}
-
 /// A part's tile state, and the handlers that change it.
 pub(crate) struct TileDoor<'a> {
     tile: &'a str,
@@ -130,6 +140,16 @@ pub(crate) struct TileDoor<'a> {
 impl TileDoor<'_> {
     pub(crate) fn highlighted(&self, key: &str) -> bool {
         self.state.highlight.as_deref() == Some(key)
+    }
+
+    /// Whether the keys reach the part keyed `key`: the highlight is on it or on a part it is in.
+    pub(crate) fn reaches(&self, key: &str) -> bool {
+        self.state.highlight.as_deref().is_some_and(|h| {
+            key == h
+                || key
+                    .strip_prefix(h)
+                    .is_some_and(|rest| rest.starts_with('.'))
+        })
     }
 
     pub(crate) fn folded(&self, key: &str) -> bool {
@@ -169,7 +189,7 @@ impl<'a> Doors<'a> {
         Doors {
             values: scope,
             commands: Commands,
-            answers: Answers,
+            answers: self.answers.clone(),
             tile: TileDoor { ..self.tile },
             room: Room {
                 key: format!("{}.{n}", self.room.key),
@@ -251,7 +271,7 @@ pub(crate) fn next_change(contents: &attn_client::TileContents, now_ms: i64) -> 
 /// The body of the markdown tile `tile` showing the view `view`, which `content` carries.
 pub(crate) fn body(
     (tile, held, title): (&str, bool, &str),
-    session: Option<&str>,
+    (session, send_key): (Option<&str>, Option<&str>),
     (content, view): (&attn_client::TileContent, &ViewDocument),
     machines: crate::machine::Machines,
     (tiles, pictures): (&Tiles, &crate::markdown::Pictures),
@@ -275,8 +295,18 @@ pub(crate) fn body(
     let state = tiles.of(tile);
     let highlight = state.highlight.clone();
     let ticks = keys::ages(&view.parts).then_some(now_ms / 60_000);
+    let place = TileKey {
+        desktop: content.message.desktop_id.clone(),
+        tile: tile.to_owned(),
+    };
+    let refusal = tiles.refusals.get(tile).cloned();
     let version = (
-        content.revision,
+        (
+            content.revision,
+            tiles.revision,
+            session.is_some(),
+            send_key,
+        ),
         away,
         state.clone(),
         pictures.revision,
@@ -289,7 +319,7 @@ pub(crate) fn body(
         let doors = Doors {
             values: data.scope(now_ms),
             commands: Commands,
-            answers: Answers,
+            answers: Answers::of(&place, content.message.answers.as_ref(), &tiles.writing),
             tile: TileDoor {
                 tile,
                 state: &state,
@@ -305,6 +335,11 @@ pub(crate) fn body(
         let problems = unplaced(view)
             .into_iter()
             .map(|p| draw::problem(&format!("tile.{tile}.view.problem.{}", p.line), p, t));
+        let refused = refusal
+            .as_deref()
+            .map(|why| draw::notice(&format!("tile.{tile}.view.refused"), why, t));
+        let sending = (keys::asks(&view.parts) && session.is_some())
+            .then(|| draw::sending(&format!("tile.{tile}.view.send"), send_key, &doors));
         col()
             .key(format!("tile.{tile}.view"))
             .role("group")
@@ -314,6 +349,8 @@ pub(crate) fn body(
                 Reader::new()
                     .push_all(problems)
                     .push_all(parts(&view.parts, &doors))
+                    .push_all(refused)
+                    .push_all(sending)
                     .bare(t)
                     .max_w(crate::markdown::PROSE_MEASURE)
                     .self_center(),

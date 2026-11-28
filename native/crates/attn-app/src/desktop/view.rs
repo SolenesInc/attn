@@ -1100,7 +1100,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 Some(content) if let Some(view) = content.message.view.as_ref() => {
                     crate::view::body(
                         (&leaf.id, held, &title),
-                        session.as_deref(),
+                        (session.as_deref(), cx.keys.send_marks.as_deref()),
                         (content, view),
                         machines,
                         (cx.view_tiles, cx.pictures),
@@ -1215,7 +1215,7 @@ fn document_controls(leaf: &Leaf, cx: &TileCx) -> Option<El> {
                 desktop: cx.desktop.id.clone(),
                 tile: leaf.id.clone(),
             })?;
-            if content.message.path.is_empty() {
+            if content.message.path.is_empty() || content.message.view.is_some() {
                 return None;
             }
             let uri = crate::markdown::drafts::Source::File {

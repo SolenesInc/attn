@@ -175,3 +175,13 @@ fn ago(value: &Value, now_ms: i64) -> String {
         _ => String::new(),
     }
 }
+
+/// How a view's answers name the item `item`, the `n`th of its list: by its `id`, or by its
+/// place from 1 when it has none, as the home's responses file does.
+pub(crate) fn row_id(item: &Value, n: usize) -> String {
+    match item.get("id") {
+        Some(Value::String(id)) if !id.is_empty() => id.clone(),
+        Some(Value::Number(id)) => id.to_string(),
+        _ => (n + 1).to_string(),
+    }
+}

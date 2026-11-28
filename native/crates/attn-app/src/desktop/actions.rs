@@ -87,7 +87,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
             find(state, tx);
         }
         MarkdownSendAnnotations => {
-            if !crate::review::open_send(state, tx) {
+            if !crate::review::open_send(state, tx) && !crate::view::send_key(state, tx) {
                 crate::markdown::sending::send_key(state, tx);
             }
             return true;
