@@ -414,3 +414,25 @@ fn a_kept_views_tile_is_named_by_the_view_then_by_its_heading() {
     );
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_kept_view_goes_by_view_in_the_sidebar_as_attn_s_own_views_do() {
+    let mut kept = tile("tile-view-todo", "markdown");
+    kept["tile_params"] = serde_json::json!({ "view": "todo" }).to_string().into();
+    let world = start(state(
+        row([pane("p0"), below(view_tile(BuiltInView::Sessions), kept)]),
+        vec![session("busy", "working")],
+        &[("views_enabled", "true")],
+    ));
+    let words: Vec<_> = [tile_id(BuiltInView::Sessions), "tile-view-todo".to_owned()]
+        .iter()
+        .map(|tile| {
+            world
+                .screen()
+                .get(Target::key(format!("sidebar.tile.{DESKTOP}.{tile}.kind")))
+                .name
+                .unwrap_or_default()
+        })
+        .collect();
+    assert_eq!(words, ["VIEW", "VIEW"]);
+}

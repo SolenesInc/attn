@@ -205,7 +205,7 @@ pub struct TileRow {
     pub title: String,
     /// The tile holds the focus of the desktop in view.
     pub selected: bool,
-    /// The tile shows one of attn's views.
+    /// The tile shows a view: one of attn's, or one the profile keeps.
     pub view: bool,
 }
 
@@ -323,6 +323,11 @@ fn basename(path: &str) -> String {
         .filter(|s| !s.is_empty())
         .unwrap_or(trimmed)
         .to_owned()
+}
+
+fn shows_a_view(kind: &str, params: &str) -> bool {
+    kind == "markdown"
+        && serde_json::from_str::<Value>(params).is_ok_and(|v| v.get("view").is_some())
 }
 
 fn path_in(params: &str) -> String {
@@ -721,7 +726,7 @@ pub fn desktop_lines(
                     selected: shown && leaf.id == desktop.active_pane_id,
                     id: leaf.id.clone(),
                     kind: kind.to_owned(),
-                    view: crate::BuiltInView::shown_by(kind, Some(params)).is_some(),
+                    view: shows_a_view(kind, params),
                 })),
                 None => {
                     let Some(session) = session_of

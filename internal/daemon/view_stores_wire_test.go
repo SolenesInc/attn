@@ -173,6 +173,30 @@ func TestAKeptToDoViewKeepsItemsChangedFromItsTileAndByAnAgentAcrossARestart(t *
 		}
 	}
 
+	collections, err := cli.DocCollections()
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(collections.Collections, func(c protocol.DocumentCollectionSchema) bool { return c.Collection == "todo_items" })
+	if i < 0 {
+		t.Fatalf("no collection holds the to-do store: %+v", collections.Collections)
+	}
+	namespace := collections.Collections[i].Namespace
+	for name, write := range map[string]func() error{
+		"put": func() error {
+			_, err := cli.DocPut(namespace, "todo_items", "forged", `{"text": "not through attn", "done": false}`, nil)
+			return err
+		},
+		"define": func() error {
+			_, err := cli.DocDefine(protocol.DocumentCollectionSchema{Namespace: namespace, Collection: "todo_items"})
+			return err
+		},
+	} {
+		if err := write(); err == nil || !strings.Contains(err.Error(), "attn view data") {
+			t.Errorf("a generic document %s into the store's namespace answered %v, want a refusal naming attn view data", name, err)
+		}
+	}
+
 	w.restart()
 	app = w.App()
 	placeSessions(t, w, app, w.Client(), "s1")

@@ -286,7 +286,7 @@ func (d *Daemon) sendDocErrorAs(conn net.Conn, err error, code string) {
 
 func (d *Daemon) handleDocDefine(conn net.Conn, msg *protocol.DocDefineMessage) {
 	schema := collectionSchemaFromProtocol(msg.Schema)
-	if err := rejectGenericGardenDocumentMutation(schema.Namespace); err != nil {
+	if err := rejectOwnedDocumentNamespace(schema.Namespace); err != nil {
 		d.sendDocError(conn, err)
 		return
 	}
@@ -313,7 +313,7 @@ func (d *Daemon) handleDocDefine(conn net.Conn, msg *protocol.DocDefineMessage) 
 }
 
 func (d *Daemon) handleDocUndefine(conn net.Conn, msg *protocol.DocUndefineMessage) {
-	if err := rejectGenericGardenDocumentMutation(msg.Namespace); err != nil {
+	if err := rejectOwnedDocumentNamespace(msg.Namespace); err != nil {
 		d.sendDocError(conn, err)
 		return
 	}
@@ -358,7 +358,7 @@ func (d *Daemon) handleDocCollections(conn net.Conn, _ *protocol.DocCollectionsM
 }
 
 func (d *Daemon) handleDocPut(conn net.Conn, msg *protocol.DocPutMessage) {
-	if err := rejectGenericGardenDocumentMutation(msg.Namespace); err != nil {
+	if err := rejectOwnedDocumentNamespace(msg.Namespace); err != nil {
 		d.sendDocError(conn, err)
 		return
 	}
@@ -402,7 +402,7 @@ func expectedRev(wire *int) *int64 {
 }
 
 func (d *Daemon) handleDocGet(conn net.Conn, msg *protocol.DocGetMessage) {
-	if err := rejectGenericGardenDocumentMutation(msg.Namespace); err != nil {
+	if err := rejectOwnedDocumentNamespace(msg.Namespace); err != nil {
 		d.sendDocError(conn, err)
 		return
 	}
@@ -436,7 +436,7 @@ func (d *Daemon) handleDocGet(conn net.Conn, msg *protocol.DocGetMessage) {
 }
 
 func (d *Daemon) handleDocDelete(conn net.Conn, msg *protocol.DocDeleteMessage) {
-	if err := rejectGenericGardenDocumentMutation(msg.Namespace); err != nil {
+	if err := rejectOwnedDocumentNamespace(msg.Namespace); err != nil {
 		d.sendDocError(conn, err)
 		return
 	}
@@ -465,14 +465,21 @@ func (d *Daemon) handleDocDelete(conn net.Conn, msg *protocol.DocDeleteMessage) 
 	})
 }
 
-func rejectGenericGardenDocumentMutation(namespace string) error {
-	if strings.TrimSpace(namespace) != garden.Namespace {
-		return nil
+func rejectOwnedDocumentNamespace(namespace string) error {
+	namespace = strings.TrimSpace(namespace)
+	switch {
+	case namespace == garden.Namespace:
+		return fmt.Errorf(
+			"the generic document API cannot access namespace %q; use attn seed commands to read or change work in your profile",
+			garden.Namespace,
+		)
+	case strings.HasPrefix(namespace, viewStoresNamespace):
+		return fmt.Errorf(
+			"the generic document API cannot access namespace %q; use attn view data commands to read or change a kept view's items",
+			namespace,
+		)
 	}
-	return fmt.Errorf(
-		"the generic document API cannot access namespace %q; use attn seed commands to read or change work in your profile",
-		garden.Namespace,
-	)
+	return nil
 }
 
 func (d *Daemon) handleDocQuery(conn net.Conn, msg *protocol.DocQueryMessage) {
@@ -481,7 +488,7 @@ func (d *Daemon) handleDocQuery(conn net.Conn, msg *protocol.DocQueryMessage) {
 		d.sendDocError(conn, err)
 		return
 	}
-	if err := rejectGenericGardenDocumentMutation(q.Namespace); err != nil {
+	if err := rejectOwnedDocumentNamespace(q.Namespace); err != nil {
 		d.sendDocError(conn, err)
 		return
 	}
@@ -503,7 +510,7 @@ func (d *Daemon) handleDocCount(conn net.Conn, msg *protocol.DocCountMessage) {
 		d.sendDocError(conn, err)
 		return
 	}
-	if err := rejectGenericGardenDocumentMutation(q.Namespace); err != nil {
+	if err := rejectOwnedDocumentNamespace(q.Namespace); err != nil {
 		d.sendDocError(conn, err)
 		return
 	}
@@ -541,7 +548,7 @@ type docSink struct {
 }
 
 func docSubscriptionQuery(msg *protocol.DocSubscribeMessage) (docstore.Query, error) {
-	if err := rejectGenericGardenDocumentMutation(msg.Query.Namespace); err != nil {
+	if err := rejectOwnedDocumentNamespace(msg.Query.Namespace); err != nil {
 		return docstore.Query{}, err
 	}
 	q, err := documentQueryFromProtocol(msg.Query)

@@ -385,11 +385,11 @@ func (d *Daemon) runViewDelete(ctx context.Context, c command.Caller, a command.
 	if err := d.discardKeptViewFiles(view); err != nil {
 		return nil, err
 	}
-	if err := d.store.DeleteView(view, d.machineFor(view.MachineID).ID()); err != nil {
-		return nil, err
-	}
 	stores, err := d.deleteViewStores(view)
 	if err != nil {
+		return nil, err
+	}
+	if err := d.store.DeleteView(view, d.machineFor(view.MachineID).ID()); err != nil {
 		return nil, err
 	}
 	d.removeKeptViewFolder(ctx, view)
