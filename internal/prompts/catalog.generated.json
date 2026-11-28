@@ -8170,6 +8170,57 @@
       ]
     },
     {
+      "id": "view",
+      "description": "Views: markdown files with parts that attn draws in a tile, and the answers the user sends back.",
+      "events": [
+        {
+          "id": "answers-sent",
+          "delivery": "inbox_content",
+          "description": "The user sent their answers to a view, typed into the conversation of the agent that opened it: one summary line and the path of the responses file beside the view.",
+          "body": {
+            "kind": "text",
+            "id": "view.answers-sent",
+            "source": "content/view/answers-sent.md",
+            "bindings": [
+              {
+                "name": "title",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "title",
+                    "kind": "text",
+                    "description": "Quoted view title: its first heading, or its file's name."
+                  }
+                }
+              },
+              {
+                "name": "summary",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "summary",
+                    "kind": "text",
+                    "description": "What the user did, counted by the adapter, such as 7 kept, 4 changed (clip-03, clip-05), 1 skipped (clip-07)."
+                  }
+                }
+              },
+              {
+                "name": "responses",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "responses",
+                    "kind": "text",
+                    "description": "The path of the responses file, on the machine that holds the view."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "code-navigation",
       "description": "Code navigation in a shown review.",
       "events": [
@@ -9893,5 +9944,5 @@
       ]
     }
   ],
-  "definitions_hash": "bc08dc42c4fb98e4123e3ddf17b143b4cc5beecf198288f7cdd8f2ab4f2d59c9"
+  "definitions_hash": "746285e70d7d75d628b26c4f1e6403bf3d4022fbae3173cd03b231ca90f9878d"
 }

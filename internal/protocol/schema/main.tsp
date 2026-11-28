@@ -3952,6 +3952,8 @@ model DesktopTileContentMessage {
   error?: string;
   review?: ReviewBundle;
   view?: ViewDocument;
+  // The user's answers to a view, which the home keeps.
+  answers?: ViewAnswers;
   // Rises when the document's annotation draft changed outside the app, as
   // when an agent answers a question; the app then reads the draft again.
   annotations_generation?: safeint;
@@ -4049,6 +4051,86 @@ enum ViewSourceState {
 model ViewValues {
   source: string;
   values: unknown;
+}
+
+// One answer the user gave a view. With part, it answers that question, in
+// the row of an each or one-by-one when row is set: picked holds a choice
+// question's labels, text a written answer. Without part, step is what the
+// user did with that one-by-one row. An answer that holds none of picked,
+// text and step takes the earlier one back.
+model ViewAnswer {
+  part?: string;
+  row?: string;
+  picked?: string[];
+  text?: string;
+  step?: ViewStep;
+}
+
+enum ViewStep {
+  kept,
+  skipped,
+}
+
+model ViewAnswers {
+  drafts: ViewAnswer[];
+  sent?: ViewSent;
+}
+
+// The last time the user sent a view's answers. told is false when the agent
+// that opened the view was gone, so nothing reached a conversation.
+model ViewSent {
+  at: string;
+  responses: string;
+  told: boolean;
+}
+
+// The user answered a question of the view a tile shows. The home keeps the
+// answer as a draft at once.
+model ViewAnswerMessage {
+  cmd: "view_answer";
+  request_id: string;
+  desktop_id: string;
+  tile_id: string;
+  answer: ViewAnswer;
+}
+
+model ViewAnswerResultMessage {
+  event: "view_answer_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
+// The user sent a view's answers. The home writes the responses file beside
+// the view and types one line into the conversation of the agent that opened
+// it.
+model ViewSendMessage {
+  cmd: "view_send";
+  request_id: string;
+  desktop_id: string;
+  tile_id: string;
+}
+
+model ViewSendResultMessage {
+  event: "view_send_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  sent?: ViewSent;
+}
+
+// The home writes a view's responses beside the view, on the machine that
+// holds it.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model ViewResponsesWriteMessage {
+  cmd: "view_responses_write";
+  host?: string;
+  view: string;
+  responses: string;
+}
+
+model ViewResponsesWritten {
+  path: string;
 }
 
 // A review document resolved on the machine that holds its files. Line
@@ -9587,6 +9669,8 @@ alias DaemonEvent =
   | AskAnswerResultMessage
   | AskFollowUpResultMessage
   | AskDraftSaveResultMessage
+  | ViewAnswerResultMessage
+  | ViewSendResultMessage
   | AskImageResultMessage
   | AskSeedMentionsResultMessage
   | AsksUpdatedMessage

@@ -33,6 +33,7 @@ type heldTileDocument struct {
 	content string
 	review  *protocol.ReviewBundle
 	view    *protocol.ViewDocument
+	answers *protocol.ViewAnswers
 	err     error
 	// The draft generation an annotation change outside the app reached.
 	annotations int
@@ -143,6 +144,9 @@ func desktopTileContentMessage(key desktopTileKey, document tileDocument, held *
 		Content:   held.content,
 		Review:    held.review,
 		View:      held.view,
+	}
+	if held.view != nil {
+		message.Answers = held.answers
 	}
 	if document.host != "" {
 		message.Host = protocol.Ptr(document.host)
@@ -266,7 +270,7 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 	delivery.watching[host] = watcher
 	for document, held := range delivery.documents {
 		if document.host == host {
-			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, view: held.view, err: held.err, annotations: held.annotations}
+			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, view: held.view, answers: held.answers, err: held.err, annotations: held.annotations}
 		}
 	}
 	delivery.mu.Unlock()
@@ -377,12 +381,20 @@ func (d *Daemon) readStaleTileDocumentLocked(document tileDocument, held *heldTi
 		} else if answer.Error != nil {
 			err = errors.New(*answer.Error)
 		}
+		var answers *protocol.ViewAnswers
+		if answer.View != nil {
+			if read, readErr := d.store.ViewAnswers(d.viewAnswersKey(document)); readErr != nil {
+				d.logf("view answers of %s: %v", document.path, readErr)
+			} else {
+				answers = &read
+			}
+		}
 		delivery := &d.desktopTiles
 		delivery.mu.Lock()
 		held.reading = false
 		if delivery.documents[document] == held {
 			held.version = max(target, answer.Version)
-			held.content, held.review, held.view, held.err = answer.Content, answer.Review, answer.View, err
+			held.content, held.review, held.view, held.answers, held.err = answer.Content, answer.Review, answer.View, answers, err
 			held.serial++
 			d.readStaleTileDocumentLocked(document, held)
 		}

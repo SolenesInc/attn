@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "view-answers-sent",
+  "description": "The user sends their answers to a view of twelve clips.",
+  "recipient": "view",
+  "event": "answers-sent",
+  "values": {
+    "title": "\"Check 12 transcripts\"",
+    "summary": "7 kept, 4 changed (clip-03, clip-05, clip-09, clip-11), 1 skipped (clip-07)",
+    "responses": "/home/ana/work/check/view.responses.json"
+  }
+}

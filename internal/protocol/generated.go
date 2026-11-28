@@ -4784,6 +4784,9 @@ type DesktopTileContentMessage struct {
 	// "annotations_generation".
 	AnnotationsGeneration *int `json:"annotations_generation,omitempty,omitzero"`
 
+	// Answers corresponds to the JSON schema field "answers".
+	Answers *ViewAnswers `json:"answers,omitempty,omitzero"`
+
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
 
@@ -15713,6 +15716,62 @@ type VentsUpdatedMessage struct {
 	Vents []Vent `json:"vents"`
 }
 
+type ViewAnswer struct {
+	// Part corresponds to the JSON schema field "part".
+	Part *string `json:"part,omitempty,omitzero"`
+
+	// Picked corresponds to the JSON schema field "picked".
+	Picked []string `json:"picked,omitempty,omitzero"`
+
+	// Row corresponds to the JSON schema field "row".
+	Row *string `json:"row,omitempty,omitzero"`
+
+	// Step corresponds to the JSON schema field "step".
+	Step *ViewStep `json:"step,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
+}
+
+type ViewAnswerMessage struct {
+	// Answer corresponds to the JSON schema field "answer".
+	Answer ViewAnswer `json:"answer"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+}
+
+type ViewAnswerResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type ViewAnswers struct {
+	// Drafts corresponds to the JSON schema field "drafts".
+	Drafts []ViewAnswer `json:"drafts"`
+
+	// Sent corresponds to the JSON schema field "sent".
+	Sent *ViewSent `json:"sent,omitempty,omitzero"`
+}
+
 type ViewColumn struct {
 	// Cell corresponds to the JSON schema field "cell".
 	Cell []ViewTemplatePiece `json:"cell"`
@@ -16052,6 +16111,67 @@ type ViewProblem struct {
 	Text string `json:"text"`
 }
 
+type ViewResponsesWriteMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Responses corresponds to the JSON schema field "responses".
+	Responses string `json:"responses"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
+type ViewResponsesWritten struct {
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+}
+
+type ViewSendMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+}
+
+type ViewSendResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Sent corresponds to the JSON schema field "sent".
+	Sent *ViewSent `json:"sent,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type ViewSent struct {
+	// At corresponds to the JSON schema field "at".
+	At string `json:"at"`
+
+	// Responses corresponds to the JSON schema field "responses".
+	Responses string `json:"responses"`
+
+	// Told corresponds to the JSON schema field "told".
+	Told bool `json:"told"`
+}
+
 type ViewSource struct {
 	// As corresponds to the JSON schema field "as".
 	As *string `json:"as,omitempty,omitzero"`
@@ -16084,6 +16204,11 @@ type ViewSourceState string
 const ViewSourceStateFailed ViewSourceState = "failed"
 const ViewSourceStateOk ViewSourceState = "ok"
 const ViewSourceStateUnavailable ViewSourceState = "unavailable"
+
+type ViewStep string
+
+const ViewStepKept ViewStep = "kept"
+const ViewStepSkipped ViewStep = "skipped"
 
 type ViewStoreField struct {
 	// Name corresponds to the JSON schema field "name".

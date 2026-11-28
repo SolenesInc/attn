@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "77d99bbd1446";
+pub const PROTOCOL_VERSION: &str = "d13822e32af3";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -4131,6 +4131,8 @@ impl DesktopShowSessionMessage {
 pub struct DesktopTileContentMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annotations_generation: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answers: Option<ViewAnswers>,
     pub content: String,
     pub desktop_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -13877,6 +13879,62 @@ impl VentsUpdatedMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewAnswer {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub picked: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<ViewStep>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewAnswerMessage {
+    pub answer: ViewAnswer,
+    pub cmd: String,
+    pub desktop_id: String,
+    pub request_id: String,
+    pub tile_id: String,
+}
+
+impl ViewAnswerMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "view_answer".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewAnswerResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    pub success: bool,
+}
+
+impl ViewAnswerResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "view_answer_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewAnswers {
+    #[serde(deserialize_with = "null_as_default")]
+    pub drafts: Vec<ViewAnswer>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sent: Option<ViewSent>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewColumn {
     #[serde(deserialize_with = "null_as_default")]
     pub cell: Vec<ViewTemplatePiece>,
@@ -14123,6 +14181,71 @@ pub struct ViewProblem {
     pub text: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewResponsesWriteMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub responses: String,
+    pub view: String,
+}
+
+impl ViewResponsesWriteMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "view_responses_write".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewResponsesWritten {
+    pub path: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewSendMessage {
+    pub cmd: String,
+    pub desktop_id: String,
+    pub request_id: String,
+    pub tile_id: String,
+}
+
+impl ViewSendMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "view_send".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewSendResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sent: Option<ViewSent>,
+    pub success: bool,
+}
+
+impl ViewSendResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "view_send_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewSent {
+    pub at: String,
+    pub responses: String,
+    pub told: bool,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewSource {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r#as: Option<String>,
@@ -14135,6 +14258,7 @@ pub struct ViewSource {
 }
 pub type ViewSourceKind = String;
 pub type ViewSourceState = String;
+pub type ViewStep = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewStoreField {
     pub name: String,

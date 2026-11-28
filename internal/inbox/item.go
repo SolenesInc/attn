@@ -17,9 +17,10 @@ const (
 	Authorization     Kind = "authorization"
 	Notice            Kind = "maintenance_prompt"
 	AutomationMessage Kind = "automation"
+	ViewAnswers       Kind = "view_answers"
 )
 
-func TypedKinds() []Kind { return []Kind{AskAnswer, QuickCapture, Authorization} }
+func TypedKinds() []Kind { return []Kind{AskAnswer, QuickCapture, Authorization, ViewAnswers} }
 
 func (k Kind) Typed() bool { return slices.Contains(TypedKinds(), k) }
 
