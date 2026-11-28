@@ -106,7 +106,12 @@ func (d *Daemon) keptViewOf(document tileDocument) (keptViewKey, error) {
 	if path.Base(document.path) != views.ViewFile {
 		return keptViewKey{}, nil
 	}
-	view, kept, err := d.store.KeptViewAt(d.machineFor(document.host).ID(), path.Dir(document.path))
+	holder := d.machineFor(document.host)
+	machines := []string{holder.ID()}
+	if !holder.IsRemote() {
+		machines = append(machines, "")
+	}
+	view, kept, err := d.store.KeptViewAt(path.Dir(document.path), machines...)
 	if err != nil || !kept {
 		return keptViewKey{}, err
 	}

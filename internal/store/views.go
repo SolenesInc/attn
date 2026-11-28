@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"strings"
 	"time"
 )
 
@@ -151,14 +152,18 @@ func (s *Store) KeptView(profileID, name string) (KeptView, bool, error) {
 	return view, err == nil, err
 }
 
-// KeptViewAt is the kept view whose machine holds its newest placed version
-// in folder.
-func (s *Store) KeptViewAt(machineID, folder string) (KeptView, bool, error) {
+// KeptViewAt is the kept view held in folder by one of machineIDs, where ""
+// is the home.
+func (s *Store) KeptViewAt(folder string, machineIDs ...string) (KeptView, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	view := KeptView{MachineID: machineID, Folder: folder}
-	err := s.db.QueryRow(`SELECT profile_id, name, version, folder_version FROM views WHERE machine_id = ? AND folder = ? AND folder != ''`, machineID, folder).
-		Scan(&view.ProfileID, &view.Name, &view.Version, &view.FolderVersion)
+	view := KeptView{Folder: folder}
+	args := []any{folder}
+	for _, id := range machineIDs {
+		args = append(args, id)
+	}
+	err := s.db.QueryRow(`SELECT profile_id, name, version, machine_id, folder_version FROM views WHERE folder = ? AND folder != '' AND machine_id IN (?`+strings.Repeat(", ?", len(machineIDs)-1)+`)`, args...).
+		Scan(&view.ProfileID, &view.Name, &view.Version, &view.MachineID, &view.FolderVersion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return view, false, nil
 	}
