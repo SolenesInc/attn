@@ -1,2 +1,2 @@
-:::data run="python3 ../tools/status.py /tmp/token" every="30s"
+:::data run="../tools/status.sh --repo /repos/attn" every="30s"
 :::

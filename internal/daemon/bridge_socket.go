@@ -3,9 +3,11 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"github.com/victorarias/attn/internal/bridge"
@@ -272,12 +274,10 @@ func (d *Daemon) forgetHomeTileDocuments(run *outpostListener, conn *bridge.Conn
 		w.mu.Unlock()
 		return
 	}
-	forgotten := w.watched
+	forgotten := slices.Collect(maps.Keys(w.watched))
 	w.watched = map[string]*watchedTileDocument{}
 	w.mu.Unlock()
-	for path := range forgotten {
-		d.releaseCodeNavigation(path)
-	}
+	d.unwatchTileDocuments(forgotten)
 }
 
 func (d *Daemon) outpostSettings() (state, home, lastError string) {

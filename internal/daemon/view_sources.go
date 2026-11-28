@@ -74,12 +74,20 @@ func viewCommands(parts []protocol.ViewPart) []viewCommand {
 // viewScriptFiles is the regular files of folder that the words of line name.
 func viewScriptFiles(folder, line string) []string {
 	var files []string
-	for _, word := range strings.Fields(line) {
-		if !filepath.IsLocal(word) {
-			continue
+	for _, file := range viewLineFiles(folder, line) {
+		if info, err := os.Stat(file); err == nil && info.Mode().IsRegular() {
+			files = append(files, file)
 		}
-		file := filepath.Join(folder, word)
-		if info, err := os.Stat(file); err == nil && info.Mode().IsRegular() && !slices.Contains(files, file) {
+	}
+	return files
+}
+
+// viewLineFiles is the paths in folder that the words of line could name,
+// whether or not a file is there yet.
+func viewLineFiles(folder, line string) []string {
+	var files []string
+	for _, word := range strings.Fields(line) {
+		if file := filepath.Join(folder, word); filepath.IsLocal(word) && !slices.Contains(files, file) {
 			files = append(files, file)
 		}
 	}
@@ -115,12 +123,21 @@ func viewCommandState(folder string, command viewCommand, files []string, script
 		}
 		return protocol.ViewRunStateChanged, protocol.Ptr(viewScriptChange(folder, command.line, files))
 	}
-	for _, s := range started {
-		if !slices.Contains(lines, s.Line) {
-			return protocol.ViewRunStateChanged, protocol.Ptr(fmt.Sprintf("was %q when you started it", s.Line))
-		}
+	if was, replaced := replacedViewLine(started, lines); replaced {
+		return protocol.ViewRunStateChanged, protocol.Ptr(fmt.Sprintf("was %q when you started it", was))
 	}
 	return protocol.ViewRunStateWaiting, nil
+}
+
+// replacedViewLine is a line the user started that the view no longer holds,
+// which a command not started took the place of.
+func replacedViewLine(started []protocol.ViewStartedCommand, lines []string) (string, bool) {
+	for _, s := range started {
+		if !slices.Contains(lines, s.Line) {
+			return s.Line, true
+		}
+	}
+	return "", false
 }
 
 // viewScriptChange says what changed in the files a command runs, read after the command's line.
@@ -144,6 +161,7 @@ type viewRun struct {
 	has     bool
 	values  any
 	size    int
+	digest  [sha256.Size]byte
 	failure string
 }
 
@@ -155,24 +173,39 @@ func (run *viewRun) halt() {
 }
 
 // viewRuns holds the commands of the shown views of this machine, each view's
-// by the order of its commands, and the commands the user started.
+// by its line, and the commands the user started.
 type viewRuns struct {
 	mu      sync.Mutex
 	started map[string][]protocol.ViewStartedCommand
-	views   map[string][]*viewRun
+	views   map[string]map[string]*viewRun
 }
 
 func newViewRuns() viewRuns {
-	return viewRuns{started: map[string][]protocol.ViewStartedCommand{}, views: map[string][]*viewRun{}}
+	return viewRuns{started: map[string][]protocol.ViewStartedCommand{}, views: map[string]map[string]*viewRun{}}
 }
 
-func (runs *viewRuns) setStarted(started []protocol.ViewStartedCommand) {
+// setStarted takes the commands the user started, and reports the views whose
+// started commands changed.
+func (runs *viewRuns) setStarted(started []protocol.ViewStartedCommand) []string {
 	runs.mu.Lock()
 	defer runs.mu.Unlock()
+	was := runs.started
 	runs.started = map[string][]protocol.ViewStartedCommand{}
 	for _, command := range started {
 		runs.started[command.Path] = append(runs.started[command.Path], command)
 	}
+	var changed []string
+	for path := range was {
+		if runs.started[path] == nil {
+			changed = append(changed, path)
+		}
+	}
+	for path, commands := range runs.started {
+		if !slices.Equal(was[path], commands) {
+			changed = append(changed, path)
+		}
+	}
+	return changed
 }
 
 type viewCommandRead struct {
@@ -216,14 +249,17 @@ func (d *Daemon) followViewRuns(path string) bool {
 	for _, r := range read {
 		lines = append(lines, r.command.line)
 	}
-	held := runs.views[path]
+	held, kept := runs.views[path], map[string]*viewRun{}
 	changed := false
-	for n, r := range read {
-		if n == len(held) {
-			held = append(held, &viewRun{})
-		}
-		run := held[n]
+	for _, r := range read {
 		state, _ := viewCommandState(filepath.Dir(path), r.command, r.files, r.script, runs.started[path], lines)
+		run := held[r.command.line]
+		if run == nil {
+			run = &viewRun{}
+			if was, replaced := replacedViewLine(runs.started[path], lines); replaced && state == protocol.ViewRunStateChanged && held[was] != nil {
+				run.has, run.values, run.size, run.digest = held[was].has, held[was].values, held[was].size, held[was].digest
+			}
+		}
 		running := run.stop != nil && run.command == r.command && run.script == r.script
 		switch {
 		case state == protocol.ViewRunStateStarted && !running:
@@ -238,15 +274,18 @@ func (d *Daemon) followViewRuns(path string) bool {
 			changed = true
 		}
 		run.command = r.command
+		kept[r.command.line] = run
 	}
-	for _, run := range held[len(read):] {
-		changed = changed || run.stop != nil
-		run.halt()
+	for line, run := range held {
+		if kept[line] == nil {
+			changed = changed || run.stop != nil
+			run.halt()
+		}
 	}
-	if held = held[:len(read)]; len(held) == 0 {
+	if len(kept) == 0 {
 		delete(runs.views, path)
 	} else {
-		runs.views[path] = held
+		runs.views[path] = kept
 	}
 	return changed
 }
@@ -264,20 +303,26 @@ func (d *Daemon) rerunViewCommand(ctx context.Context, path string, run *viewRun
 			}
 			return
 		}
-		values, size, err := runViewCommand(ctx, folder, command.line)
+		values, output, err := runViewCommand(ctx, folder, command.line)
 		runs := &d.viewRuns
 		runs.mu.Lock()
 		if ctx.Err() != nil {
 			runs.mu.Unlock()
 			return
 		}
+		var fresh bool
 		if err != nil {
+			fresh = run.failure != err.Error()
 			run.failure = err.Error()
 		} else {
-			run.has, run.values, run.size, run.failure = true, values, size, ""
+			digest := sha256.Sum256(output)
+			fresh = !run.has || run.failure != "" || run.digest != digest
+			run.has, run.values, run.size, run.digest, run.failure = true, values, len(output), digest, ""
 		}
 		runs.mu.Unlock()
-		d.reportTileDocuments(d.tileDocuments.bump([]string{path}))
+		if fresh {
+			d.reportTileDocuments(d.tileDocuments.bump([]string{path}))
+		}
 		if command.every <= 0 {
 			<-ctx.Done()
 			return
@@ -298,7 +343,7 @@ func (d *Daemon) rerunViewCommand(ctx context.Context, path string, run *viewRun
 
 // runViewCommand runs line as a program and its arguments in folder, never
 // through a shell, and reads the one JSON object it prints.
-func runViewCommand(ctx context.Context, folder, line string) (any, int, error) {
+func runViewCommand(ctx context.Context, folder, line string) (any, []byte, error) {
 	words := strings.Fields(line)
 	timedOut := fmt.Errorf("%s ran for more than %s, so attn stopped it", line, viewRunTimeout)
 	tooLarge := fmt.Errorf("%s printed more than %d bytes, past what a view's sources hold together", line, maxViewDataBytes)
@@ -316,32 +361,32 @@ func runViewCommand(ctx context.Context, folder, line string) (any, int, error) 
 	cmd.WaitDelay = viewRunWaitDelay
 	err := cmd.Run()
 	if cause := context.Cause(ctx); cause != nil && (errors.Is(cause, timedOut) || errors.Is(cause, tooLarge)) {
-		return nil, 0, cause
+		return nil, nil, cause
 	}
 	if ctx.Err() != nil {
-		return nil, 0, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
 	if exit := (*exec.ExitError)(nil); errors.As(err, &exit) {
 		said := fmt.Sprintf("%s exited with status %d", line, exit.ExitCode())
 		if last := stderr.lastLine(); last != "" {
 			said += ": " + last
 		}
-		return nil, 0, errors.New(said)
+		return nil, nil, errors.New(said)
 	}
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) && !strings.Contains(words[0], "/") {
-			return nil, 0, fmt.Errorf("%s did not start: %v. Name a program in the view's folder from there, such as ./%s", line, err, words[0])
+			return nil, nil, fmt.Errorf("%s did not start: %v. Name a program in the view's folder from there, such as ./%s", line, err, words[0])
 		}
-		return nil, 0, fmt.Errorf("%s did not start: %v", line, err)
+		return nil, nil, fmt.Errorf("%s did not start: %v", line, err)
 	}
 	var values any
 	if err := json.Unmarshal(stdout.data, &values); err != nil {
-		return nil, 0, fmt.Errorf("%s printed no JSON object: %v", line, err)
+		return nil, nil, fmt.Errorf("%s printed no JSON object: %v", line, err)
 	}
 	if _, isObject := values.(map[string]any); !isObject {
-		return nil, 0, fmt.Errorf("%s printed JSON that is not one object", line)
+		return nil, nil, fmt.Errorf("%s printed JSON that is not one object", line)
 	}
-	return values, len(stdout.data), nil
+	return values, stdout.data, nil
 }
 
 type viewOutput struct {
@@ -406,13 +451,13 @@ type viewRunRead struct {
 	failure string
 }
 
-func (d *Daemon) viewRunsOf(path string) []viewRunRead {
+func (d *Daemon) viewRunsOf(path string) map[string]viewRunRead {
 	runs := &d.viewRuns
 	runs.mu.Lock()
 	defer runs.mu.Unlock()
-	read := make([]viewRunRead, 0, len(runs.views[path]))
-	for _, run := range runs.views[path] {
-		read = append(read, viewRunRead{running: run.stop != nil, has: run.has, values: run.values, size: run.size, failure: run.failure})
+	read := make(map[string]viewRunRead, len(runs.views[path]))
+	for line, run := range runs.views[path] {
+		read[line] = viewRunRead{running: run.stop != nil, has: run.has, values: run.values, size: run.size, failure: run.failure}
 	}
 	return read
 }
@@ -443,15 +488,11 @@ func (d *Daemon) viewSources(path string, parts []protocol.ViewPart, commands []
 			source.State = protocol.ViewSourceStateOk
 			values = append(values, protocol.ViewValues{Source: source.ID, Values: read})
 		case protocol.ViewSourceKindRun:
-			n := slices.IndexFunc(commands, func(c viewCommand) bool { return c.line == source.ID })
-			if n < 0 {
+			if !slices.ContainsFunc(commands, func(c viewCommand) bool { return c.line == source.ID }) {
 				source.State, source.Notice = protocol.ViewSourceStateUnavailable, protocol.Ptr("attn runs it once its problem is fixed")
 				continue
 			}
-			var run viewRunRead
-			if n < len(runs) {
-				run = runs[n]
-			}
+			run := runs[source.ID]
 			switch {
 			case run.failure != "":
 				source.State, source.Notice = protocol.ViewSourceStateFailed, protocol.Ptr(run.failure)
@@ -464,7 +505,11 @@ func (d *Daemon) viewSources(path string, parts []protocol.ViewPart, commands []
 			default:
 				source.State = protocol.ViewSourceStateWaiting
 			}
-			if run.has && run.size <= budget {
+			switch {
+			case !run.has:
+			case run.size > budget:
+				source.State, source.Notice = protocol.ViewSourceStateFailed, protocol.Ptr(fmt.Sprintf("%s printed more than the %d bytes a view's sources hold together", source.ID, maxViewDataBytes))
+			default:
 				budget -= run.size
 				values = append(values, protocol.ViewValues{Source: source.ID, Values: run.values})
 			}
@@ -485,7 +530,7 @@ func viewDataFiles(folder string, parts []protocol.ViewPart) []string {
 		}
 	}
 	for _, command := range viewCommands(parts) {
-		files = append(files, viewScriptFiles(folder, command.line)...)
+		files = append(files, viewLineFiles(folder, command.line)...)
 	}
 	return files
 }

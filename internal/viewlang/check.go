@@ -508,7 +508,7 @@ func (c *checker) argValue(line int, part catalog.Part, arg catalog.Arg, value s
 		}
 		return value, true
 	}
-	if value == "" {
+	if strings.TrimSpace(value) == "" {
 		c.report(line, fmt.Sprintf("Give %s= a value, or remove it.", arg.Name), "%s= is empty", arg.Name)
 		return nil, false
 	}
@@ -1014,10 +1014,8 @@ func (c *checker) source(line int, part catalog.Part, args map[string]string) st
 	default:
 		c.report(line, "Give each source its own \":::data\" part.", "\":::data\" names %d sources: %s", len(given), strings.Join(given, ", "))
 	}
-	for _, word := range strings.Fields(args["run"]) {
-		if !filepath.IsLocal(word) {
-			c.report(line, "Put the files a command runs in the view's folder, and name them from there, such as \"scripts/status.sh\".", "run= names %q, which is outside the view's folder", word)
-		}
+	if words := strings.Fields(args["run"]); len(words) > 0 && strings.Contains(words[0], "/") && !filepath.IsLocal(words[0]) {
+		c.report(line, "Run a program by its name, such as \"gh\", or put it in the view's folder and name it from there, such as \"scripts/status.sh\".", "run= runs %q, which is outside the view's folder", words[0])
 	}
 	if every, ok := args["every"]; ok && len(given) == 1 && given[0] != "run" {
 		c.report(line, "Remove every=, or use run=.", "every= reruns a run= command, and this part has none")

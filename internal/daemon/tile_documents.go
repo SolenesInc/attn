@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -88,11 +89,20 @@ func newTileDocumentWatch() tileDocumentWatch {
 	return tileDocumentWatch{watched: map[string]*watchedTileDocument{}, wake: make(chan struct{}, 1)}
 }
 
+// unwatchTileDocuments lets go of what the documents at paths held while the
+// home watched them: their language servers and their view's commands.
+func (d *Daemon) unwatchTileDocuments(paths []string) {
+	for _, path := range paths {
+		d.releaseCodeNavigation(path)
+		d.followViewRuns(path)
+	}
+}
+
 func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocumentsWatchMessage) (protocol.TileDocumentVersions, error) {
 	w := &d.tileDocuments
 	now := time.Now()
 	kinds := d.documentKinds()
-	d.viewRuns.setStarted(msg.Started)
+	restarted := d.viewRuns.setStarted(msg.Started)
 	w.mu.Lock()
 	listed := make(map[string]*watchedTileDocument, len(msg.Documents))
 	for _, path := range msg.Documents {
@@ -112,13 +122,10 @@ func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocument
 	}
 	w.watched = listed
 	w.mu.Unlock()
-	for _, path := range unlisted {
-		d.releaseCodeNavigation(path)
-		d.followViewRuns(path)
-	}
+	d.unwatchTileDocuments(unlisted)
 	var changed []string
 	for _, path := range msg.Documents {
-		if d.followViewRuns(path) {
+		if d.followViewRuns(path) || slices.Contains(restarted, path) {
 			changed = append(changed, path)
 		}
 	}

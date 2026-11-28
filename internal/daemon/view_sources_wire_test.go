@@ -1,12 +1,14 @@
 package daemon_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -45,7 +47,7 @@ func viewRuns(t *testing.T, folder string) int {
 	return strings.Count(string(log), "\n")
 }
 
-func awaitViewTile(app *testworld.Peer, path string, from int, want func(*protocol.ViewDocument) bool) protocol.DesktopTileContentMessage {
+func awaitRunTile(app *testworld.Peer, path string, from int, want func(*protocol.ViewDocument) bool) protocol.DesktopTileContentMessage {
 	app.T.Helper()
 	return testworld.AwaitSince(app, from, protocol.EventDesktopTileContent, func(e protocol.DesktopTileContentMessage) bool {
 		return e.Path == path && e.View != nil && want(e.View)
@@ -77,7 +79,7 @@ func TestAViewRunsItsCommandOnlyOnceTheUserStartsItAndStopsWhenTheScriptChanges(
 		if _, err := cli.OpenMarkdown(view, "s1"); err != nil {
 			t.Fatalf("open: %v", err)
 		}
-		opened := awaitViewTile(app, view, 0, func(*protocol.ViewDocument) bool { return true })
+		opened := awaitRunTile(app, view, 0, func(*protocol.ViewDocument) bool { return true })
 		if opened.View == nil || runCommandState(opened.View) != "waiting " || viewSourceStates(opened.View)["scripts/status.sh"] != "waiting " {
 			t.Fatalf("the opened view is %+v, want its one command waiting and its source waiting", opened.View)
 		}
@@ -88,7 +90,7 @@ func TestAViewRunsItsCommandOnlyOnceTheUserStartsItAndStopsWhenTheScriptChanges(
 
 		mark := len(app.Log())
 		startView(app, opened)
-		live := awaitViewTile(app, view, mark, func(v *protocol.ViewDocument) bool {
+		live := awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool {
 			return viewValues(v)["scripts/status.sh"] == `{"runs":1,"state":"green"}`
 		})
 		if runCommandState(live.View) != "started " || viewSourceStates(live.View)["scripts/status.sh"] != "ok " {
@@ -96,14 +98,14 @@ func TestAViewRunsItsCommandOnlyOnceTheUserStartsItAndStopsWhenTheScriptChanges(
 		}
 		mark = len(app.Log())
 		w.advance(10 * time.Second)
-		awaitViewTile(app, view, mark, func(v *protocol.ViewDocument) bool {
+		awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool {
 			return viewValues(v)["scripts/status.sh"] == `{"runs":2,"state":"green"}`
 		})
 
 		mark = len(app.Log())
 		writeStatusScript(t, folder, statusScript+"echo changed >&2\n")
 		w.advance(time.Second)
-		stopped := awaitViewTile(app, view, mark, func(v *protocol.ViewDocument) bool {
+		stopped := awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool {
 			return runCommandState(v) == "changed changed since you started it"
 		})
 		if got := viewSourceStates(stopped.View)["scripts/status.sh"]; got != "out_of_date " {
@@ -119,7 +121,7 @@ func TestAViewRunsItsCommandOnlyOnceTheUserStartsItAndStopsWhenTheScriptChanges(
 
 		mark = len(app.Log())
 		startView(app, opened)
-		awaitViewTile(app, view, mark, func(v *protocol.ViewDocument) bool {
+		awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool {
 			return runCommandState(v) == "started " && viewValues(v)["scripts/status.sh"] == `{"runs":3,"state":"green"}`
 		})
 
@@ -144,15 +146,15 @@ func TestARunThatFailsKeepsTheLastValuesAndSaysWhy(t *testing.T) {
 		if _, err := cli.OpenMarkdown(view, "s1"); err != nil {
 			t.Fatalf("open: %v", err)
 		}
-		opened := awaitViewTile(app, view, 0, func(*protocol.ViewDocument) bool { return true })
+		opened := awaitRunTile(app, view, 0, func(*protocol.ViewDocument) bool { return true })
 		mark := len(app.Log())
 		startView(app, opened)
-		awaitViewTile(app, view, mark, func(v *protocol.ViewDocument) bool {
+		awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool {
 			return viewValues(v)["scripts/status.sh"] == `{"runs":1,"state":"green"}`
 		})
 		mark = len(app.Log())
 		w.advance(10 * time.Second)
-		failed := awaitViewTile(app, view, mark, func(v *protocol.ViewDocument) bool {
+		failed := awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool {
 			return strings.HasPrefix(viewSourceStates(v)["scripts/status.sh"], "failed ")
 		})
 		if got, want := viewSourceStates(failed.View)["scripts/status.sh"], "failed scripts/status.sh exited with status 3: GitHub said no"; got != want {
@@ -161,5 +163,119 @@ func TestARunThatFailsKeepsTheLastValuesAndSaysWhy(t *testing.T) {
 		if got := viewValues(failed.View)["scripts/status.sh"]; got != `{"runs":1,"state":"green"}` {
 			t.Errorf("after the failed run the values are %s, want the last good ones", got)
 		}
+	})
+}
+
+func tileContentSentSince(app *testworld.Peer, path string, mark int) int {
+	sent := 0
+	for _, raw := range app.Log()[mark:] {
+		var frame struct {
+			Event string `json:"event"`
+			Path  string `json:"path"`
+		}
+		if json.Unmarshal(raw, &frame) == nil && frame.Event == protocol.EventDesktopTileContent && frame.Path == path {
+			sent++
+		}
+	}
+	return sent
+}
+
+func openLiveView(t *testing.T, app *testworld.Peer, cli *client.Client, view string) protocol.DesktopTileContentMessage {
+	t.Helper()
+	if _, err := cli.OpenMarkdown(view, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	return awaitRunTile(app, view, 0, func(*protocol.ViewDocument) bool { return true })
+}
+
+func TestARunThatPrintsWhatItPrintedLastTimeSendsTheTileNothing(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		placeSessions(t, w, app, cli, "s1")
+		setSetting(t, app, "views_enabled", "true")
+		folder := w.Path("main")
+		view := filepath.Join(folder, "view.md")
+		writeViewFolder(t, folder, map[string]string{"view.md": liveView})
+		writeStatusScript(t, folder, "#!/bin/sh\necho ran >> runs.log\necho '{\"state\": \"green\"}'\n")
+		opened := openLiveView(t, app, cli, view)
+
+		mark := len(app.Log())
+		startView(app, opened)
+		awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool {
+			return viewValues(v)["scripts/status.sh"] == `{"state":"green"}`
+		})
+		mark = len(app.Log())
+		w.advance(10 * time.Second)
+		w.advance(10 * time.Second)
+		if runs := viewRuns(t, folder); runs != 3 {
+			t.Fatalf("the command ran %d times in 20 s at every=10s, want 3", runs)
+		}
+		if sent := tileContentSentSince(app, view, mark); sent != 0 {
+			t.Errorf("two runs that printed the same values sent the tile %d times, want none", sent)
+		}
+	})
+}
+
+func TestACommandAddedAboveAStartedOneWaitsWithNoValuesWhileTheStartedOneKeepsItsOwn(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		placeSessions(t, w, app, cli, "s1")
+		setSetting(t, app, "views_enabled", "true")
+		folder := w.Path("main")
+		view := filepath.Join(folder, "view.md")
+		writeViewFolder(t, folder, map[string]string{"view.md": liveView})
+		writeStatusScript(t, folder, statusScript)
+		opened := openLiveView(t, app, cli, view)
+		mark := len(app.Log())
+		startView(app, opened)
+		awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool {
+			return viewValues(v)["scripts/status.sh"] == `{"runs":1,"state":"green"}`
+		})
+
+		mark = len(app.Log())
+		writeViewFolder(t, folder, map[string]string{"view.md": ":::data run=\"scripts/other.sh\" as=\"other\"\n:::\n\n" + liveView})
+		w.advance(time.Second)
+		edited := awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool { return len(v.Commands) == 2 })
+		states := map[string]string{}
+		for _, command := range edited.View.Commands {
+			states[command.Line] = string(command.State)
+		}
+		if states["scripts/other.sh"] != "waiting" || states["scripts/status.sh"] != "started" {
+			t.Errorf("after adding a command above the started one the commands are %v, want the new one waiting and the started one started", states)
+		}
+		values := viewValues(edited.View)
+		if _, shown := values["scripts/other.sh"]; shown {
+			t.Errorf("the added command shows values %s before it ever ran", values["scripts/other.sh"])
+		}
+		if got := values["scripts/status.sh"]; got != `{"runs":1,"state":"green"}` {
+			t.Errorf("the started command shows %s, want its own last values", got)
+		}
+		if runs := viewRuns(t, folder); runs != 1 {
+			t.Errorf("adding a command above the started one reran it: %d runs, want 1", runs)
+		}
+	})
+}
+
+func TestAScriptWrittenAfterTheViewOpenedStartsWithTheUsersKey(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		placeSessions(t, w, app, cli, "s1")
+		setSetting(t, app, "views_enabled", "true")
+		folder := w.Path("main")
+		view := filepath.Join(folder, "view.md")
+		writeViewFolder(t, folder, map[string]string{"view.md": liveView})
+		opened := openLiveView(t, app, cli, view)
+
+		mark := len(app.Log())
+		writeStatusScript(t, folder, statusScript)
+		w.advance(time.Second)
+		written := awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool {
+			return len(v.Commands) == 1 && v.Commands[0].ScriptSHA256 != opened.View.Commands[0].ScriptSHA256
+		})
+		mark = len(app.Log())
+		startView(app, written)
+		awaitRunTile(app, view, mark, func(v *protocol.ViewDocument) bool {
+			return viewValues(v)["scripts/status.sh"] == `{"runs":1,"state":"green"}`
+		})
 	})
 }

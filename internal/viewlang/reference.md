@@ -269,7 +269,7 @@ Names one source of the view's values. It draws nothing.
 Arguments:
 
 - `attn=<data set>`: one of attn's own data sets.
-- `run=<program and arguments>`: a program and its arguments that prints one JSON object. attn runs it in the view's folder, never through a shell. Name the files it runs from the view's folder, such as `scripts/status.sh`.
+- `run=<program and arguments>`: a program and its arguments that prints one JSON object. attn runs it in the view's folder, never through a shell. Name the program by its name, such as `gh`, or from the view's folder, such as `scripts/status.sh`; attn notices a change to the files in the view's folder that the line names.
 - `every=<duration>`: how often attn reruns `run`, such as 30s or 10m, and at most once a second. Without it, attn runs the command once each time the view is shown.
 - `file=<file>`: a JSON or JSON Lines file in the view's folder.
 - `store=<store>`: the name of a store: values a kept view owns. Its body lists the store's fields, one `name: type` per line, and its values appear under the store's name. `store="view/set"` shows another kept view's store and takes no body.
