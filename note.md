@@ -1,0 +1,1 @@
+Replace attn's chibi cat icon and banner with the new neon faceted obsidian shorthair black cat across macOS (`icon.icns`, Home header `assets/icon.png`), iOS (`AppIcon-512@2x.png`), website (`favicon.png`, `logo.png`), and docs (`docs/icon.png`, `docs/banner.png`).
