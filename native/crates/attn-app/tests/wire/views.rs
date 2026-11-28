@@ -1350,7 +1350,15 @@ fn a_kept_to_do_list_is_used_by_keys_alone_and_runs_its_store_commands_without_s
         "Enter checks the item off and the control's letter removes it, with no start key"
     );
 
-    click(&mut world, Target::key("tile.m.view.2.text"));
+    press(&mut world, Key::Escape);
+    typed(&mut world, "a");
+    assert!(
+        world
+            .screen()
+            .get(Target::key("tile.m.view.2.text"))
+            .is("focused"),
+        "a, the entry's letter, did not put the keyboard in its line"
+    );
     typed(&mut world, "review oven #91");
     press(&mut world, Key::Enter);
     assert_eq!(

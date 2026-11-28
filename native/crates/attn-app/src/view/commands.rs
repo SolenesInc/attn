@@ -34,11 +34,14 @@ pub(crate) struct Commands<'a> {
 /// What a key does to the view's commands, once the state it read is let go.
 pub(crate) type Keyed = Box<dyn Fn(&mut State, &mut Tx)>;
 
-/// The commands of the controls the keys reach in `parts`, in order: those of `:::controls` and
-/// of the rows of each list, inside `::::each` too. A `::::one-by-one` item's rows are never
-/// highlighted, so its controls take no letter.
-fn keyed_calls(parts: &[ViewPart], out: &mut Vec<ViewCommandCall>) {
+/// The commands the keys reach in `parts`, in order: those of the view's own `:::entry` lines, of
+/// `:::controls` and of the rows of each list, inside `::::each` too. A `::::one-by-one` item's
+/// rows are never highlighted, so its controls take no letter.
+fn keyed_calls(parts: &[ViewPart], outermost: bool, out: &mut Vec<ViewCommandCall>) {
     for part in parts {
+        if outermost {
+            out.extend(part.entry.iter().map(|entry| entry.command.clone()));
+        }
         out.extend(
             part.controls
                 .iter()
@@ -50,7 +53,7 @@ fn keyed_calls(parts: &[ViewPart], out: &mut Vec<ViewCommandCall>) {
                 .cloned(),
         );
         if let Some(each) = &part.each {
-            keyed_calls(&each.blocks, out);
+            keyed_calls(&each.blocks, false, out);
         }
     }
 }
@@ -63,7 +66,7 @@ const TILE_KEYS: &str = "jkresfx";
 /// it took. A command whose name has no such letter has none.
 fn letters(view: &ViewDocument) -> Vec<(String, char)> {
     let mut calls = Vec::new();
-    keyed_calls(&view.parts, &mut calls);
+    keyed_calls(&view.parts, true, &mut calls);
     let mut letters: Vec<(String, char)> = Vec::new();
     for call in calls {
         if letters.iter().any(|(name, _)| name == &call.command) {

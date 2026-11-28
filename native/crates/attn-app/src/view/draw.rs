@@ -809,6 +809,12 @@ pub(crate) fn entry(part: &ViewPart, doors: &Doors<'_>) -> Block {
             }
         })
         .on_key(leave_field);
+    let input = match doors.commands.letter(&call.command) {
+        Some(letter) => input.trailing(
+            attn_ui::system::keycaps([letter.to_ascii_uppercase().to_string()], t).a11y_hidden(),
+        ),
+        None => input,
+    };
     let state = match &phase {
         Phase::Unavailable(_) => FieldState::Disabled,
         Phase::Failed(_) => FieldState::Failed,

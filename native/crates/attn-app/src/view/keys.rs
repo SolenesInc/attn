@@ -5,7 +5,8 @@
 //! text; ↩ on a file question, or f in a `one-by-one` item, chooses its file, and ⌫ takes it back;
 //! ⌘↩ sends the view's answers; r starts the view's commands while they wait for the user.
 //! ↩ on a list's row runs its `press:` command, and a control's letter runs its command: on the
-//! highlighted row for a row's control, from anywhere for one in `:::controls`.
+//! highlighted row for a row's control, from anywhere for one in `:::controls`, and an entry's
+//! letter puts the keyboard in its line.
 //! Space plays or pauses the clip at the highlight, and Shift with ← or → moves it back or on.
 
 use attn_protocol::{DesktopTileContentMessage, ViewCommandCall, ViewPart};
@@ -480,6 +481,17 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         .filter(|part| part.problem.is_none())
         .filter_map(|part| Some((part.line, part.controls.as_ref()?.controls.clone())))
         .collect();
+    let lines: Vec<(String, char)> = {
+        let ran = content.message.view_commands.as_deref().unwrap_or_default();
+        let commands = Commands::of(&place, view, ran, &state.views.entries);
+        (view.parts.iter().enumerate())
+            .filter(|(_, part)| part.problem.is_none())
+            .filter_map(|(i, part)| {
+                let letter = commands.letter(&part.entry.as_ref()?.command.command)?;
+                Some((draw::field_key(&format!("tile.{tile}.view.{i}")), letter))
+            })
+            .collect()
+    };
     match (&ev.key, typed, here) {
         (_, "r", _) if waits => {
             super::start::start(state, &place.desktop, &tile);
@@ -593,6 +605,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 }
                 _ => false,
             };
+            let typed_into = lines.iter().find(|(_, own)| own.to_string() == letter);
             on_row
                 || header.iter().any(|(line, calls)| {
                     run_keyed(
@@ -602,6 +615,10 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
                         |commands| commands.lettered(calls, letter).cloned(),
                         tx,
                     )
+                })
+                || typed_into.is_some_and(|(field, _)| {
+                    tx.focus(field.clone(), true);
+                    true
                 })
         }
         _ => false,
