@@ -322,3 +322,19 @@ fn the_keys_reach_either_clip_of_a_compare() {
         "After: Playing, 0:01 / 0:20"
     );
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_window_that_closes_leaves_another_windows_clip_playing() {
+    let mut kept = start();
+    answer_clips(&mut kept);
+    show(&mut kept, check_transcripts());
+    let mut closed = start();
+    answer_clips(&mut closed);
+    show(&mut closed, check_transcripts());
+    drop(closed);
+
+    press(&mut kept, Key::Text(" ".into()));
+    kept.advance(Duration::from_millis(1200));
+    assert_eq!(clip(&kept, 0), "clip-03: Playing, 0:01 / 0:20");
+}
