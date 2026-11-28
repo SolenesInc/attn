@@ -12,6 +12,7 @@ import (
 )
 
 type notifyBackend struct {
+	root    string
 	watcher *fsnotify.Watcher
 	changes chan treeEvent
 	done    chan struct{}
@@ -23,7 +24,7 @@ func newTreeBackend(root string) (treeBackend, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &notifyBackend{watcher: watcher, changes: make(chan treeEvent), done: make(chan struct{}), stopped: make(chan struct{})}
+	b := &notifyBackend{root: root, watcher: watcher, changes: make(chan treeEvent), done: make(chan struct{}), stopped: make(chan struct{})}
 	if err := b.addTree(root); err != nil {
 		_ = watcher.Close()
 		return nil, err
@@ -87,6 +88,11 @@ func (b *notifyBackend) loop() {
 			}
 		case _, ok := <-b.watcher.Errors:
 			if !ok {
+				return
+			}
+			select {
+			case b.changes <- treeEvent{Path: b.root, IsDir: true, Rescan: true}:
+			case <-b.done:
 				return
 			}
 		}
