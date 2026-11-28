@@ -254,11 +254,16 @@ func (d *Daemon) askDispatcher(dispatcher protocol.SessionID, verdict attention.
 		return
 	}
 	asking, _ := d.monitorViewFor(dispatcher)
-	silent := asking.LastModelRequestAt.V
-	d.appendAttentionLog(attention.LogEntry{Kind: attention.LogNotice, At: d.clock.Now(), Session: delegate, To: dispatcher, Checkpoint: verdict.Checkpoint,
-		Verdict: verdict.Verdict, Decider: verdict.Decider, Label: verdict.Label, Reason: verdict.Reason})
-	surface := attention.LogEntry{Session: delegate, Verdict: attention.Open, Decider: "rule:dispatcher_silent", Label: verdict.Label,
-		Reason: fmt.Sprintf("its dispatcher made no model request within %s of the supervisor's notice: %s", minutesText(attentionNoticeAnswerWindow), verdict.Reason)}
+	notice := attention.LogEntry{Kind: attention.LogNotice, At: d.clock.Now(), Session: delegate, To: dispatcher, Checkpoint: verdict.Checkpoint,
+		SilentSince: asking.LastModelRequestAt.V, Verdict: verdict.Verdict, Decider: verdict.Decider, Label: verdict.Label, Reason: verdict.Reason}
+	d.appendAttentionLog(notice)
+	d.awaitDispatcher(notice)
+}
+
+func (d *Daemon) awaitDispatcher(notice attention.LogEntry) {
+	delegate, dispatcher, silent := notice.Session, notice.To, notice.SilentSince
+	surface := attention.LogEntry{Session: delegate, Verdict: attention.Open, Decider: "rule:dispatcher_silent", Label: notice.Label,
+		Reason: fmt.Sprintf("its dispatcher made no model request within %s of the supervisor's notice: %s", minutesText(attentionNoticeAnswerWindow), notice.Reason)}
 	a := &d.attention
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -269,7 +274,7 @@ func (d *Daemon) askDispatcher(dispatcher protocol.SessionID, verdict attention.
 		a.dispatcherAsks = map[protocol.SessionID]stepclock.Timer{}
 	}
 	var asked stepclock.Timer
-	asked = d.clock.AfterFunc(AttentionNoticeTimer, attentionNoticeAnswerWindow, func() {
+	asked = d.clock.AfterFunc(AttentionNoticeTimer, notice.At.Add(attentionNoticeAnswerWindow).Sub(d.clock.Now()), func() {
 		d.life.Do("attentionDispatcherNotice", func() {
 			a.mu.Lock()
 			current := a.dispatcherAsks[delegate] == asked
@@ -277,10 +282,14 @@ func (d *Daemon) askDispatcher(dispatcher protocol.SessionID, verdict attention.
 				delete(a.dispatcherAsks, delegate)
 			}
 			a.mu.Unlock()
-			if view, _ := d.monitorViewFor(dispatcher); current && view.LastModelRequestAt.V.Equal(silent) && d.store.Get(delegate) != nil {
+			if !current {
+				return
+			}
+			if view, _ := d.monitorViewFor(dispatcher); view.LastModelRequestAt.V.Equal(silent) && d.store.Get(delegate) != nil {
 				surface.At = d.clock.Now()
 				d.surfaceAttention(surface)
 			}
+			d.appendAttentionLog(attention.LogEntry{Kind: attention.LogNoticeDeadline, At: d.clock.Now(), Session: delegate, To: dispatcher})
 		})
 	})
 	a.dispatcherAsks[delegate] = asked

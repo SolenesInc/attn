@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -479,4 +480,205 @@ func TestWithTheSupervisorOffADispatcherNoticeIsLoggedAndNotSent(t *testing.T) {
 	if log := daemonLogOf(t, d.w); !strings.Contains(log, "would send caller this notice") || !strings.Contains(log, "needs the user now") {
 		t.Errorf("with the supervisor off the daemon log holds no dispatcher notice; tail: %s", log[max(0, len(log)-2000):])
 	}
+}
+
+type bubbleDelegation struct {
+	t          *testing.T
+	w          *world
+	app        *testworld.Peer
+	cli        *client.Client
+	dispatcher *bubbleClaude
+	delegate   *bubbleClaude
+}
+
+func delegateStopsQuietlyInBubble(t *testing.T, w *world) *bubbleDelegation {
+	t.Helper()
+	w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
+		switch {
+		case strings.Contains(task.Prompt, supervisorQuestion):
+			task.Answer(openDelegateAnswer)
+		case strings.Contains(task.Prompt, "Classify how this assistant message ends"):
+			task.Answer(`{"verdict":"DONE"}`)
+		default:
+			task.Answer("Migration")
+		}
+	})
+	app, cli := w.TrustedApp(), w.Client()
+	setSetting(t, app, "queue_mode_enabled", "true")
+	setSetting(t, app, "attention_supervisor", "true")
+	registerSessions(t, w, cli, "reviewer")
+	dispatcher := w.bubbleClaude(t, app, "caller")
+	if booted := queriedSession(t, cli, dispatcher.id); protocol.Deref(booted.TurnOwed) {
+		settleFromApp(app, booted)
+	}
+	dispatcher.take("delegate the table migration")
+	request := delegateFrom(dispatcher.id, w.Path("worker"), "Migrate the first table", fakeagent.Claude)
+	request.RequestID = "dispatcher-deadline"
+	if err := os.MkdirAll(w.Path("worker"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := cli.StartDelegation(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.advance(0)
+	delegate := w.bootBubbleClaude(t, string(accepted.SessionID))
+	delegate.reply("Migrated the first table. <!-- attn:state=idle -->")
+	if _, err := cli.Delegate(request); err != nil {
+		t.Fatal(err)
+	}
+	dispatcher.reply("Delegated the migration. <!-- attn:state=idle -->")
+	for _, id := range []string{dispatcher.id, delegate.id} {
+		if stopped := queriedSession(t, cli, id); protocol.Deref(stopped.TurnOwed) {
+			settleFromApp(app, stopped)
+		}
+	}
+	sendAgentMessage(t, cli, "reviewer", delegate.id, "the review is in")
+	w.advance(sessionmonitor.QuietWindow)
+	pasted := delegate.term.Pasted()
+	if len(pasted) != 1 {
+		t.Fatalf("attn pasted %q into the delegate, want one doorbell", pasted)
+	}
+	delegate.take(pasted[0])
+	readInbox(t, cli, delegate.id, 0)
+	delegate.reply("The review found one bug, so I fixed it and landed it. <!-- attn:state=idle -->")
+	if quiet := queriedSession(t, cli, delegate.id); protocol.Deref(quiet.TurnOwed) {
+		t.Fatalf("the delegate's quiet stop opened a turn: %+v", quiet)
+	}
+	dispatcher.term.OnSubmit(func(string) {})
+	return &bubbleDelegation{t: t, w: w, app: app, cli: cli, dispatcher: dispatcher, delegate: delegate}
+}
+
+func (d *bubbleDelegation) noticesTheDispatcher() {
+	d.t.Helper()
+	d.w.advance(attentionStopWait)
+	if notices := supervisorNotices(d.t, d.cli, d.dispatcher.id); len(notices) != 1 || !strings.Contains(notices[0], "needs the user now") {
+		d.t.Fatalf("15 minutes after the delegate's quiet stop its dispatcher got the notices %q, want one", notices)
+	}
+	if d.turnOwed() {
+		d.t.Fatalf("the delegate's turn opened before its dispatcher's 5 minutes ran out")
+	}
+}
+
+func (d *bubbleDelegation) restart() {
+	d.t.Helper()
+	d.w.restart()
+	d.reconnect()
+}
+
+func (d *bubbleDelegation) reconnect() {
+	d.app, d.cli = d.w.TrustedApp(), d.w.Client()
+	d.dispatcher.cli, d.delegate.cli = d.cli, d.cli
+}
+
+func (d *bubbleDelegation) dispatcherMakesAModelRequest() {
+	d.t.Helper()
+	d.dispatcher.take("the delegate's report is in hand; leaving it")
+	synctest.Wait()
+}
+
+func (d *bubbleDelegation) turnOwed() bool {
+	d.t.Helper()
+	return protocol.Deref(queriedSession(d.t, d.cli, d.delegate.id).TurnOwed)
+}
+
+func (d *bubbleDelegation) turnOpenedByTheDispatchersSilence(when string) {
+	d.t.Helper()
+	owed := queriedSession(d.t, d.cli, d.delegate.id)
+	if !protocol.Deref(owed.TurnOwed) || owed.Attention == nil || owed.Attention.Decider != "rule:dispatcher_silent" {
+		d.t.Errorf("%s the delegate is %+v with attention %+v, want its turn open by rule:dispatcher_silent", when, owed, owed.Attention)
+	}
+}
+
+func TestADispatchersSilenceAcrossARestartOpensTheDelegatesTurnAtTheOriginalDeadline(t *testing.T) {
+	inBubbleWithAgentsAndVerdicts(t, func(t *testing.T, w *world) {
+		d := delegateStopsQuietlyInBubble(t, w)
+		d.noticesTheDispatcher()
+		w.advance(2 * time.Minute)
+		d.restart()
+		w.advance(noticeAnswerTime - 2*time.Minute - time.Second)
+		if d.turnOwed() {
+			t.Fatalf("a second before the dispatcher's 5 minutes ran out, across a restart, the delegate's turn is open")
+		}
+		w.advance(time.Second)
+		d.turnOpenedByTheDispatchersSilence("5 minutes after the notice, across a restart,")
+	})
+}
+
+func TestADispatcherDeadlineThatPassesWhileTheDaemonIsDownOpensTheDelegatesTurnAtStart(t *testing.T) {
+	inBubbleWithAgentsAndVerdicts(t, func(t *testing.T, w *world) {
+		d := delegateStopsQuietlyInBubble(t, w)
+		d.noticesTheDispatcher()
+		w.advance(2 * time.Minute)
+		w.stop()
+		w.advance(10 * time.Minute)
+		w.start()
+		d.reconnect()
+		w.advance(0)
+		d.turnOpenedByTheDispatchersSilence("at a start after the dispatcher's deadline passed while the daemon was down,")
+	})
+}
+
+func TestADispatcherThatAnswersAroundARestartLeavesTheDelegatesTurnClosed(t *testing.T) {
+	t.Run("it answers before the restart", func(t *testing.T) {
+		inBubbleWithAgentsAndVerdicts(t, func(t *testing.T, w *world) {
+			d := delegateStopsQuietlyInBubble(t, w)
+			d.noticesTheDispatcher()
+			w.advance(time.Minute)
+			d.dispatcherMakesAModelRequest()
+			w.advance(time.Minute)
+			d.restart()
+			w.advance(noticeAnswerTime)
+			if d.turnOwed() {
+				t.Errorf("the delegate's turn opened after a restart although its dispatcher answered the notice before it")
+			}
+		})
+	})
+	t.Run("it answers after the restart", func(t *testing.T) {
+		inBubbleWithAgentsAndVerdicts(t, func(t *testing.T, w *world) {
+			d := delegateStopsQuietlyInBubble(t, w)
+			d.noticesTheDispatcher()
+			w.advance(2 * time.Minute)
+			d.restart()
+			w.advance(time.Minute)
+			d.dispatcherMakesAModelRequest()
+			w.advance(noticeAnswerTime)
+			if d.turnOwed() {
+				t.Errorf("the delegate's turn opened although its dispatcher answered the notice after a restart")
+			}
+		})
+	})
+}
+
+func TestADelegateClosedInItsDispatchersWindowStaysClosedAcrossARestart(t *testing.T) {
+	inBubbleWithAgentsAndVerdicts(t, func(t *testing.T, w *world) {
+		d := delegateStopsQuietlyInBubble(t, w)
+		d.noticesTheDispatcher()
+		w.advance(time.Minute)
+		if _, err := d.cli.AgentClose(d.delegate.id, protocol.SessionID(d.dispatcher.id), "migration done"); err != nil {
+			t.Fatal(err)
+		}
+		awaitClosed(d.app, d.delegate.id)
+		d.restart()
+		w.advance(noticeAnswerTime)
+		if n := surfacedTurns(t, w, d.delegate.id); n != 0 {
+			t.Errorf("the delegate closed in its dispatcher's window had its turn surfaced %d times across a restart", n)
+		}
+	})
+}
+
+func TestADelegatesTurnOpenedByItsDispatchersSilenceAndSettledStaysSettledAcrossARestart(t *testing.T) {
+	inBubbleWithAgentsAndVerdicts(t, func(t *testing.T, w *world) {
+		d := delegateStopsQuietlyInBubble(t, w)
+		d.noticesTheDispatcher()
+		w.advance(noticeAnswerTime)
+		d.turnOpenedByTheDispatchersSilence("5 minutes after the notice")
+		settleFromApp(d.app, queriedSession(t, d.cli, d.delegate.id))
+		w.advance(time.Minute)
+		d.restart()
+		w.advance(noticeAnswerTime)
+		if d.turnOwed() {
+			t.Errorf("a restart reopened the delegate's turn that its dispatcher's silence opened and the user settled")
+		}
+	})
 }

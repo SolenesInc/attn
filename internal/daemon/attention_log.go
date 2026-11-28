@@ -61,6 +61,7 @@ func (d *Daemon) loadAttentionLog() {
 	judged := map[protocol.SessionID]judgedFacts{}
 	surfaced := map[protocol.SessionID]attention.LogEntry{}
 	waits := map[protocol.SessionID]*supervisedWait{}
+	dispatcherNotices := map[protocol.SessionID]attention.LogEntry{}
 	type verdictID struct {
 		session protocol.SessionID
 		at      time.Time
@@ -82,11 +83,17 @@ func (d *Daemon) loadAttentionLog() {
 				surfaced[entry.Session] = entry
 			}
 		case attention.LogNotice:
-			if entry.To == entry.Session && d.store.Get(entry.Session) != nil {
+			switch {
+			case d.store.Get(entry.Session) == nil:
+			case entry.To == entry.Session:
 				waits[entry.Session] = &supervisedWait{since: entry.WaitSince, notice: entry.Checkpoint, noticedAt: entry.At, silent: entry.SilentSince}
+			default:
+				dispatcherNotices[entry.Session] = entry
 			}
 		case attention.LogWaitEnded:
 			delete(waits, entry.Session)
+		case attention.LogNoticeDeadline:
+			delete(dispatcherNotices, entry.Session)
 		case attention.LogFollowUp:
 			if entry.VerdictAt != nil {
 				delete(pending, verdictID{entry.Session, entry.VerdictAt.UTC()})
@@ -103,6 +110,9 @@ func (d *Daemon) loadAttentionLog() {
 	for _, entry := range surfaced {
 		d.attention.surface(entry)
 		d.broadcastSessionStateChanged(entry.Session)
+	}
+	for _, notice := range dispatcherNotices {
+		d.awaitDispatcher(notice)
 	}
 	for verdict := range pending {
 		d.appendAttentionLog(attention.LogEntry{Kind: attention.LogFollowUp, At: d.clock.Now(), Session: verdict.session, VerdictAt: &verdict.at, FollowUp: followUpUnknown})

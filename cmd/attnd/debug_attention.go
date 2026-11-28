@@ -67,6 +67,8 @@ func describeAttentionEntry(entry attention.LogEntry) string {
 		return fmt.Sprintf("%s %s %s notice to %s", at, entry.Session, entry.Checkpoint, entry.To)
 	case attention.LogWaitEnded:
 		return fmt.Sprintf("%s %s supervised wait ended", at, entry.Session)
+	case attention.LogNoticeDeadline:
+		return fmt.Sprintf("%s %s answer window of the notice to %s ran out", at, entry.Session, entry.To)
 	case attention.LogFollowUp:
 		verdictAt := ""
 		if entry.VerdictAt != nil {

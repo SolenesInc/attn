@@ -10,11 +10,12 @@ import (
 const DecisionLogFile = "attention-decisions.jsonl"
 
 const (
-	LogVerdict   = "verdict"
-	LogSurfaced  = "surfaced"
-	LogFollowUp  = "follow_up"
-	LogNotice    = "notice"
-	LogWaitEnded = "wait_ended"
+	LogVerdict        = "verdict"
+	LogSurfaced       = "surfaced"
+	LogFollowUp       = "follow_up"
+	LogNotice         = "notice"
+	LogWaitEnded      = "wait_ended"
+	LogNoticeDeadline = "notice_deadline"
 )
 
 type LogEntry struct {
