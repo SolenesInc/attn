@@ -4836,6 +4836,9 @@ type DesktopTileContentMessage struct {
 
 	// View corresponds to the JSON schema field "view".
 	View *ViewDocument `json:"view,omitempty,omitzero"`
+
+	// ViewCommands corresponds to the JSON schema field "view_commands".
+	ViewCommands []ViewCommand `json:"view_commands,omitempty,omitzero"`
 }
 
 type DesktopUpdateTileMessage struct {
@@ -15815,12 +15818,52 @@ type ViewColumn struct {
 	Header string `json:"header"`
 }
 
+type ViewCommand struct {
+	// Command corresponds to the JSON schema field "command".
+	Command string `json:"command"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Part corresponds to the JSON schema field "part".
+	Part int `json:"part"`
+
+	// Phase corresponds to the JSON schema field "phase".
+	Phase ViewCommandPhase `json:"phase"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows []string `json:"rows,omitempty,omitzero"`
+}
+
 type ViewCommandCall struct {
 	// Args corresponds to the JSON schema field "args".
 	Args []string `json:"args"`
 
 	// Command corresponds to the JSON schema field "command".
 	Command string `json:"command"`
+}
+
+type ViewCommandPhase string
+
+const ViewCommandPhaseBusy ViewCommandPhase = "busy"
+const ViewCommandPhaseDone ViewCommandPhase = "done"
+const ViewCommandPhaseFailed ViewCommandPhase = "failed"
+
+type ViewCommandRunMessage struct {
+	// Args corresponds to the JSON schema field "args".
+	Args []string `json:"args"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Line corresponds to the JSON schema field "line".
+	Line string `json:"line"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
 }
 
 type ViewDocument struct {
@@ -15876,11 +15919,17 @@ type ViewOwnCommand struct {
 	// Args corresponds to the JSON schema field "args".
 	Args [][]ViewTemplatePiece `json:"args"`
 
+	// Confirm corresponds to the JSON schema field "confirm".
+	Confirm []ViewTemplatePiece `json:"confirm,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
 	// Program corresponds to the JSON schema field "program".
 	Program string `json:"program"`
+
+	// Written corresponds to the JSON schema field "written".
+	Written string `json:"written"`
 }
 
 type ViewPart struct {
@@ -16178,11 +16227,54 @@ type ViewRunCommand struct {
 	// Line corresponds to the JSON schema field "line".
 	Line string `json:"line"`
 
+	// Name corresponds to the JSON schema field "name".
+	Name *string `json:"name,omitempty,omitzero"`
+
 	// ScriptSHA256 corresponds to the JSON schema field "script_sha256".
 	ScriptSHA256 string `json:"script_sha256"`
 
 	// State corresponds to the JSON schema field "state".
 	State ViewRunState `json:"state"`
+}
+
+type ViewRunMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Command corresponds to the JSON schema field "command".
+	Command string `json:"command"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// Part corresponds to the JSON schema field "part".
+	Part int `json:"part"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows []string `json:"rows,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+}
+
+type ViewRunResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type ViewRunState string

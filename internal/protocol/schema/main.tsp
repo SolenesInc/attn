@@ -3969,6 +3969,8 @@ model DesktopTileContentMessage {
   view?: ViewDocument;
   // The user's answers to a view, which the home keeps.
   answers?: ViewAnswers;
+  // How each view command a control ran last stands, while the home holds it.
+  view_commands?: ViewCommand[];
   // Rises when the document's annotation draft changed outside the app, as
   // when an agent answers a question; the app then reads the draft again.
   annotations_generation?: safeint;
@@ -4050,9 +4052,12 @@ model ViewDocument {
   commands: ViewRunCommand[];
 }
 
-// A run= command of a view, as the user sees it before and after starting it.
+// A run= command of a view, or one of its own commands, as the user sees it
+// before and after starting it.
 model ViewRunCommand {
   line: string;
+  // The name of a view's own command, which a control runs; absent for run=.
+  name?: string;
   every?: string;
   // The sha256 of the files of the view's folder that the line names, which
   // view_start records.
@@ -4073,6 +4078,58 @@ model ViewStartMessage {
   cmd: "view_start";
   desktop_id: string;
   tile_id: string;
+}
+
+// The user pressed a control of the view a tile shows. part is the line of
+// the part that holds the control, and rows the ids of the rows it is in,
+// outermost first, as answers name rows. text is what the user typed into an
+// entry.
+model ViewRunMessage {
+  cmd: "view_run";
+  request_id: string;
+  desktop_id: string;
+  tile_id: string;
+  command: string;
+  part: int32;
+  rows?: string[];
+  text?: string;
+}
+
+// Whether the home took the run. How the run goes is the tile's
+// view_commands.
+model ViewRunResultMessage {
+  event: "view_run_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
+// A view command that a control ran, in the part and rows it ran from.
+model ViewCommand {
+  command: string;
+  part: int32;
+  rows?: string[];
+  phase: ViewCommandPhase;
+  // Why it failed, while phase is failed.
+  error?: string;
+}
+
+enum ViewCommandPhase {
+  busy,
+  done,
+  failed,
+}
+
+// The home runs a view's own command on the machine that holds the view, with
+// its arguments filled from the row. The machine runs it only while line is
+// started there.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model ViewCommandRunMessage {
+  cmd: "view_command_run";
+  host?: string;
+  path: string;
+  line: string;
+  args: string[];
 }
 
 // One place a view's values come from. A file's id is its path from the

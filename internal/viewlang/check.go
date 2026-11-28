@@ -1103,7 +1103,20 @@ func (c *checker) ownCommands(b document.Block) []out {
 			continue
 		}
 		tokens, err := tokenize(rest)
-		if err != nil || len(tokens) == 0 {
+		command := out{"name": name, "written": l.text}
+		for err == nil && len(tokens) > 0 && tokens[0].keyed() {
+			if tokens[0].key != "confirm" || tokens[0].value == "" {
+				err = fmt.Errorf("%q is not how a command asks first", tokens[0].key+"="+tokens[0].value)
+				break
+			}
+			command["confirm"] = c.template(l.line, tokens[0].value, unknown)
+			tokens = tokens[1:]
+		}
+		if err != nil {
+			c.report(l.line, "Write it as \"name: program arguments\". To ask the user first, put confirm=\"Question?\" before the program.", "%s", err)
+			continue
+		}
+		if len(tokens) == 0 {
 			c.report(l.line, "Write the program after the colon, then its arguments.", "%q names no program", name)
 			continue
 		}
@@ -1116,7 +1129,8 @@ func (c *checker) ownCommands(b document.Block) []out {
 			args = append(args, c.template(l.line, word, unknown))
 		}
 		c.own[name] = l.line
-		commands = append(commands, out{"name": name, "program": tokens[0].value, "args": args})
+		command["program"], command["args"] = tokens[0].value, args
+		commands = append(commands, command)
 	}
 	return commands
 }

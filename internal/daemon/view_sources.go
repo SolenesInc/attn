@@ -44,21 +44,42 @@ const viewRunWaitDelay = 5 * time.Second
 
 const viewStderrTail = 2 << 10
 
-// viewCommand is a run= source of a view: the command line attn reruns every
-// so often, or runs once when every is zero.
+// viewCommand is a command of a view that runs only once the user starts it:
+// a run= source, which attn reruns every so often or runs once when every is
+// zero, or one of the view's own commands, which a control runs.
 type viewCommand struct {
 	line      string
 	every     time.Duration
 	everyText string
+	// own is set for a view's own command, whose line is its definition.
+	own *protocol.ViewOwnCommand
+}
+
+// words is the program and the arguments that could name a file of the view's
+// folder.
+func (c viewCommand) words() []string {
+	if c.own == nil {
+		return strings.Fields(c.line)
+	}
+	words := []string{c.own.Program}
+	for _, arg := range c.own.Args {
+		if len(arg) == 1 && arg[0].Text != nil {
+			words = append(words, *arg[0].Text)
+		}
+	}
+	return words
 }
 
 // viewCommands lists the run= commands of a view's parts that have no problem,
-// in the order its sources are listed.
+// in the order its sources are listed, then its own commands.
 func viewCommands(parts []protocol.ViewPart) []viewCommand {
 	var commands []viewCommand
+	listed := func(line string) bool {
+		return slices.ContainsFunc(commands, func(c viewCommand) bool { return c.line == line })
+	}
 	eachViewPart(parts, func(part protocol.ViewPart) {
 		data := part.Data
-		if data == nil || data.Run == nil || part.Problem != nil || slices.ContainsFunc(commands, func(c viewCommand) bool { return c.line == *data.Run }) {
+		if data == nil || data.Run == nil || part.Problem != nil || listed(*data.Run) {
 			return
 		}
 		command := viewCommand{line: *data.Run}
@@ -68,13 +89,23 @@ func viewCommands(parts []protocol.ViewPart) []viewCommand {
 		}
 		commands = append(commands, command)
 	})
+	eachViewPart(parts, func(part protocol.ViewPart) {
+		if part.Commands == nil {
+			return
+		}
+		for i := range part.Commands.Commands {
+			if own := &part.Commands.Commands[i]; !listed(own.Written) {
+				commands = append(commands, viewCommand{line: own.Written, own: own})
+			}
+		}
+	})
 	return commands
 }
 
-// viewScriptFiles is the regular files of folder that the words of line name.
-func viewScriptFiles(folder, line string) []string {
+// viewScriptFiles is the regular files of folder that the words name.
+func viewScriptFiles(folder string, words []string) []string {
 	var files []string
-	for _, file := range viewLineFiles(folder, line) {
+	for _, file := range viewLineFiles(folder, words) {
 		if info, err := os.Stat(file); err == nil && info.Mode().IsRegular() {
 			files = append(files, file)
 		}
@@ -82,11 +113,11 @@ func viewScriptFiles(folder, line string) []string {
 	return files
 }
 
-// viewLineFiles is the paths in folder that the words of line could name,
-// whether or not a file is there yet.
-func viewLineFiles(folder, line string) []string {
+// viewLineFiles is the paths in folder that the words could name, whether or
+// not a file is there yet.
+func viewLineFiles(folder string, words []string) []string {
 	var files []string
-	for _, word := range strings.Fields(line) {
+	for _, word := range words {
 		if file := filepath.Join(folder, word); filepath.IsLocal(word) && !slices.Contains(files, file) {
 			files = append(files, file)
 		}
@@ -121,7 +152,7 @@ func viewCommandState(folder string, command viewCommand, files []string, script
 		if s.ScriptSHA256 == script {
 			return protocol.ViewRunStateStarted, nil
 		}
-		return protocol.ViewRunStateChanged, protocol.Ptr(viewScriptChange(folder, command.line, files))
+		return protocol.ViewRunStateChanged, protocol.Ptr(viewScriptChange(folder, command, files))
 	}
 	if was, replaced := replacedViewLine(started, lines); replaced {
 		return protocol.ViewRunStateChanged, protocol.Ptr(fmt.Sprintf("was %q when you started it", was))
@@ -141,12 +172,12 @@ func replacedViewLine(started []protocol.ViewStartedCommand, lines []string) (st
 }
 
 // viewScriptChange says what changed in the files a command runs, read after the command's line.
-func viewScriptChange(folder, line string, files []string) string {
+func viewScriptChange(folder string, command viewCommand, files []string) string {
 	if len(files) != 1 {
 		return "uses a file that changed since you started it"
 	}
 	name, _ := filepath.Rel(folder, files[0])
-	if program := strings.Fields(line)[0]; filepath.Clean(program) == name {
+	if program := command.words()[0]; filepath.Clean(program) == name {
 		return "changed since you started it"
 	}
 	return fmt.Sprintf("uses %s, which changed since you started it", name)
@@ -225,7 +256,7 @@ func (d *Daemon) readViewCommands(path string) []viewCommandRead {
 	folder := filepath.Dir(path)
 	var read []viewCommandRead
 	for _, command := range viewCommands(viewlang.Check(content).Parts) {
-		files := viewScriptFiles(folder, command.line)
+		files := viewScriptFiles(folder, command.words())
 		read = append(read, viewCommandRead{command: command, files: files, script: viewScript(folder, files)})
 	}
 	return read
@@ -252,6 +283,9 @@ func (d *Daemon) followViewRuns(path string) bool {
 	held, kept := runs.views[path], map[string]*viewRun{}
 	changed := false
 	for _, r := range read {
+		if r.command.own != nil {
+			continue
+		}
 		state, _ := viewCommandState(filepath.Dir(path), r.command, r.files, r.script, runs.started[path], lines)
 		run := held[r.command.line]
 		if run == nil {
@@ -297,7 +331,7 @@ func (d *Daemon) rerunViewCommand(ctx context.Context, path string, run *viewRun
 	folder := filepath.Dir(path)
 	for {
 		began := time.Now()
-		if viewScript(folder, viewScriptFiles(folder, command.line)) != script {
+		if viewScript(folder, viewScriptFiles(folder, command.words())) != script {
 			if d.followViewRuns(path) {
 				d.reportTileDocuments(d.tileDocuments.bump([]string{path}))
 			}
@@ -344,40 +378,12 @@ func (d *Daemon) rerunViewCommand(ctx context.Context, path string, run *viewRun
 // runViewCommand runs line as a program and its arguments in folder, never
 // through a shell, and reads the one JSON object it prints.
 func runViewCommand(ctx context.Context, folder, line string) (any, []byte, error) {
-	words := strings.Fields(line)
-	timedOut := fmt.Errorf("%s ran for more than %s, so attn stopped it", line, viewRunTimeout)
 	tooLarge := fmt.Errorf("%s printed more than %d bytes, past what a view's sources hold together", line, maxViewDataBytes)
-	ctx, stop := context.WithTimeoutCause(ctx, viewRunTimeout, timedOut)
-	defer stop()
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	stdout := &viewOutput{cancel: func() { cancel(tooLarge) }}
-	stderr := &viewTail{}
-	cmd := exec.CommandContext(ctx, words[0], words[1:]...)
-	cmd.Dir = folder
-	cmd.Stdout, cmd.Stderr = stdout, stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.WaitDelay = viewRunWaitDelay
-	err := cmd.Run()
-	if cause := context.Cause(ctx); cause != nil && (errors.Is(cause, timedOut) || errors.Is(cause, tooLarge)) {
-		return nil, nil, cause
-	}
-	if ctx.Err() != nil {
-		return nil, nil, ctx.Err()
-	}
-	if exit := (*exec.ExitError)(nil); errors.As(err, &exit) {
-		said := fmt.Sprintf("%s exited with status %d", line, exit.ExitCode())
-		if last := stderr.lastLine(); last != "" {
-			said += ": " + last
-		}
-		return nil, nil, errors.New(said)
-	}
-	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) && !strings.Contains(words[0], "/") {
-			return nil, nil, fmt.Errorf("%s did not start: %v. Name a program in the view's folder from there, such as ./%s", line, err, words[0])
-		}
-		return nil, nil, fmt.Errorf("%s did not start: %v", line, err)
+	if err := runViewProgram(ctx, folder, line, strings.Fields(line), stdout); err != nil {
+		return nil, nil, err
 	}
 	var values any
 	if err := json.Unmarshal(stdout.data, &values); err != nil {
@@ -387,6 +393,40 @@ func runViewCommand(ctx context.Context, folder, line string) (any, []byte, erro
 		return nil, nil, fmt.Errorf("%s printed JSON that is not one object", line)
 	}
 	return values, stdout.data, nil
+}
+
+// runViewProgram runs words as a program and its arguments in folder, never
+// through a shell, in a process group of its own that a timeout or ctx ends.
+// It says the command as line in what it reports.
+func runViewProgram(ctx context.Context, folder, line string, words []string, stdout io.Writer) error {
+	timedOut := fmt.Errorf("%s ran for more than %s, so attn stopped it", line, viewRunTimeout)
+	ctx, stop := context.WithTimeoutCause(ctx, viewRunTimeout, timedOut)
+	defer stop()
+	stderr := &viewTail{}
+	cmd := exec.CommandContext(ctx, words[0], words[1:]...)
+	cmd.Dir = folder
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = viewRunWaitDelay
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		return context.Cause(ctx)
+	}
+	if exit := (*exec.ExitError)(nil); errors.As(err, &exit) {
+		said := fmt.Sprintf("%s exited with status %d", line, exit.ExitCode())
+		if last := stderr.lastLine(); last != "" {
+			said += ": " + last
+		}
+		return errors.New(said)
+	}
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) && !strings.Contains(words[0], "/") {
+			return fmt.Errorf("%s did not start: %v. Name a program in the view's folder from there, such as ./%s", line, err, words[0])
+		}
+		return fmt.Errorf("%s did not start: %v", line, err)
+	}
+	return nil
 }
 
 type viewOutput struct {
@@ -431,12 +471,15 @@ func (d *Daemon) viewRunCommands(path string, commands []viewCommand) []protocol
 	d.viewRuns.mu.Unlock()
 	listed := []protocol.ViewRunCommand{}
 	for _, command := range commands {
-		files := viewScriptFiles(folder, command.line)
+		files := viewScriptFiles(folder, command.words())
 		script := viewScript(folder, files)
 		state, change := viewCommandState(folder, command, files, script, started, lines)
 		shown := protocol.ViewRunCommand{Line: command.line, ScriptSHA256: script, State: state, Change: change}
 		if command.everyText != "" {
 			shown.Every = protocol.Ptr(command.everyText)
+		}
+		if command.own != nil {
+			shown.Name = protocol.Ptr(command.own.Name)
 		}
 		listed = append(listed, shown)
 	}
@@ -530,7 +573,7 @@ func viewDataFiles(folder string, parts []protocol.ViewPart) []string {
 		}
 	}
 	for _, command := range viewCommands(parts) {
-		files = append(files, viewLineFiles(folder, command.line)...)
+		files = append(files, viewLineFiles(folder, command.words())...)
 	}
 	return files
 }

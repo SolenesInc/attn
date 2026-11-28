@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "5ae515ca0565";
+pub const PROTOCOL_VERSION: &str = "8a702684c760";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -4165,6 +4165,8 @@ pub struct DesktopTileContentMessage {
     pub tile_kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<ViewDocument>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view_commands: Option<Vec<ViewCommand>>,
 }
 
 impl DesktopTileContentMessage {
@@ -13968,10 +13970,41 @@ pub struct ViewColumn {
     pub header: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewCommand {
+    pub command: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub part: i64,
+    pub phase: ViewCommandPhase,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows: Option<Vec<String>>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewCommandCall {
     #[serde(deserialize_with = "null_as_default")]
     pub args: Vec<String>,
     pub command: String,
+}
+pub type ViewCommandPhase = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewCommandRunMessage {
+    #[serde(deserialize_with = "null_as_default")]
+    pub args: Vec<String>,
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub line: String,
+    pub path: String,
+}
+
+impl ViewCommandRunMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "view_command_run".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewDocument {
@@ -14012,8 +14045,11 @@ pub struct ViewMedia {
 pub struct ViewOwnCommand {
     #[serde(deserialize_with = "null_as_default")]
     pub args: Vec<Vec<ViewTemplatePiece>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<Vec<ViewTemplatePiece>>,
     pub name: String,
     pub program: String,
+    pub written: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewPart {
@@ -14238,8 +14274,51 @@ pub struct ViewRunCommand {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub every: Option<String>,
     pub line: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub script_sha256: String,
     pub state: ViewRunState,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewRunMessage {
+    pub cmd: String,
+    pub command: String,
+    pub desktop_id: String,
+    pub part: i64,
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    pub tile_id: String,
+}
+
+impl ViewRunMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "view_run".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewRunResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    pub success: bool,
+}
+
+impl ViewRunResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "view_run_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 pub type ViewRunState = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

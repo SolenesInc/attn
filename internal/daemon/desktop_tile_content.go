@@ -35,7 +35,9 @@ type heldTileDocument struct {
 	review  *protocol.ReviewBundle
 	view    *protocol.ViewDocument
 	answers *protocol.ViewAnswers
-	err     error
+	// How each view command a control ran last stands.
+	commands []protocol.ViewCommand
+	err      error
 	// The draft generation an annotation change outside the app reached.
 	annotations int
 	// The profiles whose windows show it, whose started commands its machine runs.
@@ -150,6 +152,7 @@ func desktopTileContentMessage(key desktopTileKey, document tileDocument, held *
 	}
 	if held.view != nil {
 		message.Answers = held.answers
+		message.ViewCommands = held.commands
 	}
 	if document.host != "" {
 		message.Host = protocol.Ptr(document.host)
@@ -280,7 +283,7 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 	delivery.watching[host] = watcher
 	for document, held := range delivery.documents {
 		if document.host == host {
-			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, view: held.view, answers: held.answers, err: held.err, annotations: held.annotations, profiles: held.profiles}
+			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, view: held.view, answers: held.answers, commands: held.commands, err: held.err, annotations: held.annotations, profiles: held.profiles}
 		}
 	}
 	delivery.mu.Unlock()

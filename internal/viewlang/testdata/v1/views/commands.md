@@ -3,9 +3,10 @@
 
 :::commands
 rerun: scripts/rerun.sh {id}
+cancel: confirm="Cancel {name}?" scripts/cancel.sh --job={id}
 :::
 
 :::list ci.jobs
 title: {name}
-controls: rerun
+controls: rerun, cancel
 :::

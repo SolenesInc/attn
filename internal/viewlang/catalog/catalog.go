@@ -161,9 +161,9 @@ var Parts = []Part{
 	}, Example: "chart.md"},
 	{Name: "each", Colons: 4, Summary: "Its content once per item: prose, headings, media, questions and parts.", Args: []Arg{itemsArg}, Body: BlocksBody, Reports: "each item's answers", Example: "each.md"},
 	{Name: "one-by-one", Colons: 4, Summary: "One item at a time, with progress and a summary before sending.", Args: []Arg{itemsArg}, Body: BlocksBody, Keys: "↩ keeps and goes on, s skips, ← and → step; e writes, digits pick and f chooses a file in the item's questions", Reports: "each item's answers, and whether the user kept, changed or skipped it", Example: "one-by-one.md"},
-	{Name: "entry", Colons: 3, Summary: "A line to type in. ↩ runs the command with the text. The body is the hint shown while the line is empty.", Args: []Arg{{Name: "command", Kind: CommandArg, Required: true, Doc: "the command and its arguments"}}, Body: TextBody, Keys: "↩ runs", Example: "entry.md"},
+	{Name: "entry", Colons: 3, Summary: "A line to type in. ↩ runs the command with the text, which a view's own command gets as its last argument. The body is the hint shown while the line is empty.", Args: []Arg{{Name: "command", Kind: CommandArg, Required: true, Doc: "the command and its arguments"}}, Body: TextBody, Keys: "↩ runs", Example: "entry.md"},
 	{Name: "controls", Colons: 3, Summary: "The view's own buttons, in its header, one command per line.", Body: ControlsBody, Keys: "each control's letter", TopOnly: true, Example: "controls.md"},
-	{Name: "commands", Colons: 3, Summary: "Defines the view's own commands, one `name: program arguments` per line. It draws nothing.", Body: CommandsBody, TopOnly: true, Example: "commands.md"},
+	{Name: "commands", Colons: 3, Summary: "Defines the view's own commands, one `name: program arguments` per line. `name: confirm=\"Question?\" program arguments` asks the user first. It draws nothing.", Body: CommandsBody, TopOnly: true, Example: "commands.md"},
 }
 
 var Formats = []Named{

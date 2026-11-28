@@ -38,6 +38,7 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, false, d.tileDocumentChanged)
 	runs(parts, true, d.readTileDocument)
 	runs(parts, false, d.writeViewResponses)
+	runs(parts, false, d.runOwnViewCommand)
 	runs(parts, true, d.readTileAsset)
 	runs(parts, true, d.readReviewFile)
 	runs(parts, true, d.searchReview)

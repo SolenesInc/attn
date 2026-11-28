@@ -23,7 +23,38 @@
               ]
             ],
             "name": "rerun",
-            "program": "scripts/rerun.sh"
+            "program": "scripts/rerun.sh",
+            "written": "rerun: scripts/rerun.sh {id}"
+          },
+          {
+            "args": [
+              [
+                {
+                  "text": "--job="
+                },
+                {
+                  "field": [
+                    "id"
+                  ]
+                }
+              ]
+            ],
+            "confirm": [
+              {
+                "text": "Cancel "
+              },
+              {
+                "field": [
+                  "name"
+                ]
+              },
+              {
+                "text": "?"
+              }
+            ],
+            "name": "cancel",
+            "program": "scripts/cancel.sh",
+            "written": "cancel: confirm=\"Cancel {name}?\" scripts/cancel.sh --job={id}"
           }
         ]
       },
@@ -31,7 +62,7 @@
       "name": "commands"
     },
     {
-      "line": 8,
+      "line": 9,
       "list": {
         "items": {
           "field": [
@@ -44,6 +75,10 @@
             {
               "args": [],
               "command": "rerun"
+            },
+            {
+              "args": [],
+              "command": "cancel"
             }
           ],
           "title": [

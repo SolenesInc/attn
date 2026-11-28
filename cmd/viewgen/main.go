@@ -167,6 +167,8 @@ model ViewColumn {
 
 model ViewOwnCommand {
   name: string;
+  written: string;
+  confirm?: ViewTemplate;
   program: string;
   args: ViewTemplate[];
 }
@@ -306,7 +308,7 @@ func writeReference(fixtures string) (string, error) {
 		store = append(store, fmt.Sprintf("`%s`: %s.", usage, command.Doc))
 	}
 	bullets(&out, "The commands of a view with a store, such as `press: toggle done` and `:::entry add text`", store)
-	out.WriteString("A view defines its own commands in `:::commands`. Each is a program and its arguments, run in the view's folder and never through a shell. A view's own command cannot take the name of one of attn's commands or of a store's commands.\n")
+	out.WriteString("A view defines its own commands in `:::commands`. Each is a program and its arguments, run on the view's machine in the view's folder and never through a shell. Fields such as `{id}` in its arguments take the values of the row whose control the user pressed, and each reaches the program as one argument, whatever characters it holds. `:::entry` gives it the typed text as its last argument. `confirm=\"Rerun {name}?\"` before the program asks the user first. The command runs only once the user starts the view's commands with `r` on its tile, and its control shows while it runs, and whether it finished or failed. A view's own command cannot take the name of one of attn's commands or of a store's commands.\n")
 	for _, part := range catalog.Parts {
 		fmt.Fprintf(&out, "\n## %s\n\n`%s`\n\n%s\n\n", part.Name, written(part), part.Summary)
 		var args []string

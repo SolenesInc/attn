@@ -856,6 +856,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopUpdateTile(client, msg.(*protocol.DesktopUpdateTileMessage))
 	case protocol.CmdViewStart:
 		d.handleViewStart(client, msg.(*protocol.ViewStartMessage))
+	case protocol.CmdViewRun:
+		d.handleViewRun(client, msg.(*protocol.ViewRunMessage))
 	case protocol.CmdClientHello:
 		d.handleClientHello(client, msg.(*protocol.ClientHelloMessage))
 	case protocol.CmdDelegate:

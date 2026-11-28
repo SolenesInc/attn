@@ -7,7 +7,8 @@
           {
             "args": [],
             "name": "note",
-            "program": "scripts/add-note.sh"
+            "program": "scripts/add-note.sh",
+            "written": "note: scripts/add-note.sh"
           }
         ]
       },

@@ -32,9 +32,9 @@ When the user sends, attn writes the answers to `<view>.responses.json` beside t
 | chart | `:::chart <items> x=<field> y=<field>` | A line chart of the items. |
 | each | `::::each <items>` | Its content once per item: prose, headings, media, questions and parts. |
 | one-by-one | `::::one-by-one <items>` | One item at a time, with progress and a summary before sending. |
-| entry | `:::entry <command>` | A line to type in. ↩ runs the command with the text. The body is the hint shown while the line is empty. |
+| entry | `:::entry <command>` | A line to type in. ↩ runs the command with the text, which a view's own command gets as its last argument. The body is the hint shown while the line is empty. |
 | controls | `:::controls` | The view's own buttons, in its header, one command per line. |
-| commands | `:::commands` | Defines the view's own commands, one `name: program arguments` per line. It draws nothing. |
+| commands | `:::commands` | Defines the view's own commands, one `name: program arguments` per line. `name: confirm="Question?" program arguments` asks the user first. It draws nothing. |
 
 Do not name a part `script`: attn reserves the name and refuses it.
 
@@ -105,7 +105,7 @@ The commands of a view with a store, such as `press: toggle done` and `:::entry 
 - `toggle <field>`: switches the row's yes-no field.
 - `remove`: removes the row.
 
-A view defines its own commands in `:::commands`. Each is a program and its arguments, run in the view's folder and never through a shell. A view's own command cannot take the name of one of attn's commands or of a store's commands.
+A view defines its own commands in `:::commands`. Each is a program and its arguments, run on the view's machine in the view's folder and never through a shell. Fields such as `{id}` in its arguments take the values of the row whose control the user pressed, and each reaches the program as one argument, whatever characters it holds. `:::entry` gives it the typed text as its last argument. `confirm="Rerun {name}?"` before the program asks the user first. The command runs only once the user starts the view's commands with `r` on its tile, and its control shows while it runs, and whether it finished or failed. A view's own command cannot take the name of one of attn's commands or of a store's commands.
 
 ## markdown
 
@@ -469,7 +469,7 @@ Is this take good enough?
 
 `:::entry <command>`
 
-A line to type in. ↩ runs the command with the text. The body is the hint shown while the line is empty.
+A line to type in. ↩ runs the command with the text, which a view's own command gets as its last argument. The body is the hint shown while the line is empty.
 
 Arguments:
 
@@ -508,7 +508,7 @@ follow
 
 `:::commands`
 
-Defines the view's own commands, one `name: program arguments` per line. It draws nothing.
+Defines the view's own commands, one `name: program arguments` per line. `name: confirm="Question?" program arguments` asks the user first. It draws nothing.
 
 It goes at the top level of a view, not inside a four-colon part.
 
@@ -518,10 +518,11 @@ It goes at the top level of a view, not inside a four-colon part.
 
 :::commands
 rerun: scripts/rerun.sh {id}
+cancel: confirm="Cancel {name}?" scripts/cancel.sh --job={id}
 :::
 
 :::list ci.jobs
 title: {name}
-controls: rerun
+controls: rerun, cancel
 :::
 ```

@@ -202,6 +202,7 @@ var Placements = map[string][]Placement{
 	"update_outpost":                 {Placement{LocatorHome, ""}},
 	"update_request":                 {Placement{LocatorHome, ""}},
 	"update_status":                  {Placement{LocatorHome, ""}},
+	"view_command_run":               {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"view_responses_write":           {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"wake_turn":                      {Placement{LocatorHome, ""}},
 	"worktree_keep":                  {Placement{LocatorHere, ""}},
@@ -2433,6 +2434,24 @@ func (m UpdateStatusMessage) Placement() Placement {
 }
 
 func (m UpdateStatusMessage) Locate() string {
+	return ""
+}
+
+func (ViewCommandRunMessage) CommandName() string {
+	return "view_command_run"
+}
+
+func (m ViewCommandRunMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m ViewCommandRunMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
 	return ""
 }
 

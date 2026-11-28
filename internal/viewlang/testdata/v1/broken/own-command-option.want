@@ -1,0 +1,4 @@
+line 2: "retries=3" is not how a command asks first
+fix: Write it as "name: program arguments". To ask the user first, put confirm="Question?" before the program.
+
+commands on line 1 shows the problem of line 2

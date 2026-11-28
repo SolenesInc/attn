@@ -48,6 +48,8 @@ model ViewColumn {
 
 model ViewOwnCommand {
   name: string;
+  written: string;
+  confirm?: ViewTemplate;
   program: string;
   args: ViewTemplate[];
 }
