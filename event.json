@@ -1,0 +1,13 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Shadow attention supervisor's headless check hangs TestAParkedVerdictHoldsAYieldedTurnWorkingPastTheIdlePromptUntilItExpires (main Daemon (4) times out)",
+  "at": "2026-11-28T00:11:33.475Z",
+  "severity": "p1",
+  "source": "agent",
+  "location": {
+    "path": "internal/daemon/stop_yield_wire_test.go",
+    "line": 36
+  },
+  "culprit": "d4aa68b6be106d0bd813a35260106982e1fa8d94"
+}
