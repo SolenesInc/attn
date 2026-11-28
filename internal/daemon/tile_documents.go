@@ -42,6 +42,9 @@ type watchedTileDocument struct {
 // a new version of the document.
 func (doc *watchedTileDocument) watchShown(path string, kinds documentKinds, now time.Time) {
 	doc.kinds, doc.shown = kinds, nil
+	if kinds == (documentKinds{}) {
+		return
+	}
 	content, err := readMarkdownFile(path)
 	if err != nil {
 		return

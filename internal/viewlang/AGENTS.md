@@ -5,3 +5,4 @@
 - Each part's entry names its example in the `views` folder of the current language's fixtures, `testdata/v<Language>/views`. The reference shows the example, and the corpus test checks it. When `Language` rises, copy the folder to the new `v<N>` and point the `viewgen` line of `generate-types` at it.
 - The files under `testdata/v<N>` are views that a later attn reads with the same meaning. Reword a fixture's `.md` only when its meaning stays the same. A change of meaning raises `Language` and ships a rewriter from the old form.
 - `go test ./internal/viewlang -update` rewrites each fixture's expected output. Read the diff before you commit it.
+- The app's wire test `native/crates/attn-app/tests/wire/views.rs` reads `every-static-part.json`, `commands.json` and `question.json` and names parts by their index and line. Update it when you change those fixtures.

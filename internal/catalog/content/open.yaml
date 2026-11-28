@@ -30,7 +30,7 @@ commands:
     effect: record
     upfront: true
     doc: |
-      Opens the markdown file at `path`, or the seed `seed` (pass one of the two), in a tile next to your session. The tile reloads whenever the file changes. A view's or a review document's problems come back as `problems`, each with its line; the tile opens anyway.
+      Opens the markdown file at `path`, or the seed `seed` (pass one of the two), in a tile next to your session. The tile reloads whenever the file changes. With `code_review_enabled` on, a review document's problems come back as `problems`, each with its line; with `views_enabled` on, so do a view's. The tile opens anyway.
     args:
       - {name: path, type: path, cli: pos, one_of: target, placeholder: "<file.md>", doc: "the markdown file to show"}
       - {name: seed, type: seed_id, cli: pos, one_of: target, doc: "the seed to show, by its id"}

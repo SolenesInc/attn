@@ -243,6 +243,11 @@ pub(crate) fn ticks(contents: &attn_client::TileContents, now_ms: i64) -> Option
     ages.then_some(now_ms / 60_000)
 }
 
+/// When the ages the shown views draw next read differently: at the next minute.
+pub(crate) fn next_change(contents: &attn_client::TileContents, now_ms: i64) -> Option<i64> {
+    ticks(contents, now_ms).map(|minute| (minute + 1) * 60_000)
+}
+
 /// The body of the markdown tile `tile` showing the view `view`, which `content` carries.
 pub(crate) fn body(
     (tile, held, title): (&str, bool, &str),

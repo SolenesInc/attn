@@ -1,11 +1,12 @@
 use std::time::Duration;
 
+use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     Desktop, DesktopPane, DesktopTileContentMessage, InitialStateMessage, Profile, Session,
     ViewDocument, ViewProblem, ViewSource, ViewValues,
 };
 use attn_testkit::tree::{pane, row};
-use attn_testkit::{Daemon, Target, World};
+use attn_testkit::{Daemon, Target, WALL_START_MS, World, key_event};
 use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
@@ -13,6 +14,10 @@ const DESKTOP: &str = "work/desktop_1";
 const VIEW: &str = "/work/a/release/view.md";
 const EVERY_STATIC_PART: &str =
     include_str!("../../../../../internal/viewlang/testdata/v1/views/every-static-part.json");
+const COMMANDS: &str =
+    include_str!("../../../../../internal/viewlang/testdata/v1/views/commands.json");
+const QUESTION: &str =
+    include_str!("../../../../../internal/viewlang/testdata/v1/views/question.json");
 
 fn start() -> World {
     let tile = json!({
@@ -98,10 +103,9 @@ fn source(id: &str, data: bool) -> ViewSource {
 
 /// The example view that uses every static part, as the daemon checks it, with its two files.
 fn every_static_part() -> ViewDocument {
-    let checked: Value = serde_json::from_str(EVERY_STATIC_PART).unwrap();
     let mut view = ViewDocument {
         language: 1,
-        parts: serde_json::from_value(checked["parts"].clone()).unwrap(),
+        parts: parts_of(EVERY_STATIC_PART),
         ..ViewDocument::default()
     };
     view.sources = vec![source("release.json", true), source("takes.jsonl", false)];
@@ -118,16 +122,34 @@ fn every_static_part() -> ViewDocument {
     view
 }
 
+fn parts_of(checked: &str) -> Vec<attn_protocol::ViewPart> {
+    let checked: Value = serde_json::from_str(checked).unwrap();
+    serde_json::from_value(checked["parts"].clone()).unwrap()
+}
+
 fn show(world: &mut World, view: ViewDocument) {
+    deliver(world, Some(view));
+}
+
+fn deliver(world: &mut World, view: Option<ViewDocument>) {
     world.daemon.emit(DesktopTileContentMessage {
         desktop_id: DESKTOP.into(),
         tile_id: "m".into(),
         tile_kind: "markdown".into(),
         path: VIEW.into(),
         content: "# Release 4.2".into(),
-        view: Some(view),
+        view,
         ..DesktopTileContentMessage::new()
     });
+    world.settle();
+}
+
+fn press_action(world: &mut World, action: &Action) {
+    let ev = match Keymap::from_setting(None, attn_testkit::platform()).binding(action) {
+        Some(Binding::Chord(chord)) => key_event(&chord),
+        other => panic!("{} has no single chord: {other:?}", action.id()),
+    };
+    world.gesture(|app| app.key(ev));
     world.settle();
 }
 
@@ -287,8 +309,85 @@ fn keys_move_the_highlight_fold_a_list_and_step_through_one_by_one() {
     assert!(says(&world, "All 2 seen: 1 kept, 1 skipped"));
 
     world.advance(Duration::from_secs(1));
+    let now = world.now().as_secs_f64();
+    let wake = world.runtime().wake_deadline().map(|at| at - now);
     assert!(
-        world.runtime_is_at_rest(),
-        "the view repaints while nothing changes"
+        !world.runtime().animating && wake.is_some_and(|s| s > 58.0),
+        "the view repaints while nothing changes: it wakes in {wake:?} s"
+    );
+}
+
+#[test]
+fn a_views_ages_move_on_while_the_window_is_idle() {
+    let mut world = start();
+    let mut view = every_static_part();
+    view.values[0].values["head"]["at"] = json!((WALL_START_MS - 30_000) / 1000);
+    show(&mut world, view);
+    assert!(says(&world, "just now"));
+    world.advance(Duration::from_secs(61));
+    assert!(says(&world, "2m ago"), "{:#?}", shown(&world));
+}
+
+#[test]
+fn parts_attn_cannot_run_yet_say_so_in_their_place() {
+    let mut world = start();
+    let mut parts = parts_of(COMMANDS);
+    parts.extend(parts_of(QUESTION));
+    let view = ViewDocument {
+        language: 1,
+        parts,
+        sources: vec![ViewSource {
+            id: "scripts/main-status.sh".into(),
+            kind: "run".into(),
+            data: true,
+            state: "unavailable".into(),
+            ..ViewSource::default()
+        }],
+        ..ViewDocument::default()
+    };
+    show(&mut world, view);
+    for said in [
+        "run=\"scripts/main-status.sh\" is not available yet",
+        "Running a view's own commands is not available yet",
+        "Answering \"Which size should the icon be?\" in a view is not available yet",
+    ] {
+        assert!(
+            says(&world, said),
+            "{said:?} is not said in {:#?}",
+            shown(&world)
+        );
+    }
+}
+
+#[test]
+fn the_overview_shows_a_view_tile_by_its_card() {
+    let mut world = start();
+    show(&mut world, every_static_part());
+    press_action(&mut world, &Action::DesktopOverview);
+    let screen = world.screen();
+    assert!(
+        screen
+            .find(Target::key("overview.miniature.m.card"))
+            .is_some()
+    );
+    assert!(
+        screen
+            .find(Target::key("overview.miniature.m.picture"))
+            .is_none()
+    );
+}
+
+#[test]
+fn the_find_chord_on_a_view_leaves_no_find_bar_behind() {
+    let mut world = start();
+    show(&mut world, every_static_part());
+    press_action(&mut world, &Action::TerminalFind);
+    deliver(&mut world, None);
+    assert!(says(&world, "Release 4.2"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.m.document.find"))
+            .is_none()
     );
 }

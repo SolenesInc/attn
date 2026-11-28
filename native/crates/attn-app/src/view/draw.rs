@@ -104,9 +104,14 @@ pub(crate) fn tasks(part: &ViewPart, doors: &Doors<'_>) -> Block {
 
 pub(crate) fn question(part: &ViewPart, doors: &Doors<'_>) -> Block {
     let _ = doors.answers.taken();
+    let asked = (part.question.as_ref().map(|q| &q.question))
+        .or(part.question_multi.as_ref().map(|q| &q.question))
+        .or(part.question_text.as_ref().map(|q| &q.question))
+        .or(part.question_file.as_ref().map(|q| &q.question));
+    let prompt = asked.map_or("", |q| q.prompt.as_str());
     not_yet(
         &doors.room.key,
-        &format!("Answering \"{}\" in a view", part.name),
+        &format!("Answering \"{prompt}\" in a view"),
         doors.room.t,
     )
 }
@@ -527,5 +532,9 @@ pub(crate) fn controls(part: &ViewPart, doors: &Doors<'_>) -> Block {
 }
 
 pub(crate) fn commands(_: &ViewPart, doors: &Doors<'_>) -> Block {
-    not_yet(&doors.room.key, "A view's own commands", doors.room.t)
+    not_yet(
+        &doors.room.key,
+        "Running a view's own commands",
+        doors.room.t,
+    )
 }

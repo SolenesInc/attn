@@ -216,7 +216,7 @@ pub(crate) fn body(
 
 /// The document `content` holds, read `width` points across as its tile reads it, with no marks and
 /// none of its tile's tools. `view` names it apart from its tile. None when there is nothing to
-/// read.
+/// read, and for a view, which only its tile draws.
 pub(crate) fn still(
     view: String,
     width: f32,
@@ -226,7 +226,7 @@ pub(crate) fn still(
 ) -> Option<El> {
     let attn_client::TileContent { revision, message } = content;
     let failed = message.error.as_deref().is_some_and(|e| !e.is_empty());
-    if failed || message.content.trim().is_empty() {
+    if failed || message.content.trim().is_empty() || message.view.is_some() {
         return None;
     }
     let widest = if message.review.is_some() {

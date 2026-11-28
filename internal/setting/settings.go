@@ -103,9 +103,9 @@ var (
 		Since:   "2026-11-19",
 		Search:  "harness sigma pi server",
 	})
-	ViewsEnabled = feature("views_enabled", "Let a tile show one of attn's views, such as Sessions or Pull requests, on any desktop: true or false. Experimental; off by default.", Info{
+	ViewsEnabled = feature("views_enabled", "Let a tile show one of attn's views, such as Sessions or Pull requests, on any desktop, and draw a markdown file written in the view language part by part: true or false. Experimental; off by default.", Info{
 		Name:    "Views",
-		Summary: "Show attn's brand line, Sessions or Pull requests as tiles on any desktop, from the command palette.",
+		Summary: "Show attn's brand line, Sessions or Pull requests as tiles on any desktop, from the command palette, and draw view files opened with attn open.",
 		Group:   Interface,
 		Applies: Now,
 		Stage:   Experimental,

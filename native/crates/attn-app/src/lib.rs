@@ -181,7 +181,7 @@ impl State {
     }
 
     /// Reads the wall clock into the window and wakes it when the next turn age, activity
-    /// staleness or Sessions list window would change.
+    /// staleness, Sessions list window or view's age would change.
     fn tick(&mut self, tx: &mut Tx) {
         self.window.now_ms = self.wall_ms();
         let now_ms = self.window.now_ms;
@@ -194,6 +194,7 @@ impl State {
             .chain(settings::phones::next_change(self, now_ms))
             .chain(review::setup::next_change(self, now_ms))
             .chain(ledger::next_change(self, now_ms))
+            .chain(view::next_change(&self.facts.tile_contents, now_ms))
             .min()
             .map(|at| match self.age_wake {
                 Some(armed) if armed.at_ms == at => armed,

@@ -163,3 +163,23 @@ func TestWithViewsOffAViewIsPlainMarkdownAndOpenAnswersNoProblems(t *testing.T) 
 		t.Errorf("the tile got view %+v and content %q, want the file as written and no view", tile.View, protocol.Deref(tile.Content))
 	}
 }
+
+func TestWithViewsOnMarkdownThatOnlyLooksLikeAViewOpensAsWritten(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "views_enabled", "true")
+	folder := w.Path("notes")
+	notes := filepath.Join(folder, "notes.md")
+	written := "# Notes\n\n:::note\nKeep this.\n:::\n\n```markdown\n:::list ci.jobs\n:::\n```\n"
+	writeViewFolder(t, folder, map[string]string{"notes.md": written})
+
+	problems, err := cli.OpenMarkdown(notes, "s1")
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("opening the notes answered problems %+v, error %v; want none", problems, err)
+	}
+	tile := awaitDocumentContent(app, notes)
+	if tile.View != nil || protocol.Deref(tile.Content) != written {
+		t.Errorf("the tile got view %+v and content %q, want the file as written and no view", tile.View, protocol.Deref(tile.Content))
+	}
+}

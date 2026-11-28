@@ -32,7 +32,7 @@ impl Doc {
 }
 
 /// The document tile holding the keyboard, on screen with nothing over it: a markdown tile
-/// showing a file, not a review, or a seed tile.
+/// showing a file, not a review or a view, or a seed tile.
 fn held(state: &State) -> Option<Doc> {
     if !state.window.tiles_in_front() {
         return None;
@@ -52,7 +52,7 @@ fn held(state: &State) -> Option<Doc> {
                 tile: holder.pane.clone(),
             };
             let message = &state.facts.tile_contents.get(&key)?.message;
-            message.review.is_none().then(|| doc(&holder.pane))
+            (message.review.is_none() && message.view.is_none()).then(|| doc(&holder.pane))
         }
         _ => None,
     }

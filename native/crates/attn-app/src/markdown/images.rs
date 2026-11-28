@@ -264,11 +264,11 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
             let read = hash(&(&c.path, &host, &c.content, &stops));
             let fresh = state.pictures.documents.get(key) != Some(&read);
             documents.insert(key.clone(), read);
-            let source = c
-                .view
-                .as_ref()
-                .map_or_else(|| c.content.clone(), crate::view::shown_markdown);
-            let shown = std::iter::once((c.path.as_str(), source.as_str())).chain(
+            let source: std::borrow::Cow<str> = match &c.view {
+                Some(view) => crate::view::shown_markdown(view).into(),
+                None => c.content.as_str().into(),
+            };
+            let shown = std::iter::once((c.path.as_str(), source.as_ref())).chain(
                 stops
                     .iter()
                     .map(|(path, text)| (path.as_str(), text.as_str())),

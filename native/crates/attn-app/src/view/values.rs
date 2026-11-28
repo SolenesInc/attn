@@ -4,27 +4,25 @@
 use std::collections::HashMap;
 
 use attn_protocol::{ViewDocument, ViewItems, ViewTemplatePiece};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 /// The values of a view's sources: its data, which the parts' fields name, and each file by
 /// its path from the view's folder, which a part's items may name.
 #[derive(Default)]
-pub(crate) struct Data {
-    top: Value,
-    files: HashMap<String, Value>,
-    sources: HashMap<String, (String, String)>,
+pub(crate) struct Data<'a> {
+    top: Vec<(Option<&'a str>, &'a Value)>,
+    files: HashMap<&'a str, &'a Value>,
+    sources: HashMap<&'a str, (&'a str, &'a str)>,
 }
 
-impl Data {
-    pub(crate) fn of(view: &ViewDocument) -> Data {
-        let mut top = Map::new();
+impl<'a> Data<'a> {
+    pub(crate) fn of(view: &'a ViewDocument) -> Data<'a> {
+        let mut top = Vec::new();
         let mut files = HashMap::new();
         let sources = (view.sources.iter())
             .map(|s| {
-                (
-                    s.id.clone(),
-                    (s.state.clone(), s.notice.clone().unwrap_or_default()),
-                )
+                let notice = s.notice.as_deref().unwrap_or_default();
+                (s.id.as_str(), (s.state.as_str(), notice))
             })
             .collect();
         for values in &view.values {
@@ -32,40 +30,43 @@ impl Data {
                 continue;
             };
             if source.data {
-                match (&source.r#as, &values.values) {
-                    (Some(name), value) => {
-                        top.insert(name.clone(), value.clone());
-                    }
-                    (None, Value::Object(fields)) => {
-                        top.extend(fields.iter().map(|(k, v)| (k.clone(), v.clone())));
-                    }
-                    (None, _) => {}
-                }
+                top.push((source.r#as.as_deref(), &values.values));
             }
             if source.kind == "file" {
-                files.insert(source.id.clone(), values.values.clone());
+                files.insert(source.id.as_str(), &values.values);
             }
         }
         Data {
-            top: Value::Object(top),
+            top,
             files,
             sources,
         }
     }
 
-    pub(crate) fn scope(&self, now_ms: i64) -> Scope<'_> {
+    pub(crate) fn scope(&'a self, now_ms: i64) -> Scope<'a> {
         Scope {
             data: self,
             items: Vec::new(),
             now_ms,
         }
     }
+
+    /// The value at `path` in the view's data: the last data source that has it wins.
+    fn field(&self, path: &[String]) -> Option<&'a Value> {
+        self.top.iter().rev().find_map(|(name, value)| match name {
+            Some(name) => match path.split_first() {
+                Some((first, rest)) if first == name => at(value, rest),
+                _ => None,
+            },
+            None => value.is_object().then(|| at(value, path)).flatten(),
+        })
+    }
 }
 
 /// Where a part reads its fields: the view's data, inside the items around it, innermost last.
 #[derive(Clone)]
 pub(crate) struct Scope<'a> {
-    data: &'a Data,
+    data: &'a Data<'a>,
     items: Vec<&'a Value>,
     now_ms: i64,
 }
@@ -80,19 +81,15 @@ impl<'a> Scope<'a> {
 
     /// The value at `path`: a field of the innermost item that has it, or of the view's data.
     pub(crate) fn get(&self, path: &[String]) -> Option<&'a Value> {
-        let roots = self
-            .items
-            .iter()
-            .rev()
-            .copied()
-            .chain(std::iter::once(&self.data.top));
-        roots.into_iter().find_map(|root| at(root, path))
+        (self.items.iter().rev())
+            .find_map(|item| at(item, path))
+            .or_else(|| self.data.field(path))
     }
 
     /// The items `items` names: a field's list, or a file's.
     pub(crate) fn items(&self, items: &ViewItems) -> &'a [Value] {
         let value = match (&items.file, &items.field) {
-            (Some(file), _) => self.data.files.get(file),
+            (Some(file), _) => self.data.files.get(file.as_str()).copied(),
             (None, Some(field)) => self.get(field),
             (None, None) => None,
         };
@@ -123,7 +120,7 @@ impl<'a> Scope<'a> {
     /// How the source `id` stands, and what it says when it is not ok.
     pub(crate) fn source(&self, id: &str) -> Option<(&'a str, String)> {
         let (state, notice) = self.data.sources.get(id)?;
-        Some((state.as_str(), notice.clone()))
+        Some((state, (*notice).to_owned()))
     }
 
     /// The number `path` holds, read from a number or from text that is one.
