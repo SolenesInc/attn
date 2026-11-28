@@ -556,10 +556,8 @@ func (d *Daemon) viewSources(path string, parts []protocol.ViewPart, commands []
 				budget -= run.size
 				values = append(values, protocol.ViewValues{Source: source.ID, Values: run.values})
 			}
-		case protocol.ViewSourceKindAttn:
+		case protocol.ViewSourceKindAttn, protocol.ViewSourceKindStore:
 			source.State = protocol.ViewSourceStateWaiting
-		default:
-			source.State, source.Notice = protocol.ViewSourceStateUnavailable, protocol.Ptr("not available yet")
 		}
 	}
 	return sources, values

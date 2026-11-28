@@ -7,7 +7,7 @@ groups:
       rows:
         - {need: "Keep, change, duplicate, hide or show a view", tools: [view_export, view_edit, view_show, view_hide]}
     doc: |
-      A view is a folder with a view file and the files that view file names; attn draws it in a tile. A kept view is one attn stores in your profile under a name, with every version. attn's own views, `sessions`, `pull-requests` and `attn`, are views too, and an edit keeps an override of one. Only attn writes a kept view: export a copy with `view_export`, edit the copy, and save it with `view_edit`. A kept view with `:::data store=` also keeps items, which the user changes in its tile and you change with the `view_data_` commands. With the experimental setting views_enabled on.
+      A view is a folder with a view file and the files that view file names; attn draws it in a tile. A kept view is one attn stores in your profile under a name, with every version. attn's own views, `sessions`, `pull-requests` and `attn`, are views too, and an edit keeps an override of one. Only attn writes a kept view: export a copy with `view_export`, edit the copy, and save it with `view_edit`. A kept view with `:::data store=` also keeps items, which the user changes in its tile and you change with `view_data_list`, `view_data_add`, `view_data_set` and `view_data_remove`. With the experimental setting views_enabled on.
     flags:
       - {name: session, placeholder: "<id>", doc: "the session asking (defaults to the current session)"}
     sections:

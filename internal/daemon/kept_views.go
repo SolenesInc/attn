@@ -257,6 +257,7 @@ func (d *Daemon) placeKeptView(ctx context.Context, profileID, name string) erro
 		if err := d.store.SetViewFolder(profileID, name, d.machineFor(view.MachineID).ID(), written.Folder, view.Version); err != nil {
 			return err
 		}
+		d.dataSets.nudge()
 		d.nudgeDesktopTileContent()
 	}
 }

@@ -123,12 +123,12 @@ func (d *Daemon) viewStoreFields(s viewStore) ([]protocol.ViewStoreField, error)
 	if !kept {
 		return nil, command.Refuse(command.CodeNotFound, "this profile keeps no view %s", s.view)
 	}
-	files, err := d.store.ViewFiles(s.profileID, s.view, view.Version)
+	text, err := d.store.ViewFile(s.profileID, s.view, view.Version, views.ViewFile)
 	if err != nil {
 		return nil, err
 	}
 	var fields []protocol.ViewStoreField
-	eachViewPart(viewlang.Check(string(files[views.ViewFile])).Parts, func(part protocol.ViewPart) {
+	eachViewPart(viewlang.Check(string(text)).Parts, func(part protocol.ViewPart) {
 		if data := part.Data; data != nil && data.Fields != nil && protocol.Deref(data.Store) == s.set {
 			fields = data.Fields
 		}

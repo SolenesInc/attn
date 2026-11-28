@@ -207,6 +207,18 @@ func (s *Store) ViewVersions(profileID, name string) ([]ViewVersion, error) {
 	return versions, rows.Err()
 }
 
+// ViewFile is one file of a saved version of the kept view.
+func (s *Store) ViewFile(profileID, name string, version int, file string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var content []byte
+	err := s.db.QueryRow(`SELECT content FROM view_files WHERE profile_id = ? AND name = ? AND version = ? AND file = ?`, profileID, name, version, file).Scan(&content)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("the view %s has no %s in version %d", name, file, version)
+	}
+	return content, err
+}
+
 // ViewFiles is the files of one saved version of the kept view.
 func (s *Store) ViewFiles(profileID, name string, version int) (map[string][]byte, error) {
 	s.mu.RLock()

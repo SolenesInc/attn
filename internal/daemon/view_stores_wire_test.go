@@ -183,6 +183,22 @@ func TestAKeptToDoViewKeepsItemsChangedFromItsTileAndByAnAgentAcrossARestart(t *
 	}
 	awaitTodoTile(t, app, tile.TileID, 0, func(items []todoItem) bool { return texts(items) == "[x] buy oat milk" })
 
+	edited := w.Path("todo-edited")
+	writeViewFolder(t, edited, map[string]string{"view.md": "<!-- attn-view 1 todo@1 -->\n" + strings.Replace(todoView, "done: yes-no\n", "done: yes-no\nnote: text\n", 1)})
+	mark = len(app.Log())
+	must("view edit", command.ViewEditArgs{View: "todo", From: edited}, nil)
+	testworld.AwaitSince(app, mark, protocol.EventDesktopTileContent, func(e protocol.DesktopTileContentMessage) bool {
+		if e.TileID != tile.TileID || e.View == nil {
+			return false
+		}
+		for _, values := range e.View.Values {
+			if raw, _ := json.Marshal(values.Values); values.Source == "items" && strings.Contains(string(raw), `"note":""`) {
+				return true
+			}
+		}
+		return false
+	})
+
 	var deleted protocol.ViewDeleteResult
 	must("view delete", command.ViewDeleteArgs{View: "todo"}, &deleted)
 	if want := []protocol.ViewStoreRemoved{{Set: "items", Items: 1}}; !slices.Equal(deleted.Stores, want) {
