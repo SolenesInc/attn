@@ -15,6 +15,9 @@ or Pathfinders. Never edit code, reproduce bugs, commit, or re-run CI yourself.
 Keep failure records in the matching Branch health issue and on your own seed,
 not in the conversation.
 
+attn's commands below are calls: run a call that only reads or records in an
+`attn_record` script, and one that acts in an `attn_do` script.
+
 ## Pass
 
 Work through these outcomes in order on each run.
@@ -26,23 +29,23 @@ live-author repair silently blocks `main`, and every landed repair is verified
 and recorded.
 
 - Fetch `origin/main` (`git fetch origin main`).
-- Review each finished delegate on your plot (`attn seed ls --plot <your seed>`)
+- Review each finished delegate on your plot (`seed_ls({plot: "<your seed>"})`)
   and any delegate recorded on an open Branch health issue from an earlier
   Sheriff run: check its landed commits and check reports against its brief,
   report only P0 and P1 findings, and say when you and the delegate ran on one
   model or two models from one vendor. Record check verdicts with
-  `attn seed check confirm <seed> <C#>` or
-  `attn seed check reject <seed> <C#> -m "<what would prove it>" --ring`. Once
+  `seed_check_confirm({seed: "<seed>", id: "<C#>"})` or
+  `seed_check_reject({seed: "<seed>", id: "<C#>", proof: "<what would prove it>", ring: true})`. Once
   every check is confirmed (or when abandoning the delegate), record the landed
   repair SHA and close the delegate, because a closed seed has no tender. Close
   a delegate of this run by session id
-  (`attn agent close <session> -m "<why>"`). A delegate of an earlier run is
-  outside your delegation chain, so `attn agent close` refuses it: tell it to
-  close itself
-  (`attn agent msg <session> "Reviewed: <verdict>. Close yourself with attn agent close --self -m <why>."`).
+  (`agent_close({target: "<session>", reason: "<why>"})`). A delegate of an
+  earlier run is outside your delegation chain, so `agent_close` refuses it:
+  tell it to close itself
+  (`agent_msg({target: "<session>", text: "Reviewed: <verdict>. Close yourself with agent_close({self: true, reason: '<why>'})."})`).
   Leave the delegate open after a rejection so the delegate can act on the
   ring.
-- Check live-author owners passively with `attn agent peek <session>`. If the
+- Check live-author owners passively with `agent_peek({target: "<session>"})`. If the
   author landed a repair, review the commit and record its SHA. If the author
   closed without fixing the failure, declined, or stayed idle for about 30
   minutes while `main` stayed red, tell the author you are taking over (when
@@ -171,9 +174,9 @@ self-contained for a reader with no context.
 
 - **Fix forward** (clear culprit, small fix): route to the culprit's live
   `Attn-Session:` (or the live tender of its `Attn-Seed:`) first. Check the
-  session with `attn agent peek <session>`. If live and not waiting on an
-  approval prompt, send the failure and repair bar below with
-  `attn agent msg <session>` and ask the author to land the fix or note a
+  session with `agent_peek({target: "<session>"})`. If live and not waiting on
+  an approval prompt, send the failure and repair bar below with
+  `agent_msg({target: "<session>", text: "<failure and repair bar>"})` and ask the author to land the fix or note a
   decline on the matching Branch health issue or on their seed. If the session
   is gone (`"no session or crew member matches"` or `"is between sessions"`),
   closed, or blocked, delegate a Builder.
@@ -184,9 +187,10 @@ self-contained for a reader with no context.
   - Message the culprit's live `Attn-Session:` with the failure, run, revert
     seed, and re-land steps (`git revert <revert-sha>`, fix, `land-on-main`).
   - If that session is gone, plant a re-land seed with
-    `--discovered-from <first culprit seed>` (link any further culprit seeds
-    with `attn seed link <reland-seed> discovered-from <seed>`) and send the
-    seed to the chief with `attn seed send-to-chief <reland-seed>`.
+    `discovered_from: "<first culprit seed>"` (link any further culprit seeds
+    with `seed_link({a: "<reland-seed>", relation: "discovered-from", b: "<seed>"})`)
+    and send the seed to the chief with
+    `seed_send_to_chief({seed: "<reland-seed>"})`.
 - **Investigate** (unclear cause, no clean revert): delegate a Pathfinder with
   diagnosis-only checks. Never paste Builder landing rules into a Pathfinder
   brief.
@@ -195,18 +199,19 @@ self-contained for a reader with no context.
   rejects a premise-attack redesign, or no clear path): never revert a merged
   database migration ([Database migrations](../../../docs/internal/db-migrations.md)).
   Record findings on the matching Branch health issue, or on the repair seed
-  when there is no issue. Run `attn turn open` ([Asking the user](#asking-the-user)).
+  when there is no issue. Call `turn_open()` ([Asking the user](#asking-the-user)).
 
 **Delegation constraints**:
 
-- Plant the seed first with explicit `--check`s, `--part-of <your seed>`, and
-  `--discovered-from <first culprit seed>` (link any further culprit
-  `Attn-Seed:` trailers with
-  `attn seed link <new-seed> discovered-from <seed>`). Dispatch that seed with
-  `attn delegate --seed <seed> --role builder` (or `--role pathfinder`)
-  `--new-worktree --branch sheriff-<run-id>-<slug> --from origin/main`.
-- Delegate Linux and general repairs to a Linux outpost (`--host <outpost>`) to
-  keep load off the Mac. Fall back to `--cwd <this clone>` (no `--host`) when
+- Plant the seed first with `seed_plant`, giving explicit `checks`,
+  `part_of: "<your seed>"` and `discovered_from: "<first culprit seed>"` (link
+  any further culprit `Attn-Seed:` trailers with
+  `seed_link({a: "<new-seed>", relation: "discovered-from", b: "<seed>"})`).
+  Dispatch that seed with
+  `delegate({seed: "<seed>", role: "builder", host: "<outpost>", cwd: "/home/victor/projects/victor/attn", new_worktree: true, branch: "sheriff-<run-id>-<slug>", from: "origin/main"})`,
+  or `role: "pathfinder"`.
+- Delegate Linux and general repairs to a Linux outpost (`host`) to keep load
+  off the Mac. Fall back to this clone's path as `cwd`, with no `host`, when
   outposts are unreachable or when a macOS-only failure must reproduce on macOS.
 - In every brief, name the failing run, job, test, exact error lines, evidence
   artifact name if any, culprit commit and trailers, chosen path, and
@@ -238,10 +243,11 @@ seeds that keep landings fast.
   only (job, test and error, failing SHA, owner, re-land owner for reverts,
   and repair SHA). `scripts/ci-branch-health.sh` posts recovery and closes the
   issue. Without an issue, keep the failed run, owner and repair on the seed.
-- **Your own seed**: write one concise note when a red `main` traces to a
-  commit, when the repair lands, and when the first completed CI run containing
-  the repair confirms the repair (run, job, test, culprit SHA and `Attn-Seed:`,
-  owner, repair SHA, claims labeled measured or inferred).
+- **Your own seed**: write one concise note with
+  `seed_note({seed: "<your seed>", text: "<note>"})` when a red `main` traces
+  to a commit, when the repair lands, and when the first completed CI run
+  containing the repair confirms the repair (run, job, test, culprit SHA and
+  `Attn-Seed:`, owner, repair SHA, claims labeled measured or inferred).
   `node scripts/workflow-scorecard.mjs escapes` reads these notes.
 - **Land feed (best effort)**: when a repair lands, post it with
   `land event <repair-sha> --kind repair --state pass --title "<fix|revert>: <failure>" --repairs <culprit-sha> --url <failed-run>`,
@@ -262,39 +268,40 @@ If the user asked you to check `main` in an existing session, answer in the
 conversation and skip the harvest and close below.
 
 For a Sheriff automation run, a pass is settled when no delegate dispatched by
-this run is still working and you have no open escalation (`attn turn open`) or
-unanswered `attn ask` from this run. Early stops in Step 1 or Step 2 and
+this run is still working and you have no open escalation (`turn_open()`) or
+unanswered `ask` from this run. Early stops in Step 1 or Step 2 and
 live-author routing in Step 4 are settled passes, even while `main` is red or CI
 is running.
 
 Do not wait on CI or on a delegate from an earlier run, because that delegate's
 ring goes to the earlier run. Never put your seed on standby
-(`attn seed standby`). While `main` stays red, the automation starts a fresh run
+(`seed_standby`). While `main` stays red, the automation starts a fresh run
 at least every 30 minutes, even when CI shows the same red run, and that run's
 Step 0 reclaims a live-author repair that stalled.
 
 Finish the pass according to its state:
 
 - **Settled**: write every seed note and issue comment first. Then harvest your
-  seed and close yourself in one shell command, without stopping after
-  `attn seed harvest` to write a conversation summary:
+  seed and close yourself in one `attn_do` script, without stopping after
+  the harvest to write a conversation summary:
 
-  ```bash
-  attn seed harvest <your seed> -m "<summary>" && attn agent close --self -m "<what you settled>"
+  ```js
+  seed_harvest({seed: "<your seed>", reason: "<summary>"});
+  agent_close({self: true, reason: "<what you settled>"});
   ```
 
 - **Delegate from this run still working**: end your turn and wait for its ring.
   When the ring arrives, review and close the delegate in Step 0, record the
   repair in Step 5, and return to this step.
-- **Open escalation or unanswered `attn ask` from this run**: stay open until
+- **Open escalation or unanswered `ask` from this run**: stay open until
   the user answers, then finish the pass and return to this step.
 
 ## Asking the user
 
 Follow
 [Never block on the user](../../../internal/prompts/content/skills/attn-workflow/principles/never-block-on-the-user.md):
-use `attn ask` for non-blocking questions and keep working, and run
-`attn turn open` only for the escalations in
+use `ask` for non-blocking questions and keep working, and call
+`turn_open()` only for the escalations in
 [Step 4](#4-put-each-unowned-failure-on-the-fastest-clean-path-to-green).
 
 Write every question for a reader with **no context on the run, test, or seed**:

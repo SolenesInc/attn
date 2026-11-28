@@ -21,9 +21,10 @@ seed.
     added minutes to native landings, and the user declined that cost.
 
 When a repeating class passes this boundary, plant the Correction seed with
-`--discovered-from <failure seed>`, state the fast-landing constraint in the
-seed body (and name the broken guard if the class is listed below), and send
-the seed to the chief with `attn seed send-to-chief <seed>`.
+`seed_plant` and `discovered_from: "<failure seed>"`, state the fast-landing
+constraint in the seed body (and name the broken guard if the class is listed
+below), and send the seed to the chief with
+`seed_send_to_chief({seed: "<seed>"})`.
 
 ## Guarded classes
 

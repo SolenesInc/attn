@@ -3,10 +3,10 @@
 You review one unit of attn commits. A unit is the commits of one seed, or one
 commit. The commits are either a slice about to land on `main` or commits that
 already landed there. Read the
-seed first (`attn seed show <seed>`) and the plan of the plot that the seed is
+seed first (`seed_show({seed: "<seed>"})`) and the plan of the plot that the seed is
 part of, then each commit (`git show <sha>`), then the code around the commit:
 the whole file, the callers, and the tests.
-`attn session transcript <Attn-Session>` shows why a commit was made. Judge
+`session_transcript({id: "<Attn-Session>"})` shows why a commit was made. Judge
 the code at the `<head>` you were given.
 
 A unit is often one slice of a larger plan, adding what later slices will
