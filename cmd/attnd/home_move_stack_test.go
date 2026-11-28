@@ -848,6 +848,7 @@ func TestAFailedChecksFixIsTypedInAShellOnTheTargetThatTheCheckHoldsUntilItPasse
 
 	shell := home.Spawn(pair.App, fakeagent.Harness(protocol.SessionAgentShell), outpost.Path("fix"), func(m *protocol.SpawnSessionMessage) {
 		m.Host = protocol.Ptr(pair.Host)
+		m.Cwd = "~"
 		m.Typed = linger.Fix
 		m.Placement = &protocol.SessionPlacement{MoveCheck: protocol.Ptr("linger")}
 	})
@@ -860,6 +861,13 @@ func TestAFailedChecksFixIsTypedInAShellOnTheTargetThatTheCheckHoldsUntilItPasse
 		t.Fatalf("the shell the linger check holds has a tile")
 	}
 	pair.App.AwaitTerminalScreen(string(binding.TerminalID), fix)
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessions, err := home.Client().Query(""); err != nil || !slices.ContainsFunc(sessions, func(s protocol.Session) bool { return string(s.ID) == shell && s.Directory == userHome }) {
+		t.Fatalf("the fix shell did not open in the target's home %s (%v)", userHome, err)
+	}
 
 	check()
 	if sessions, err := home.Client().Query(""); err != nil || !slices.ContainsFunc(sessions, func(s protocol.Session) bool { return string(s.ID) == shell }) {

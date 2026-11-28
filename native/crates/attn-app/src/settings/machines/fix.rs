@@ -125,6 +125,7 @@ fn open(state: &mut State, machine: &str, check: &HomeMoveCheck, tx: &mut Tx) {
         id: session.clone(),
         agent: "shell".into(),
         host: Some(machine.to_owned()),
+        cwd: "~".into(),
         typed: Some(command),
         placement: Some(SessionPlacement {
             move_check: Some(name.clone()),

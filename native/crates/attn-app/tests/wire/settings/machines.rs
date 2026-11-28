@@ -1665,6 +1665,7 @@ fn a_failed_check_with_a_fix_opens_it_typed_in_a_shell_on_the_target_under_the_c
     let spawn = &spawned[0];
     assert_eq!(spawn["agent"], "shell");
     assert_eq!(spawn["host"], "outpost-1");
+    assert_eq!(spawn["cwd"], "~", "the shell opens in the target's home");
     assert_eq!(spawn["typed"], "loginctl enable-linger victor");
     assert_eq!(spawn["placement"]["move_check"], "linger");
     assert!(spawn["placement"]["desktop_id"].is_null(), "{spawn}");
