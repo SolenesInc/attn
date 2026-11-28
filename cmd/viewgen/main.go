@@ -263,6 +263,14 @@ func bullets(out *strings.Builder, heading string, items []string) {
 	out.WriteString("\n")
 }
 
+func commandRows(commands []catalog.Command) []string {
+	rows := make([]string, 0, len(commands))
+	for _, command := range commands {
+		rows = append(rows, fmt.Sprintf("`%s`: %s.", command.Name, command.Doc))
+	}
+	return rows
+}
+
 func namedRows(items []catalog.Named) []string {
 	rows := make([]string, 0, len(items))
 	for _, item := range items {
@@ -295,7 +303,7 @@ func writeReference(fixtures string) (string, error) {
 	bullets(&out, "The types of a store's fields", namedRows(catalog.StoreTypes))
 	bullets(&out, "The formats, written `{field|format}`", namedRows(catalog.Formats))
 	out.WriteString("## Commands a view can run\n\nA row's `press:`, `controls:` and `group-controls:` slots, `:::controls` and `:::entry` name commands, such as `press: open`.\n\n")
-	bullets(&out, "attn's commands", namedRows(catalog.Commands))
+	bullets(&out, "attn's commands", commandRows(catalog.Commands))
 	var store []string
 	for _, command := range catalog.StoreCommands {
 		usage := command.Name

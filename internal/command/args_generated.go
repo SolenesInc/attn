@@ -74,6 +74,7 @@ const (
 	CodeNotAPlot                    = "not_a_plot"
 	CodeNotAPRURL                   = "not_a_pr_url"
 	CodeNotATable                   = "not_a_table"
+	CodeNotBuiltIn                  = "not_built_in"
 	CodeNotExported                 = "not_exported"
 	CodeNotFound                    = "not_found"
 	CodeNotOnScreen                 = "not_on_screen"
@@ -282,12 +283,12 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"vent":                    {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"vent withdraw":           {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"view list":               {needsSession: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists."}},
-		"view read":               {needsSession: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_target": "Pass {view} or {path}.", "not_found": "Name a view that view_list lists.", "built_in": "attn's own views are not view files yet; read a kept view or a view file."}},
-		"view export":             {needsSession: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "built_in": "attn's own views cannot be exported yet; fork is not available for them either. Keep a view of your own with view_keep."}},
+		"view read":               {needsSession: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_target": "Pass {view} or {path}.", "not_found": "Name a view that view_list lists."}},
+		"view export":             {needsSession: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists."}},
 		"view keep":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bad_name": "Name it with lowercase letters, digits and dashes, starting with a letter.", "built_in": "Give the view a name other than attn, sessions or pull-requests.", "exists": "Pick another {name}, or save a change to the kept view with view_export and view_edit.", "has_problems": "Correct each line, then call view_keep again. Nothing was kept.", "other_view": "Save an export with view_edit, or remove its first line to keep it as a new view.", "too_large": "Keep large files out of the view's folder, or name them from a source's rows."}},
-		"view edit":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "built_in": "attn's own views cannot be edited yet.", "not_stamped": "Export the view with view_export, edit that copy and keep its first line.", "other_view": "Save the folder as the view its first line names, or export {view} and reapply your change.", "stale_export": "Export again into another folder and reapply your change. Nothing was saved.", "has_problems": "Correct each line, then call view_edit again. Nothing was saved.", "too_large": "Keep large files out of the view's folder, or name them from a source's rows."}},
-		"view restore":            {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view and one of its versions that view_list lists.", "built_in": "attn's own views cannot be edited yet.", "stale_export": "The view changed while restoring; call view_restore again."}},
-		"view fork":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "built_in": "attn's own views cannot be forked yet.", "bad_name": "Name it with lowercase letters, digits and dashes, starting with a letter.", "exists": "Pick another {name}."}},
+		"view edit":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "not_stamped": "Export the view with view_export, edit that copy and keep its first line.", "other_view": "Save the folder as the view its first line names, or export {view} and reapply your change.", "stale_export": "Export again into another folder and reapply your change. Nothing was saved.", "has_problems": "Correct each line, then call view_edit again. Nothing was saved.", "too_large": "Keep large files out of the view's folder, or name them from a source's rows."}},
+		"view restore":            {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view and one of its versions that view_list lists.", "not_built_in": "Restore one of the view's versions; only attn's own views have an original.", "stale_export": "The view changed while restoring; call view_restore again."}},
+		"view fork":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "built_in": "Give the copy a name other than attn, sessions or pull-requests.", "bad_name": "Name it with lowercase letters, digits and dashes, starting with a letter.", "exists": "Pick another {name}."}},
 		"view delete":             {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "built_in": "Take it off Home with view_hide instead."}},
 		"view show":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists, and a desktop of your profile."}},
 		"view hide":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists, and a desktop of your profile."}},
@@ -1240,8 +1241,9 @@ type ViewEditArgs struct {
 }
 
 type ViewRestoreArgs struct {
-	View    string `json:"view,omitempty"`
-	Version *int64 `json:"version,omitempty"`
+	View     string `json:"view,omitempty"`
+	Version  *int64 `json:"version,omitempty"`
+	Original bool   `json:"original,omitempty"`
 }
 
 type ViewForkArgs struct {

@@ -62,21 +62,65 @@ func notKept(name string) error {
 	return command.Refuse(command.CodeNotFound, "this profile keeps no view %s", name)
 }
 
-func notYetBuiltIn(name string) error {
-	return command.Refuse(command.CodeBuiltIn, "%s is one of attn's own views, which are not view files yet, so it is not available to read, export, edit, restore or fork yet", name)
+// namedView is a view of the profile by its name: a kept view, or one of
+// attn's own with the override its edits keep, if any.
+type namedView struct {
+	name    string
+	builtIn bool
+	kept    *store.KeptView
 }
 
-// keptView is the kept view name of the profile, refusing one of attn's own
-// and a name the profile does not keep.
-func (d *Daemon) keptView(profileID, name string) (store.KeptView, error) {
-	if views.BuiltIn(name) {
-		return store.KeptView{}, notYetBuiltIn(name)
+// version is the view's newest version. One of attn's own that was never
+// edited reads as version 1, which its first edit saves it as.
+func (v namedView) version() int {
+	if v.kept == nil {
+		return 1
 	}
-	view, kept, err := d.store.KeptView(profileID, name)
-	if err == nil && !kept {
-		err = notKept(name)
+	return v.kept.Version
+}
+
+// shipped is whether the view is one of attn's own that was never edited.
+func (v namedView) shipped() bool { return v.kept == nil }
+
+// machine is the machine a new version of the kept view, made of files and
+// saved from saver, runs on. The home holds attn's own views.
+func (v namedView) machine(files views.Files, saver string) string {
+	if v.builtIn {
+		return ""
 	}
-	return view, err
+	return viewMachine(files, v.kept.MachineID, saver)
+}
+
+// saved places the view's newest version once a save made it.
+func (d *Daemon) saved(ctx context.Context, profileID string, view namedView) {
+	if view.kept == nil {
+		d.placed(ctx, profileID, view.name)
+		return
+	}
+	d.replaced(ctx, *view.kept)
+}
+
+func (d *Daemon) namedView(profileID, name string) (namedView, error) {
+	view := namedView{name: name, builtIn: views.BuiltIn(name)}
+	kept, found, err := d.store.KeptView(profileID, name)
+	switch {
+	case err != nil:
+		return view, err
+	case found:
+		view.kept = &kept
+	case !view.builtIn:
+		return view, notKept(name)
+	}
+	return view, nil
+}
+
+// files is the newest version of the view's files.
+func (d *Daemon) files(profileID string, view namedView) (views.Files, error) {
+	if view.shipped() {
+		files, _ := views.Shipped(view.name)
+		return files, nil
+	}
+	return d.store.ViewFiles(profileID, view.name, view.kept.Version)
 }
 
 // callerViewFolder reads the folder at the caller's path on the caller's
@@ -183,7 +227,7 @@ func (d *Daemon) runViewEdit(ctx context.Context, c command.Caller, a command.Vi
 	if err != nil {
 		return nil, err
 	}
-	view, err := d.keptView(profile.ID, a.View)
+	view, err := d.namedView(profile.ID, a.View)
 	if err != nil {
 		return nil, err
 	}
@@ -191,22 +235,29 @@ func (d *Daemon) runViewEdit(ctx context.Context, c command.Caller, a command.Vi
 	if err != nil {
 		return nil, err
 	}
-	kept, err := d.store.ViewFiles(profile.ID, view.Name, view.Version)
+	kept, err := d.files(profile.ID, view)
 	if err != nil {
 		return nil, err
 	}
-	files, err := views.Edited(view.Name, view.Version, kept, folder, missing)
+	files, err := views.Edited(view.name, view.version(), kept, folder, missing)
 	if err != nil {
 		return nil, refusedView(err)
 	}
-	version, err := d.store.SaveViewVersion(profile.ID, view.Name, view.Version, viewMachine(files, view.MachineID, saver), savedVersion(c, a.Note), files)
-	if errors.Is(err, store.ErrStaleView) {
-		return nil, command.Refuse(command.CodeStaleExport, "%s changed while saving; export it again into another folder and reapply your change", view.Name)
+	var version int
+	if view.shipped() {
+		shipped := savedVersion(c, "as attn shipped it")
+		shipped.SavedBy = ""
+		version, err = 2, d.store.OverrideView(profile.ID, view.name, "", shipped, kept, savedVersion(c, a.Note), files)
+	} else {
+		version, err = d.store.SaveViewVersion(profile.ID, view.name, view.version(), view.machine(files, saver), savedVersion(c, a.Note), files)
+	}
+	if errors.Is(err, store.ErrStaleView) || errors.Is(err, store.ErrViewExists) {
+		return nil, command.Refuse(command.CodeStaleExport, "%s changed while saving; export it again into another folder and reapply your change", view.name)
 	} else if err != nil {
 		return nil, err
 	}
-	d.replaced(ctx, view)
-	return protocol.ViewEditResult{View: view.Name, Version: version, PreviousVersion: view.Version}, nil
+	d.saved(ctx, profile.ID, view)
+	return protocol.ViewEditResult{View: view.name, Version: version, PreviousVersion: view.version()}, nil
 }
 
 func (d *Daemon) runViewRestore(ctx context.Context, c command.Caller, a command.ViewRestoreArgs) (any, error) {
@@ -214,35 +265,64 @@ func (d *Daemon) runViewRestore(ctx context.Context, c command.Caller, a command
 	if err != nil {
 		return nil, err
 	}
-	view, err := d.keptView(profile.ID, a.View)
+	view, err := d.namedView(profile.ID, a.View)
 	if err != nil {
 		return nil, err
 	}
-	restore := view.Version - 1
+	if a.Original {
+		return d.restoreOriginal(profile.ID, view, a.Version)
+	}
+	if view.shipped() {
+		return nil, command.Refuse(command.CodeNotFound, "%s shows what attn ships and has no earlier version", view.name)
+	}
+	restore := view.version() - 1
 	if a.Version != nil {
 		restore = int(*a.Version)
 	}
-	versions, err := d.store.ViewVersions(profile.ID, view.Name)
+	versions, err := d.store.ViewVersions(profile.ID, view.name)
 	if err != nil {
 		return nil, err
 	}
-	if !slices.ContainsFunc(versions, func(v store.ViewVersion) bool { return v.Version == restore }) || restore == view.Version {
-		return nil, command.Refuse(command.CodeNotFound, "%s has no earlier version %d; its versions are 1 to %d", view.Name, restore, view.Version)
+	if !slices.ContainsFunc(versions, func(v store.ViewVersion) bool { return v.Version == restore }) || restore == view.version() {
+		return nil, command.Refuse(command.CodeNotFound, "%s has no earlier version %d; its versions are 1 to %d", view.name, restore, view.version())
 	}
-	files, err := d.store.ViewFiles(profile.ID, view.Name, restore)
+	files, err := d.store.ViewFiles(profile.ID, view.name, restore)
 	if err != nil {
 		return nil, err
 	}
 	saved := savedVersion(c, "")
 	saved.RestoredFrom = restore
-	version, err := d.store.SaveViewVersion(profile.ID, view.Name, view.Version, viewMachine(files, view.MachineID, d.machineFor(callerHost(ctx)).ID()), saved, files)
+	version, err := d.store.SaveViewVersion(profile.ID, view.name, view.version(), view.machine(files, d.machineFor(callerHost(ctx)).ID()), saved, files)
 	if errors.Is(err, store.ErrStaleView) {
-		return nil, command.Refuse(command.CodeStaleExport, "%s changed while restoring", view.Name)
+		return nil, command.Refuse(command.CodeStaleExport, "%s changed while restoring", view.name)
 	} else if err != nil {
 		return nil, err
 	}
-	d.replaced(ctx, view)
-	return protocol.ViewRestoreResult{View: view.Name, Version: version, RestoredFrom: restore}, nil
+	d.saved(ctx, profile.ID, view)
+	return protocol.ViewRestoreResult{View: view.name, Version: protocol.Ptr(version), RestoredFrom: protocol.Ptr(restore)}, nil
+}
+
+// restoreOriginal drops the override of one of attn's views, so the view
+// shows what attn ships again and follows attn's changes.
+func (d *Daemon) restoreOriginal(profileID string, view namedView, version *int64) (any, error) {
+	if !view.builtIn {
+		return nil, command.Refuse(command.CodeNotBuiltIn, "%s is not one of attn's own views, so it has no original; restore one of its versions", view.name)
+	}
+	if version != nil {
+		return nil, command.Refuse(command.CodeUsage, "pass a version or original, not both")
+	}
+	if !view.shipped() {
+		if err := d.discardKeptViewFiles(*view.kept); err != nil {
+			return nil, err
+		}
+		if err := d.store.DeleteView(*view.kept, d.machineFor(view.kept.MachineID).ID()); err != nil {
+			return nil, err
+		}
+		if err := d.shipBuiltInView(profileID, view.name); err != nil {
+			return nil, err
+		}
+	}
+	return protocol.ViewRestoreResult{View: view.name, Original: protocol.Ptr(true)}, nil
 }
 
 func (d *Daemon) runViewFork(ctx context.Context, c command.Caller, a command.ViewForkArgs) (any, error) {
@@ -250,25 +330,29 @@ func (d *Daemon) runViewFork(ctx context.Context, c command.Caller, a command.Vi
 	if err != nil {
 		return nil, err
 	}
-	view, err := d.keptView(profile.ID, a.View)
+	view, err := d.namedView(profile.ID, a.View)
 	if err != nil {
 		return nil, err
 	}
 	if err := views.CheckName(a.Name); err != nil {
 		return nil, refusedView(err)
 	}
-	files, err := d.store.ViewFiles(profile.ID, view.Name, view.Version)
+	files, err := d.files(profile.ID, view)
 	if err != nil {
 		return nil, err
 	}
-	saved := savedVersion(c, fmt.Sprintf("a copy of version %d of %s", view.Version, view.Name))
-	if err := d.store.KeepView(profile.ID, a.Name, view.MachineID, saved, files); errors.Is(err, store.ErrViewExists) {
+	machineID := ""
+	if view.kept != nil {
+		machineID = view.kept.MachineID
+	}
+	saved := savedVersion(c, fmt.Sprintf("a copy of version %d of %s", view.version(), view.name))
+	if err := d.store.KeepView(profile.ID, a.Name, machineID, saved, files); errors.Is(err, store.ErrViewExists) {
 		return nil, command.Refuse(command.CodeExists, "this profile already keeps a view %s", a.Name)
 	} else if err != nil {
 		return nil, err
 	}
 	d.placed(ctx, profile.ID, a.Name)
-	return protocol.ViewForkResult{View: a.Name, From: view.Name, Version: 1}, nil
+	return protocol.ViewForkResult{View: a.Name, From: view.name, Version: 1}, nil
 }
 
 func (d *Daemon) runViewDelete(ctx context.Context, c command.Caller, a command.ViewDeleteArgs) (any, error) {
@@ -279,10 +363,11 @@ func (d *Daemon) runViewDelete(ctx context.Context, c command.Caller, a command.
 	if views.BuiltIn(a.View) {
 		return nil, command.Refuse(command.CodeBuiltIn, "%s is one of attn's own views and cannot be deleted", a.View)
 	}
-	view, err := d.keptView(profile.ID, a.View)
+	named, err := d.namedView(profile.ID, a.View)
 	if err != nil {
 		return nil, err
 	}
+	view := *named.kept
 	closed := []protocol.ViewShownOn{}
 	shown, err := d.viewShownOn(profile.ID, view.Name)
 	if err != nil {
@@ -435,7 +520,12 @@ func (d *Daemon) runViewList(_ context.Context, c command.Caller, a command.View
 		listings = append(listings, protocol.ViewListing{Name: name, BuiltIn: true})
 	}
 	for _, view := range kept {
-		listings = append(listings, protocol.ViewListing{Name: view.Name, Version: protocol.Ptr(view.Version)})
+		i := slices.IndexFunc(listings, func(l protocol.ViewListing) bool { return l.Name == view.Name })
+		if i < 0 {
+			listings = append(listings, protocol.ViewListing{Name: view.Name})
+			i = len(listings) - 1
+		}
+		listings[i].Version = protocol.Ptr(view.Version)
 	}
 	if a.View != "" {
 		listings = slices.DeleteFunc(listings, func(l protocol.ViewListing) bool { return l.Name != a.View })
@@ -447,7 +537,7 @@ func (d *Daemon) runViewList(_ context.Context, c command.Caller, a command.View
 		if listings[i].Shown, err = d.viewShownOn(profile.ID, listings[i].Name); err != nil {
 			return nil, err
 		}
-		if a.View == "" || listings[i].BuiltIn {
+		if a.View == "" || listings[i].Version == nil {
 			continue
 		}
 		versions, err := d.store.ViewVersions(profile.ID, listings[i].Name)
@@ -478,16 +568,16 @@ func (d *Daemon) runViewExport(_ context.Context, c command.Caller, a command.Vi
 	if err != nil {
 		return nil, err
 	}
-	view, err := d.keptView(profile.ID, a.View)
+	view, err := d.namedView(profile.ID, a.View)
 	if err != nil {
 		return nil, err
 	}
-	files, err := d.store.ViewFiles(profile.ID, view.Name, view.Version)
+	files, err := d.files(profile.ID, view)
 	if err != nil {
 		return nil, err
 	}
-	texts, other := views.Exported(view.Name, view.Version, files)
-	result := protocol.ViewExportResult{View: view.Name, Version: view.Version, Files: recordOf(texts)}
+	texts, other := views.Exported(view.name, view.version(), files)
+	result := protocol.ViewExportResult{View: view.name, Version: view.version(), Files: recordOf(texts)}
 	if len(other) > 0 {
 		result.Kept = other
 	}
@@ -503,17 +593,20 @@ func (d *Daemon) runViewRead(ctx context.Context, c command.Caller, a command.Vi
 	var document tileDocument
 	switch {
 	case a.View != "":
-		view, err := d.keptView(profile.ID, a.View)
+		view, err := d.namedView(profile.ID, a.View)
 		if err != nil {
 			return nil, err
 		}
-		if err := d.placeKeptView(ctx, profile.ID, view.Name); err != nil {
+		if view.kept != nil {
+			if err := d.placeKeptView(ctx, profile.ID, view.name); err != nil {
+				return nil, err
+			}
+			result.Version = protocol.Ptr(view.version())
+		}
+		if document, err = d.tileDocumentOf(profile.ID, profiles.ViewParams(view.name)); err != nil {
 			return nil, err
 		}
-		if document, err = d.keptViewDocument(profile.ID, view.Name); err != nil {
-			return nil, err
-		}
-		result.View, result.Version = protocol.Ptr(view.Name), protocol.Ptr(view.Version)
+		result.View = protocol.Ptr(view.name)
 	case a.Path != "":
 		path, _, err := d.callerPath(ctx, c, callerFile("path", a.Path))
 		if err != nil {

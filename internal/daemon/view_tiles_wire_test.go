@@ -1,12 +1,12 @@
 package daemon_test
 
 import (
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestATileShowsOneOfAttnsViewsByNameWhileViewsAreOn(t *testing.T) {
@@ -55,9 +55,9 @@ func TestATileShowsOneOfAttnsViewsByNameWhileViewsAreOn(t *testing.T) {
 	if unknown.Success || !strings.Contains(protocol.Deref(unknown.Error), "attn, sessions and pull-requests") {
 		t.Errorf("docking an unknown view answered success=%v error %q, want a refusal naming attn's views", unknown.Success, protocol.Deref(unknown.Error))
 	}
-	for _, e := range app.Received() {
-		if e.Event == protocol.EventDesktopTileContent && slices.Contains([]string{"tile-attn", "tile-sessions", "tile-pull-requests"}, protocol.Deref(e.TileID)) {
-			t.Errorf("the daemon sent file content to the view tile %s", protocol.Deref(e.TileID))
-		}
+	for _, view := range []string{"attn", "sessions", "pull-requests"} {
+		testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+			return m.TileID == "tile-"+view && m.View != nil && len(m.View.Problems) == 0 && m.Content != ""
+		})
 	}
 }

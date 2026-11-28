@@ -4359,8 +4359,11 @@ model ViewEditResult {
 
 model ViewRestoreResult {
   view: string;
-  version: int32;
-  restored_from: int32;
+  // The version the restore saved; absent when it dropped an override.
+  version?: int32;
+  restored_from?: int32;
+  // The restore dropped the override of one of attn's views, which shows what attn ships again.
+  original?: boolean;
 }
 
 model ViewForkResult {

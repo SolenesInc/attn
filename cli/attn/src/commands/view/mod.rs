@@ -93,10 +93,13 @@ impl Family for View {
             }
             "restore" => {
                 let restored: ViewRestoreResult = command::decode(run, self, cmd, &result)?;
-                format!(
-                    "saved {} as version {}, restored from version {}\n",
-                    restored.view, restored.version, restored.restored_from
-                )
+                match (restored.version, restored.restored_from) {
+                    (Some(version), Some(from)) => format!(
+                        "saved {} as version {version}, restored from version {from}\n",
+                        restored.view
+                    ),
+                    _ => format!("{} shows what attn ships again\n", restored.view),
+                }
             }
             "fork" => {
                 let forked: ViewForkResult = command::decode(run, self, cmd, &result)?;

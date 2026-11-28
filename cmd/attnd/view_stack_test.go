@@ -260,3 +260,50 @@ func TestAKeptViewThatRunsNothingDrawsFromTheHomeWhileTheOutpostItWasKeptFromIsO
 		t.Fatalf("where, once an edit on the home gave it a command again, reads %+v; want it with its command from the home's folder %s", read, home.Dir)
 	}
 }
+
+func TestAnEditOfSessionsChangesHomeAndRestoringTheOriginalPutsItBack(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	app := s.App()
+	requireStdout(t, s.Attn("settings", "set", "views_enabled", "true"), "true")
+	profile := app.SelectedProfile()
+	home := profiles.HomeDesktopID(profile)
+	mark := app.EventCount()
+	app.Send(protocol.DesktopSetCurrentMessage{Cmd: protocol.CmdDesktopSetCurrent, ProfileID: profile, DesktopID: home, RequestID: "home"})
+	sessionsShow := func(since int, wanted func(content string) bool) protocol.DesktopTileContentMessage {
+		t.Helper()
+		return testworld.AwaitSince(app, since, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+			return m.DesktopID == home && m.TileID == "tile-view-sessions" && m.View != nil && len(m.View.Problems) == 0 && wanted(m.Content)
+		})
+	}
+	shipped := sessionsShow(mark, func(content string) bool { return strings.Contains(content, "## Your turn") }).Content
+
+	exported := s.Path("sessions")
+	requireStdout(t, s.Attn("view", "export", "sessions", "--to", exported), "wrote version 1 of sessions to "+exported)
+	if got := fileText(t, filepath.Join(exported, "view.md")); got != "<!-- attn-view 1 sessions@1 -->\n"+shipped {
+		t.Fatalf("exported Sessions:\n%s", got)
+	}
+	stale := s.Path("stale")
+	requireStdout(t, s.Attn("view", "export", "sessions", "--to", stale))
+	writeView(t, exported, strings.Replace(fileText(t, filepath.Join(exported, "view.md")), "## Your turn", "## Needs you", 1), map[string]string{})
+	mark = app.EventCount()
+	requireStdout(t, s.Attn("view", "edit", "sessions", "--from", exported, "-m", "say needs you"), "saved sessions as version 2 (was 1)")
+	sessionsShow(mark, func(content string) bool {
+		return strings.HasPrefix(content, "<!-- attn-view 1 -->\n") && strings.Contains(content, "## Needs you")
+	})
+	refused(t, s.Attn("view", "edit", "sessions", "--from", stale), 1, "exported from version 1 of sessions, and its newest version is 2")
+	listing := viewListing(t, s, "sessions")
+	if !listing.BuiltIn || protocol.Deref(listing.Version) != 2 || len(listing.Versions) != 2 || protocol.Deref(listing.Versions[0].Note) != "as attn shipped it" || protocol.Deref(listing.Versions[1].Note) != "say needs you" {
+		t.Fatalf("Sessions after its edit: %+v", listing)
+	}
+
+	mark = app.EventCount()
+	requireStdout(t, s.Attn("view", "restore", "sessions", "--original"), "sessions shows what attn ships again")
+	sessionsShow(mark, func(content string) bool { return content == shipped })
+	if listing := viewListing(t, s, "sessions"); listing.Version != nil || len(listing.Versions) != 0 {
+		t.Fatalf("Sessions after restoring the original: %+v", listing)
+	}
+	requireStdout(t, s.Attn("view", "restore", "sessions", "--original"), "sessions shows what attn ships again")
+	refused(t, s.Attn("view", "restore", "sessions"), 1, "shows what attn ships and has no earlier version")
+}

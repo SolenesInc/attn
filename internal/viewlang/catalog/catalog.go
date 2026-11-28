@@ -185,20 +185,47 @@ var StoreTypes = []Named{
 	{Name: "yes-no", Doc: "yes or no"},
 }
 
-var Commands = []Named{
-	{Name: "open", Doc: "opens the row's session, pull request or file"},
-	{Name: "new-session", Doc: "starts a session"},
-	{Name: "choose-harness", Doc: "picks the harness of a new session"},
-	{Name: "unsnooze", Doc: "brings a snoozed session back"},
-	{Name: "approve", Doc: "approves a pull request"},
-	{Name: "merge", Doc: "merges a pull request"},
-	{Name: "mute", Doc: "mutes a pull request"},
-	{Name: "mute-author", Doc: "mutes a pull request's author"},
-	{Name: "mute-repo", Doc: "mutes a repository"},
-	{Name: "refresh", Doc: "fetches the data again"},
-	{Name: "follow", Doc: "follows the next turn; a switch that shows on or off"},
-	{Name: "settings", Doc: "opens Settings"},
-	{Name: "whats-new", Doc: "shows what is new in attn"},
+// Runner is the side of attn that runs one of its view commands: the home
+// daemon, or the app window the control is in.
+type Runner int
+
+const (
+	RunsAtHome Runner = iota + 1
+	RunsInApp
+)
+
+// Command is one of attn's view commands, and who runs it. It runs only
+// where the values around its control list it in their `commands`.
+type Command struct {
+	Name string
+	Doc  string
+	Runs Runner
+}
+
+var Commands = []Command{
+	{Name: "open", Doc: "opens the row's session, ask, pull request or file", Runs: RunsInApp},
+	{Name: "new-session", Doc: "starts a session; on a pull request's row, in a new worktree of its branch", Runs: RunsInApp},
+	{Name: "choose-harness", Doc: "picks the harness of a new session", Runs: RunsInApp},
+	{Name: "unsnooze", Doc: "brings a snoozed session back", Runs: RunsAtHome},
+	{Name: "approve", Doc: "approves a pull request", Runs: RunsAtHome},
+	{Name: "merge", Doc: "merges a pull request", Runs: RunsAtHome},
+	{Name: "mute", Doc: "mutes a pull request", Runs: RunsAtHome},
+	{Name: "mute-author", Doc: "mutes a pull request's author", Runs: RunsAtHome},
+	{Name: "mute-repo", Doc: "mutes a repository", Runs: RunsAtHome},
+	{Name: "refresh", Doc: "fetches the data again", Runs: RunsAtHome},
+	{Name: "follow", Doc: "follows the next turn; a switch that shows on or off", Runs: RunsInApp},
+	{Name: "settings", Doc: "opens Settings", Runs: RunsInApp},
+	{Name: "whats-new", Doc: "shows what is new in attn", Runs: RunsInApp},
+}
+
+// FindCommand is attn's view command name, when it is one.
+func FindCommand(name string) (Command, bool) {
+	for _, command := range Commands {
+		if command.Name == name {
+			return command, true
+		}
+	}
+	return Command{}, false
 }
 
 type StoreCommand struct {

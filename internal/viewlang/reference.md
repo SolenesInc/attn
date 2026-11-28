@@ -84,8 +84,8 @@ A row's `press:`, `controls:` and `group-controls:` slots, `:::controls` and `::
 
 attn's commands:
 
-- `open`: opens the row's session, pull request or file.
-- `new-session`: starts a session.
+- `open`: opens the row's session, ask, pull request or file.
+- `new-session`: starts a session; on a pull request's row, in a new worktree of its branch.
 - `choose-harness`: picks the harness of a new session.
 - `unsnooze`: brings a snoozed session back.
 - `approve`: approves a pull request.

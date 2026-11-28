@@ -290,6 +290,7 @@ type Daemon struct {
 
 	desktopTiles    desktopTileDelivery
 	keptViewFolders keptViewFolders
+	shipping        sync.Mutex
 	tileDocuments   tileDocumentWatch
 	viewRuns        viewRuns
 	dataSets        dataSets

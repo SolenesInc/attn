@@ -6,12 +6,8 @@ import (
 )
 
 func (d *Daemon) handleApprovePRWS(client *wsClient, msg *protocol.ApprovePRMessage) {
-	d.logf("Processing approve for %s", msg.ID)
 	d.life.Go("handleApprovePRWS", func() {
-		ghClient, repo, number, _, err := d.clientForPRID(msg.ID)
-		if err == nil {
-			err = ghClient.ApprovePR(repo, number)
-		}
+		err := d.approvePR(msg.ID)
 		result := protocol.PRActionResultMessage{
 			Event:   protocol.EventPRActionResult,
 			Action:  "approve",
@@ -20,25 +16,33 @@ func (d *Daemon) handleApprovePRWS(client *wsClient, msg *protocol.ApprovePRMess
 		}
 		if err != nil {
 			result.Error = protocol.Ptr(err.Error())
-			d.logf("Approve failed for %s: %v", msg.ID, err)
-		} else {
-			d.logf("Approve succeeded for %s", msg.ID)
-			d.store.MarkPRApproved(msg.ID)
-			d.store.SetPRHot(msg.ID)
-			d.life.Go("fetchPRDetailsImmediate", func() { d.fetchPRDetailsImmediate(msg.ID) })
 		}
 		d.sendToClient(client, result)
-		d.logf("Sent approve result to client")
 		d.RefreshPRs()
 	})
 }
 
+// approvePR approves the pull request id on GitHub and keeps the approval.
+func (d *Daemon) approvePR(id string) error {
+	d.logf("Processing approve for %s", id)
+	ghClient, repo, number, _, err := d.clientForPRID(id)
+	if err == nil {
+		err = ghClient.ApprovePR(repo, number)
+	}
+	if err != nil {
+		d.logf("Approve failed for %s: %v", id, err)
+		return err
+	}
+	d.logf("Approve succeeded for %s", id)
+	d.store.MarkPRApproved(id)
+	d.store.SetPRHot(id)
+	d.life.Go("fetchPRDetailsImmediate", func() { d.fetchPRDetailsImmediate(id) })
+	return nil
+}
+
 func (d *Daemon) handleMergePRWS(client *wsClient, msg *protocol.MergePRMessage) {
 	d.life.Go("handleMergePRWS", func() {
-		ghClient, repo, number, _, err := d.clientForPRID(msg.ID)
-		if err == nil {
-			err = ghClient.MergePR(repo, number, msg.Method)
-		}
+		err := d.mergePR(msg.ID, msg.Method)
 		result := protocol.PRActionResultMessage{
 			Event:   protocol.EventPRActionResult,
 			Action:  "merge",
@@ -51,6 +55,15 @@ func (d *Daemon) handleMergePRWS(client *wsClient, msg *protocol.MergePRMessage)
 		d.sendToClient(client, result)
 		d.RefreshPRs()
 	})
+}
+
+// mergePR merges the pull request id on GitHub by method.
+func (d *Daemon) mergePR(id, method string) error {
+	ghClient, repo, number, _, err := d.clientForPRID(id)
+	if err != nil {
+		return err
+	}
+	return ghClient.MergePR(repo, number, method)
 }
 
 func (d *Daemon) handleMutePRWS(msg *protocol.MutePRMessage) {

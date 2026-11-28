@@ -68,6 +68,35 @@ func (s *Store) KeepView(profileID, name, machineID string, version ViewVersion,
 	return tx.Commit()
 }
 
+// OverrideView keeps an override of one of attn's views as two versions: what
+// attn shipped as version 1 and the edit as version 2.
+func (s *Store) OverrideView(profileID, name, machineID string, shipped ViewVersion, shippedFiles map[string][]byte, edited ViewVersion, editedFiles map[string][]byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`INSERT INTO views (profile_id, name, version, machine_id) VALUES (?, ?, 2, ?) ON CONFLICT DO NOTHING`, profileID, name, machineID)
+	if err != nil {
+		return err
+	}
+	if inserted, err := result.RowsAffected(); err != nil {
+		return err
+	} else if inserted == 0 {
+		return ErrViewExists
+	}
+	shipped.Version, edited.Version = 1, 2
+	if err := insertViewVersion(tx, profileID, name, shipped, shippedFiles); err != nil {
+		return err
+	}
+	if err := insertViewVersion(tx, profileID, name, edited, editedFiles); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // SaveViewVersion saves the files as the view's next version, when after is
 // still its newest, and answers the version saved.
 func (s *Store) SaveViewVersion(profileID, name string, after int, machineID string, version ViewVersion, files map[string][]byte) (int, error) {

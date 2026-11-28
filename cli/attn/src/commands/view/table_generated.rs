@@ -67,6 +67,7 @@ pub const COMMANDS: &[Command] = &[
         args: &[
             Arg { name: "view", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
             Arg { name: "version", cli: Cli::Pos, value: Value::Int, source: Source::Given, required: false, list: false },
+            Arg { name: "original", cli: Cli::Flag("original"), value: Value::Bool, source: Source::Given, required: false, list: false },
         ],
     },
     Command {

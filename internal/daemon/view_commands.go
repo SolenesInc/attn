@@ -74,20 +74,24 @@ type viewCommandRun func(ctx context.Context, d *Daemon, document tileDocument) 
 // viewCommandOf is the run of the command msg names: one the view defines,
 // with its arguments filled from the row the control is in.
 func viewCommandOf(view *protocol.ViewDocument, msg *protocol.ViewRunMessage) (viewCommandRun, error) {
+	attn, isAttns := catalog.FindCommand(msg.Command)
+	if isAttns && attn.Runs != catalog.RunsAtHome {
+		return nil, fmt.Errorf("the app runs %s", attn.Name)
+	}
+	scope, found := viewCallScope(view.Parts, newViewScope(view), msg.Part, msg.Rows)
+	if !found {
+		return nil, fmt.Errorf("the row %s ran from is no longer shown", msg.Command)
+	}
+	if isAttns {
+		return attnViewCommand(attn, scope)
+	}
 	own := ownViewCommand(view.Parts, msg.Command)
 	if own == nil {
-		if slices.ContainsFunc(catalog.Commands, func(c catalog.Named) bool { return c.Name == msg.Command }) {
-			return nil, fmt.Errorf("attn's %s does not run from a view yet", msg.Command)
-		}
 		return nil, fmt.Errorf("the view defines no command %s", msg.Command)
 	}
 	i := slices.IndexFunc(view.Commands, func(c protocol.ViewRunCommand) bool { return c.Line == own.Written })
 	if i < 0 || view.Commands[i].State != protocol.ViewRunStateStarted {
 		return nil, fmt.Errorf("%s runs once you start the view's commands: press r on its tile", own.Name)
-	}
-	scope, found := viewCallScope(view.Parts, newViewScope(view), msg.Part, msg.Rows)
-	if !found {
-		return nil, fmt.Errorf("the row %s ran from is no longer shown", own.Name)
 	}
 	args := make([]string, 0, len(own.Args)+1)
 	for _, arg := range own.Args {
@@ -105,6 +109,56 @@ func viewCommandOf(view *protocol.ViewDocument, msg *protocol.ViewRunMessage) (v
 		_, err := Call[struct{}](ctx, d.router(), run)
 		return d.tileDocumentError(document.host, err)
 	}, nil
+}
+
+// attnViewCommand is the run of one of attn's commands that the home runs, on
+// the values around its control, which must list the command.
+func attnViewCommand(command catalog.Command, scope viewScope) (viewCommandRun, error) {
+	listed, _ := scope.field([]string{"commands"}).([]any)
+	if !slices.Contains(listed, any(command.Name)) {
+		return nil, fmt.Errorf("%s does not apply here", command.Name)
+	}
+	field := func(name string) string {
+		text, _ := scope.field([]string{name}).(string)
+		return text
+	}
+	var run func(d *Daemon) error
+	switch command.Name {
+	case "approve":
+		run = func(d *Daemon) error {
+			if err := d.approvePR(field("id")); err != nil {
+				return err
+			}
+			d.RefreshPRs()
+			return nil
+		}
+	case "merge":
+		run = func(d *Daemon) error {
+			if err := d.mergePR(field("id"), "squash"); err != nil {
+				return err
+			}
+			d.RefreshPRs()
+			return nil
+		}
+	case "mute":
+		run = func(d *Daemon) error { d.handleMutePRWS(&protocol.MutePRMessage{ID: field("id")}); return nil }
+	case "mute-author":
+		run = func(d *Daemon) error {
+			d.handleMuteAuthorWS(&protocol.MuteAuthorMessage{Author: field("author")})
+			return nil
+		}
+	case "mute-repo":
+		run = func(d *Daemon) error { d.handleMuteRepoWS(&protocol.MuteRepoMessage{Repo: field("repo")}); return nil }
+	case "unsnooze":
+		run = func(d *Daemon) error {
+			return d.handleWakeTurn(&protocol.WakeTurnMessage{SessionID: protocol.SessionID(field("id"))})
+		}
+	case "refresh":
+		run = func(d *Daemon) error { return d.doRefreshPRsWithResult() }
+	default:
+		return nil, fmt.Errorf("attn's %s does not run from a view yet", command.Name)
+	}
+	return func(_ context.Context, d *Daemon, _ tileDocument) error { return run(d) }, nil
 }
 
 func ownViewCommand(parts []protocol.ViewPart, name string) *protocol.ViewOwnCommand {

@@ -735,6 +735,7 @@ type pullRequestsSet struct {
 }
 
 type prRepo struct {
+	ID       string   `json:"id"`
 	Repo     string   `json:"repo"`
 	Name     string   `json:"name"`
 	Count    int      `json:"count"`
@@ -844,7 +845,7 @@ func shapePullRequests(f *dataSetFacts, now time.Time) (pullRequestsSet, time.Ti
 		at := slices.IndexFunc(set.Review, func(r prRepo) bool { return r.Repo == pr.Repo })
 		if at < 0 {
 			at = len(set.Review)
-			set.Review = append(set.Review, prRepo{Repo: pr.Repo, Name: repoName(pr.Repo), Rows: []prRow{}, Commands: []string{"mute-repo"}})
+			set.Review = append(set.Review, prRepo{ID: pr.Repo, Repo: pr.Repo, Name: repoName(pr.Repo), Rows: []prRow{}, Commands: []string{"mute-repo"}})
 		}
 		set.Review[at].Rows = append(set.Review[at].Rows, row(pr, fmt.Sprintf("#%d", pr.Number), false))
 		set.Review[at].Count++

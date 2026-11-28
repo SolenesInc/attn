@@ -16379,11 +16379,14 @@ type ViewResponsesWritten struct {
 }
 
 type ViewRestoreResult struct {
+	// Original corresponds to the JSON schema field "original".
+	Original *bool `json:"original,omitempty,omitzero"`
+
 	// RestoredFrom corresponds to the JSON schema field "restored_from".
-	RestoredFrom int `json:"restored_from"`
+	RestoredFrom *int `json:"restored_from,omitempty,omitzero"`
 
 	// Version corresponds to the JSON schema field "version".
-	Version int `json:"version"`
+	Version *int `json:"version,omitempty,omitzero"`
 
 	// View corresponds to the JSON schema field "view".
 	View string `json:"view"`

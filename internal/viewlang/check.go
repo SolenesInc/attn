@@ -921,7 +921,7 @@ func (c *checker) controls(b document.Block, line int) []any {
 }
 
 func (c *checker) knownCommands() []string {
-	known := names(catalog.Commands, func(n catalog.Named) string { return n.Name })
+	known := names(catalog.Commands, func(c catalog.Command) string { return c.Name })
 	if c.hasStore {
 		known = append(known, names(catalog.StoreCommands, func(s catalog.StoreCommand) string { return s.Name })...)
 	}
@@ -946,7 +946,7 @@ func (c *checker) call(line int, text string) (any, bool) {
 	name, args := words[0], words[1:]
 	known := c.knownCommands()
 	if !slices.Contains(known, name) {
-		fix := didYouMean(name, known, "Use one of attn's commands ("+strings.Join(names(catalog.Commands, func(n catalog.Named) string { return n.Name }), ", ")+"), or define it in \":::commands\".")
+		fix := didYouMean(name, known, "Use one of attn's commands ("+strings.Join(names(catalog.Commands, func(c catalog.Command) string { return c.Name }), ", ")+"), or define it in \":::commands\".")
 		if _, isStore := storeCommand(name); isStore {
 			fix = "Add a \":::data store=\" part that holds the items."
 		}
@@ -1084,7 +1084,7 @@ func (c *checker) storeBody(b document.Block, args map[string]string) ([]out, *s
 }
 
 func (c *checker) ownCommands(b document.Block) []out {
-	attn := names(catalog.Commands, func(n catalog.Named) string { return n.Name })
+	attn := names(catalog.Commands, func(c catalog.Command) string { return c.Name })
 	store := names(catalog.StoreCommands, func(s catalog.StoreCommand) string { return s.Name })
 	commands := []out{}
 	lines := bodyLines(b, b.Line)

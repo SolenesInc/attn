@@ -55,7 +55,7 @@ func (d *Daemon) markdownTileDocument(params string) (tileDocument, error) {
 func (d *Daemon) tileDocumentOf(profileID, params string) (tileDocument, error) {
 	if view, named := profiles.ViewNamed(params); named {
 		if views.BuiltIn(view) {
-			return tileDocument{}, fmt.Errorf("the app draws attn's view %s", view)
+			return d.builtInViewDocument(profileID, view)
 		}
 		return d.keptViewDocument(profileID, view)
 	}
