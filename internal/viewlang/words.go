@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 type out = map[string]any
@@ -45,16 +46,18 @@ func tokenize(text string) ([]token, error) {
 }
 
 func splitToken(word string) token {
-	if key, value, ok := strings.Cut(word, "="); ok && namePattern.MatchString(key) {
+	if key, value, ok := strings.Cut(word, "="); ok && namePattern().MatchString(key) {
 		return token{key: key, value: value}
 	}
 	return token{value: word}
 }
 
 var (
-	namePattern     = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
-	segmentPattern  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
-	templatePattern = regexp.MustCompile(`\{([A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)*)(?:\|([a-z][a-z-]*))?\}`)
+	namePattern     = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[a-z][a-z0-9-]*$`) })
+	segmentPattern  = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`) })
+	templatePattern = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`\{([A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)*)(?:\|([a-z][a-z-]*))?\}`)
+	})
 )
 
 type fieldRef struct {
@@ -66,7 +69,7 @@ func template(text string) ([]out, []fieldRef) {
 	pieces := []out{}
 	var refs []fieldRef
 	at := 0
-	for _, match := range templatePattern.FindAllStringSubmatchIndex(text, -1) {
+	for _, match := range templatePattern().FindAllStringSubmatchIndex(text, -1) {
 		if match[0] > at {
 			pieces = append(pieces, out{"text": text[at:match[0]]})
 		}
@@ -89,7 +92,7 @@ func template(text string) ([]out, []fieldRef) {
 func fieldPath(text string) ([]string, bool) {
 	path := strings.Split(text, ".")
 	for _, segment := range path {
-		if !segmentPattern.MatchString(segment) {
+		if !segmentPattern().MatchString(segment) {
 			return nil, false
 		}
 	}

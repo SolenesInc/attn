@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/document"
@@ -25,29 +26,29 @@ type Checked struct {
 }
 
 var (
-	openerPattern  = regexp.MustCompile(`^(:{3,4})([a-z][a-z0-9-]*)(?:[ \t]+(.*))?$`)
-	versionPattern = regexp.MustCompile(`^<!--\s*attn-view\b(.*?)-->$`)
-	mediaPattern   = regexp.MustCompile(`^!\[([^\]]*)\]\(([^()\s]+)\)$`)
-	taskPattern    = regexp.MustCompile(`^[-*] \[( |x|X)\] (.*)$`)
+	openerPattern  = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^(:{3,4})([a-z][a-z0-9-]*)(?:[ \t]+(.*))?$`) })
+	versionPattern = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^<!--\s*attn-view\b(.*?)-->$`) })
+	mediaPattern   = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^!\[([^\]]*)\]\(([^()\s]+)\)$`) })
+	taskPattern    = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[-*] \[( |x|X)\] (.*)$`) })
 	videoTypes     = []string{".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi"}
 	viewSyntax     = document.Syntax{Opens: opensPart, Containers: true}
 	innerSyntax    = document.Syntax{Opens: func(trimmed string) bool { return opensPart(trimmed) && !strings.HasPrefix(trimmed, "::::") }}
 )
 
-func opensPart(trimmed string) bool { return openerPattern.MatchString(trimmed) }
+func opensPart(trimmed string) bool { return openerPattern().MatchString(trimmed) }
 
 // IsView says whether markdown is a view: it carries the language line, or a
 // line outside code opens one of the catalog's parts. Other markdown, such as
 // a document that uses ":::note" for its own purpose, is not.
 func IsView(markdown string) bool {
 	lines := strings.Split(strings.ReplaceAll(markdown, "\r\n", "\n"), "\n")
-	if versionPattern.MatchString(strings.TrimSpace(lines[0])) {
+	if versionPattern().MatchString(strings.TrimSpace(lines[0])) {
 		return true
 	}
 	var fence document.Fence
 	for _, line := range lines {
 		if !fence.Open() {
-			if match := openerPattern.FindStringSubmatch(strings.TrimSpace(line)); match != nil {
+			if match := openerPattern().FindStringSubmatch(strings.TrimSpace(line)); match != nil {
 				if _, known := catalog.FindPart(match[2]); known {
 					return true
 				}
@@ -107,7 +108,7 @@ func (c *checker) sorted() []protocol.ViewProblem {
 
 func (c *checker) language(first string) (int, bool) {
 	trimmed := strings.TrimSpace(first)
-	match := versionPattern.FindStringSubmatch(trimmed)
+	match := versionPattern().FindStringSubmatch(trimmed)
 	if match == nil {
 		return catalog.Language, false
 	}
@@ -154,7 +155,7 @@ type opener struct {
 }
 
 func parseOpener(text string) opener {
-	m := openerPattern.FindStringSubmatch(text)
+	m := openerPattern().FindStringSubmatch(text)
 	return opener{colons: m[1], name: m[2], rest: m[3]}
 }
 
@@ -475,7 +476,7 @@ func (c *checker) argValue(line int, part catalog.Part, arg catalog.Arg, value s
 		}
 		return segments, true
 	case catalog.NameArg:
-		if !namePattern.MatchString(value) {
+		if !namePattern().MatchString(value) {
 			c.report(line, "Use lowercase letters, digits and dashes, starting with a letter.", "%q cannot name an answer", value)
 			return nil, false
 		}
@@ -651,13 +652,13 @@ func (c *checker) prose(lines []string, first int, sc *shape) []out {
 		line := first + i
 		trimmed := strings.TrimSpace(text)
 		if !fence.Open() {
-			if m := mediaPattern.FindStringSubmatch(trimmed); m != nil {
+			if m := mediaPattern().FindStringSubmatch(trimmed); m != nil {
 				flushMarkdown()
 				flushTasks()
 				parts = append(parts, c.media(line, m[1], m[2], sc))
 				continue
 			}
-			if m := taskPattern.FindStringSubmatch(trimmed); m != nil {
+			if m := taskPattern().FindStringSubmatch(trimmed); m != nil {
 				flushMarkdown()
 				if len(tasks) == 0 {
 					tasksAt, tasksMark = line, len(c.problems)
@@ -767,7 +768,7 @@ func (c *checker) question(b document.Block, line int, part catalog.Part, args m
 func (c *checker) mediaPair(b document.Block, line int, sc *shape) []out {
 	var media []out
 	for _, l := range bodyLines(b, line) {
-		m := mediaPattern.FindStringSubmatch(l.text)
+		m := mediaPattern().FindStringSubmatch(l.text)
 		if m == nil {
 			c.report(l.line, "Write two lines of the form ![label](file), and nothing else.", "%q is not a media line", l.text)
 			continue
@@ -805,7 +806,7 @@ func (c *checker) slots(b document.Block, line int, part catalog.Part, items, sc
 	for _, l := range bodyLines(b, line) {
 		name, value, ok := strings.Cut(l.text, ":")
 		name, value = strings.TrimSpace(name), strings.TrimSpace(value)
-		if !ok || !namePattern.MatchString(name) {
+		if !ok || !namePattern().MatchString(name) {
 			c.report(l.line, fmt.Sprintf("Write it as \"slot: value\". The slots are %s.", strings.Join(slotNames, ", ")), "%q is not a slot line", l.text)
 			continue
 		}
@@ -875,12 +876,12 @@ func cells(row string) []string {
 	return append(cells, strings.TrimSpace(row[start:]))
 }
 
-var separatorPattern = regexp.MustCompile(`^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$`)
+var separatorPattern = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$`) })
 
 func (c *checker) table(b document.Block, line int, items *shape) []out {
 	lines := bodyLines(b, line)
 	fix := "Write a markdown table of three lines: the headers, a line of dashes, and one row of fields such as \"| {name} | {state} |\"."
-	if len(lines) != 3 || !separatorPattern.MatchString(lines[1].text) {
+	if len(lines) != 3 || !separatorPattern().MatchString(lines[1].text) {
 		c.report(line, fix, "\":::table\" holds a header, a line of dashes and one row")
 		return nil
 	}
@@ -1043,7 +1044,7 @@ func (c *checker) storeBody(b document.Block, args map[string]string) ([]out, *s
 	for _, l := range lines {
 		name, kind, ok := strings.Cut(l.text, ":")
 		name, kind = strings.TrimSpace(name), strings.TrimSpace(kind)
-		if !ok || !segmentPattern.MatchString(name) {
+		if !ok || !segmentPattern().MatchString(name) {
 			c.report(l.line, "Write it as \"name: type\".", "%q is not a field", l.text)
 			continue
 		}
@@ -1078,7 +1079,7 @@ func (c *checker) ownCommands(b document.Block) []out {
 	for _, l := range lines {
 		name, rest, ok := strings.Cut(l.text, ":")
 		name = strings.TrimSpace(name)
-		if !ok || !namePattern.MatchString(name) {
+		if !ok || !namePattern().MatchString(name) {
 			c.report(l.line, "Write it as \"name: program arguments\", such as \"rerun: scripts/rerun.sh {id}\".", "%q does not define a command", l.text)
 			continue
 		}
