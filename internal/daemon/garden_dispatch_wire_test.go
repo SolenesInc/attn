@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -52,7 +53,83 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 
 	closePane(app, sessionPane{session: string(plain.ID), desktop: workspace, pane: pane})
 	awaitClosed(app, string(plain.ID))
-	shows("once its plain dispatcher closed", fromPlain, "", "")
+	shows("once its plain dispatcher closed", fromPlain, string(plain.ID), "")
+}
+
+func TestALiveDelegateKeepsTheClosedDispatchersAboveItUntilOneReopens(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	top, _, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("top"))
+	if !top.Success {
+		t.Fatalf("spawn the top of the chain: %s", protocol.Deref(top.Error))
+	}
+	w.Launched(string(top.ID))
+	cwd := w.Path("dispatch")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	codex := []protocol.DelegationChoice{{ID: "default", Name: "Everyday", Selection: protocol.DelegationSelection{Harness: "codex"}}}
+	saved := uuid.NewString()
+	if roles := preferencesRequest(app, protocol.DelegationPreferencesSaveMessage{
+		Cmd: protocol.CmdDelegationPreferencesSave, RequestID: saved,
+		Preferences: protocol.DelegationPreferences{
+			Enabled:  true,
+			Roles:    []protocol.DelegationRole{{ID: "orchestrate", Name: "Orchestrate", Enabled: true, DefaultChoiceID: "default", Choices: codex}},
+			Fallback: protocol.DelegationFallback{Selection: protocol.DelegationSelection{Harness: "codex"}},
+		},
+	}, saved); !roles.Success {
+		t.Fatalf("saving the roles: %s", protocol.Deref(roles.Error))
+	}
+	w.SetCodexFolderTrust(cwd, "trusted")
+	orchestrate := brief(cwd, "Orchestrate the sync")
+	orchestrate.SourceSessionID = protocol.Ptr(top.ID)
+	orchestrate.Label = protocol.Ptr("Orchestrate the sync")
+	orchestrate.Role = protocol.Ptr("orchestrate")
+	orchestrated, err := cli.Delegate(orchestrate)
+	if err != nil {
+		t.Fatalf("top delegates the orchestrator: %v", err)
+	}
+	w.Launched(string(orchestrated.SessionID))
+	middle := string(orchestrated.SessionID)
+	lower := gardenDispatchDelegate(t, w, cli, middle, cwd, "Build the push")
+	leaf := gardenDispatchDelegate(t, w, cli, lower, cwd, "Review the push")
+
+	chainOf := func(s protocol.Session) []string {
+		chain := []string{string(protocol.Deref(s.DispatcherSessionID))}
+		for _, closed := range s.ClosedDispatchers {
+			chain = append(chain, string(closed.Entry.ID)+">"+string(protocol.Deref(closed.DispatcherSessionID)))
+		}
+		return chain
+	}
+	wantClosed := []string{lower, lower + ">" + middle, middle + ">" + string(top.ID)}
+
+	mark := len(app.Log())
+	for _, closing := range []string{lower, middle} {
+		if closed := closeFromApp(app, closing); !closed.Accepted {
+			t.Fatalf("close %s: %s", closing, protocol.Deref(closed.Error))
+		}
+		awaitClosed(app, closing)
+	}
+	pushed := testworld.AwaitSessionSince(app, mark, leaf, func(s protocol.Session) bool { return slices.Equal(chainOf(s), wantClosed) })
+	if orchestrator := pushed.ClosedDispatchers[1]; orchestrator.Entry.Label != "Orchestrate the sync" || protocol.Deref(orchestrator.Entry.ClosedAt) == "" || orchestrator.DelegationRole == nil || orchestrator.DelegationRole.Name != "Orchestrate" {
+		t.Errorf("the closed orchestrator above %s is %+v with role %+v, want its ledger row, closed, with the role Orchestrate", leaf, orchestrator.Entry, orchestrator.DelegationRole)
+	}
+	if got := chainOf(sessionOfDelegate(t, w, leaf)); !slices.Equal(got, wantClosed) {
+		t.Errorf("an app connecting after both closed sees %s under %v, want %v", leaf, got, wantClosed)
+	}
+
+	mark = len(app.Log())
+	reopen := uuid.NewString()
+	app.Send(protocol.SessionReopenMessage{Cmd: protocol.CmdSessionReopen, RequestID: protocol.Ptr(reopen), SessionID: protocol.SessionID(middle)})
+	if reopened := testworld.Await(app, protocol.EventSessionReopenResult, func(r protocol.SessionReopenResultMessage) bool { return r.RequestID == reopen }); !reopened.Success {
+		t.Fatalf("reopen %s: %s", middle, protocol.Deref(reopened.Error))
+	}
+	w.Launched(middle)
+	wantReopened := []string{lower, lower + ">" + middle}
+	testworld.AwaitSessionSince(app, mark, leaf, func(s protocol.Session) bool { return slices.Equal(chainOf(s), wantReopened) })
+	if reopenedMiddle := sessionOfDelegate(t, w, middle); string(protocol.Deref(reopenedMiddle.DispatcherSessionID)) != string(top.ID) || reopenedMiddle.ClosedDispatchers != nil {
+		t.Errorf("the reopened orchestrator names dispatcher %q above closed %v, want %s and none", protocol.Deref(reopenedMiddle.DispatcherSessionID), reopenedMiddle.ClosedDispatchers, top.ID)
+	}
 }
 
 func TestADelegateKeepsItsDispatcherAcrossARestartAfterManySessionsClosed(t *testing.T) {

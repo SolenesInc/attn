@@ -19,7 +19,9 @@ it has no chain. Walk the chain with the arrow keys, press Enter to go to an
 agent, and press Tab to switch between the chain and the agent's pull requests.
 You can also point at an agent's sidebar row, at its tile's header, or at its id in
 a terminal. The terminal keeps the keyboard while you point, and Cmd+I moves it
-into what you see.
+into what you see. When an agent in the middle of a chain closes while the agents
+it started still work, the chain keeps it in its place, marked closed, so the agents
+above and below it stay connected. Press Enter on it to resume it.
 
 ### The `attn delegate` command
 

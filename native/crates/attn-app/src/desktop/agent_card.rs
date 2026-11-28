@@ -1,6 +1,8 @@
 use attn_client::Facts;
 use attn_protocol::session_id::short;
-use attn_protocol::{ActorView, Seed, Session, SessionLedgerEntry, StandbyTender};
+use attn_protocol::{
+    ActorView, ClosedDispatcher, Seed, Session, SessionLedgerEntry, StandbyTender,
+};
 use attn_ui::blocks::{Inline, Stack};
 use attn_ui::system::{
     Button, DotShape, DotSize, IconSize, Size, Type, dot, glyph, icon, keycaps, tinted_pill, words,
@@ -15,12 +17,13 @@ use crate::action::Action;
 use crate::sidebar::model::{AgentState, display_name, harness_label};
 
 /// An agent a card shows: a live session, a closed one that tends a seed on standby and
-/// resumes when mail reaches it, or a closed one as the ledger holds it.
+/// resumes when mail reaches it, or a closed one as the ledger holds it, with its place in a
+/// chain when it closed above agents still at work.
 #[derive(Clone, Copy)]
 pub(crate) enum Link<'a> {
     Live(&'a Session),
     Dormant(&'a Seed, &'a StandbyTender),
-    Closed(&'a SessionLedgerEntry),
+    Closed(&'a SessionLedgerEntry, Option<&'a ClosedDispatcher>),
 }
 
 impl<'a> Link<'a> {
@@ -28,7 +31,7 @@ impl<'a> Link<'a> {
         match self {
             Link::Live(session) => &session.id,
             Link::Dormant(_, tender) => &tender.session_id,
-            Link::Closed(entry) => &entry.id,
+            Link::Closed(entry, _) => &entry.id,
         }
     }
 
@@ -36,7 +39,7 @@ impl<'a> Link<'a> {
         match self {
             Link::Live(session) => session.dispatcher_session_id.as_deref(),
             Link::Dormant(_, tender) => tender.dispatcher_session_id.as_deref(),
-            Link::Closed(_) => None,
+            Link::Closed(_, above) => above?.dispatcher_session_id.as_deref(),
         }
     }
 
@@ -44,7 +47,15 @@ impl<'a> Link<'a> {
         match self {
             Link::Live(session) => session.dispatcher.as_ref(),
             Link::Dormant(_, tender) => tender.dispatcher.as_ref(),
-            Link::Closed(_) => None,
+            Link::Closed(_, above) => above?.dispatcher.as_ref(),
+        }
+    }
+
+    pub(super) fn role(self) -> Option<&'a attn_protocol::SessionDelegationRole> {
+        match self {
+            Link::Live(session) => session.delegation_role.as_ref(),
+            Link::Dormant(..) => None,
+            Link::Closed(_, above) => above?.delegation_role.as_ref(),
         }
     }
 }
@@ -63,7 +74,7 @@ impl<'a> Card<'a> {
             name: name_of(link, facts),
             needs: match link {
                 Link::Live(session) => Needs::of(session, facts, now_ms),
-                Link::Dormant(..) | Link::Closed(_) => None,
+                Link::Dormant(..) | Link::Closed(..) => None,
             },
         }
     }
@@ -116,7 +127,7 @@ fn name_of(link: Link<'_>, facts: &Facts) -> String {
     match link {
         Link::Live(session) => display_name(session, &facts.harnesses),
         Link::Dormant(_, tender) => dormant_name(tender, &facts.harnesses),
-        Link::Closed(entry) => crate::ledger::title(facts, entry),
+        Link::Closed(entry, _) => crate::ledger::title(facts, entry),
     }
 }
 
@@ -129,7 +140,7 @@ pub(super) fn role_ink(role: &attn_protocol::SessionDelegationRole, t: &Tokens) 
 }
 
 /// How long ago `iso` was, as "3m", once a minute has passed.
-fn held(iso: &str, now_ms: i64) -> Option<String> {
+pub(super) fn held(iso: &str, now_ms: i64) -> Option<String> {
     let at = crate::sidebar::queue::epoch_ms(iso)?;
     match (now_ms - at).max(0) / 1000 {
         s if s < 60 => None,
@@ -182,7 +193,7 @@ pub(super) fn goes(link: Link<'_>, state: &State) -> Vec<Go> {
             )
             .collect(),
         Link::Dormant(seed, _) => vec![Go::Seed(seed.id.clone())],
-        Link::Closed(entry) => {
+        Link::Closed(entry, _) => {
             let action = match state.window.ledger.verdict(entry) {
                 Some(verdict) => verdict.actions.first().cloned(),
                 None => Some("reopen".to_owned()),
@@ -277,7 +288,7 @@ pub(super) fn go_button(
         Go::PullRequest(url) => {
             let pr = match link {
                 Link::Live(agent) => super::provenance::pull_request(agent),
-                Link::Dormant(..) | Link::Closed(_) => None,
+                Link::Dormant(..) | Link::Closed(..) => None,
             };
             match pr {
                 Some(pr) => (
@@ -392,8 +403,10 @@ pub(super) fn who(key: Option<&str>, card: &Card<'_>, state: &State, t: &Tokens)
                 t.text_tertiary,
             )
         }
-        Link::Closed(entry) => {
+        Link::Closed(entry, _) => {
+            let role = card.link.role();
             let about = [
+                role.map(|r| r.name.clone()),
                 Some(harness_label(&facts.harnesses, &entry.agent)),
                 Some(short(&entry.id).into_owned()),
                 crate::machine::Machines::of(facts).away(entry.host.as_deref()),
@@ -406,9 +419,20 @@ pub(super) fn who(key: Option<&str>, card: &Card<'_>, state: &State, t: &Tokens)
                 Some(held) => format!("closed {held}"),
                 None => "closed".to_owned(),
             };
+            let meta = role
+                .map(|role| {
+                    glyph(
+                        Mark::of(Some(role)).glyph(),
+                        IconSize::Small,
+                        t.text_tertiary,
+                    )
+                })
+                .into_iter()
+                .chain([about_line(about, t)])
+                .collect();
             (
                 dot(t.text_muted, DotShape::Hollow, DotSize::Regular),
-                vec![about_line(about, t)],
+                meta,
                 said,
                 t.text_tertiary,
             )
@@ -453,10 +477,10 @@ pub(super) fn doing(card: &Card<'_>, state: &State, t: &Tokens) -> Option<El> {
             crate::garden::model::standby_of(seed, now_ms)?.blocked_words()?,
             t.warning,
         ),
-        Link::Closed(entry) if crate::ledger::resuming(state, entry) => {
+        Link::Closed(entry, _) if crate::ledger::resuming(state, entry) => {
             ("Resuming…".to_owned(), t.text_secondary)
         }
-        Link::Closed(entry) => match crate::ledger::refused(state, entry) {
+        Link::Closed(entry, _) => match crate::ledger::refused(state, entry) {
             Some(why) => (why, t.warning),
             None => (
                 entry.branch.clone().filter(|b| !b.is_empty())?,
@@ -473,12 +497,12 @@ pub(super) fn doing(card: &Card<'_>, state: &State, t: &Tokens) -> Option<El> {
 pub(super) fn follow(state: &mut State, go: &Go, beside: Option<&str>, tx: &mut Tx) {
     match go {
         Go::Resume { session, action } => {
-            if let Some(entry) = state.terminals.closed_session(session).cloned() {
+            if let Some(entry) = super::chain::closed_entry(session, state).cloned() {
                 crate::ledger::resume(state, entry, action.clone(), tx);
             }
         }
         Go::Ledger(session) => {
-            if let Some(entry) = state.terminals.closed_session(session).cloned() {
+            if let Some(entry) = super::chain::closed_entry(session, state).cloned() {
                 header_pop::close(state);
                 crate::shell::uncover_tiles(state, tx);
                 crate::ledger::open_session(state, entry, tx);

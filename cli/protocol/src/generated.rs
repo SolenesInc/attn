@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "d12e57f5c6db";
+pub const PROTOCOL_VERSION: &str = "77d99bbd1446";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -2216,6 +2216,16 @@ impl ClientHelloMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ClosedDispatcher {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegation_role: Option<SessionDelegationRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatcher: Option<ActorView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dispatcher_session_id: Option<SessionID>,
+    pub entry: SessionLedgerEntry,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CodeNavCheckResult {
@@ -11258,6 +11268,8 @@ pub struct Session {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chief_of_staff: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed_dispatchers: Option<Vec<ClosedDispatcher>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_terminal: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window_cap: Option<i64>,
@@ -12649,6 +12661,8 @@ impl StandbySessionMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StandbyTender {
     pub agent: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed_dispatchers: Option<Vec<ClosedDispatcher>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dispatcher: Option<ActorView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use attn_client::Facts;
-use attn_protocol::{ActorView, Seed, Session, StandbyTender};
+use attn_protocol::{
+    ActorView, ClosedDispatcher, Seed, Session, SessionLedgerEntry, StandbyTender,
+};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, HeaderPiece, Inline, Popover, Prose, Stack};
 use attn_ui::system::{
@@ -12,7 +14,7 @@ use rune::{Color, El, Key, KeyEvent, Tx, col};
 use rune_kit::Placement;
 
 use super::agent_card::{
-    Card, Go, Link, doing, follow, go_button, goes, open_seed, role_ink, select, who,
+    Card, Go, Link, doing, follow, go_button, goes, held, open_seed, role_ink, select, who,
 };
 use super::fit::{Level, Widths};
 use super::header_pop::{self, Pop, What};
@@ -46,19 +48,49 @@ fn on_standby(facts: &Facts) -> impl Iterator<Item = (&Seed, &StandbyTender)> {
         .filter_map(|seed| Some((seed.as_ref(), seed.standby.as_ref()?.tender.as_ref()?)))
 }
 
-/// Every agent a chain can show: the live sessions, and the closed tenders of seeds on
-/// standby.
+/// The closed sessions the daemon names above a live agent or one on standby, where they hold
+/// its chain together.
+fn closed_above(facts: &Facts) -> impl Iterator<Item = &ClosedDispatcher> {
+    let above_live = facts
+        .sessions
+        .iter()
+        .flat_map(|s| s.closed_dispatchers.iter().flatten());
+    let above_dormant =
+        on_standby(facts).flat_map(|(_, tender)| tender.closed_dispatchers.iter().flatten());
+    above_live.chain(above_dormant)
+}
+
+/// Every agent a chain can show: the live sessions, the closed tenders of seeds on standby, and
+/// the closed sessions above either.
 fn links(facts: &Facts) -> Vec<Link<'_>> {
-    let live: HashSet<&str> = facts.sessions.iter().map(|s| s.id.as_str()).collect();
-    let dormant = on_standby(facts)
-        .filter(|(_, tender)| !live.contains(tender.session_id.as_str()))
-        .map(|(seed, tender)| Link::Dormant(seed, tender));
+    let mut seen: HashSet<&str> = facts.sessions.iter().map(|s| s.id.as_str()).collect();
+    let dormant: Vec<Link<'_>> = on_standby(facts)
+        .filter(|(_, tender)| seen.insert(tender.session_id.as_str()))
+        .map(|(seed, tender)| Link::Dormant(seed, tender))
+        .collect();
+    let closed: Vec<Link<'_>> = closed_above(facts)
+        .filter(|above| seen.insert(above.entry.id.as_str()))
+        .map(|above| Link::Closed(&above.entry, Some(above)))
+        .collect();
     facts
         .sessions
         .iter()
         .map(Link::Live)
         .chain(dormant)
+        .chain(closed)
         .collect()
+}
+
+/// The closed session `id`, as the ledger holds it or as a chain above a live agent names it.
+pub(crate) fn closed_entry<'a>(id: &str, state: &'a State) -> Option<&'a SessionLedgerEntry> {
+    if state.facts.sessions.iter().any(|s| s.id == id) {
+        return None;
+    }
+    state.terminals.closed_session(id).or_else(|| {
+        closed_above(&state.facts)
+            .map(|above| &above.entry)
+            .find(|entry| entry.id == id)
+    })
 }
 
 /// Whether `session` sits in a delegation chain: it has a role, a dispatcher or delegates,
@@ -73,6 +105,7 @@ pub(crate) fn shown(session: &Session, facts: &Facts) -> bool {
             .iter()
             .any(|s| dispatches(s.dispatcher_session_id.as_deref()))
         || on_standby(facts).any(|(_, t)| dispatches(t.dispatcher_session_id.as_deref()))
+        || closed_above(facts).any(|c| dispatches(c.dispatcher_session_id.as_deref()))
 }
 
 pub(crate) fn trigger(session: &Session, facts: &Facts) -> Option<Trigger> {
@@ -157,7 +190,7 @@ pub(crate) fn tree<'a>(id: &str, facts: &'a Facts) -> (Vec<(Link<'a>, usize)>, O
 fn shown_rows<'a>(session: &str, state: &'a State) -> (Vec<(Link<'a>, usize)>, Option<String>) {
     let live = state.facts.sessions.iter().any(|s| s.id == session);
     match state.terminals.closed_session(session).filter(|_| !live) {
-        Some(entry) => (vec![(Link::Closed(entry), 0)], None),
+        Some(entry) => (vec![(Link::Closed(entry, None), 0)], None),
         None => tree(session, &state.facts),
     }
 }
@@ -176,7 +209,7 @@ pub(crate) fn agent_at(session: &str, i: usize, facts: &Facts) -> Option<String>
     let (rows, _) = tree(session, facts);
     match rows.get(i.min(rows.len().checked_sub(1)?))?.0 {
         Link::Live(session) => Some(session.id.clone()),
-        Link::Dormant(..) | Link::Closed(_) => None,
+        Link::Dormant(..) | Link::Closed(..) => None,
     }
 }
 
@@ -474,7 +507,7 @@ fn row_name(key: &str, agent: &Agent<'_>, picked: bool, t: &Tokens) -> El {
     let (kind, ink) = match (picked, agent.card.link) {
         (true, _) => (Type::Name, t.text_primary),
         (false, Link::Live(_)) => (Type::Body, t.text_primary),
-        (false, Link::Dormant(..) | Link::Closed(_)) => (Type::Body, t.text_secondary),
+        (false, Link::Dormant(..) | Link::Closed(..)) => (Type::Body, t.text_secondary),
     };
     words(agent.shown_name(), kind, ink)
         .key(format!("{key}.title"))
@@ -549,9 +582,32 @@ fn agent_row(
                     open_seed(state, &opens.0, opens.1.as_deref(), tx)
                 })
         }
-        Link::Closed(_) => ListRow::new(key.clone(), agent.card.name.clone())
+        Link::Closed(entry, _) => {
+            let role = agent.card.link.role();
+            let kind = role
+                .map(|r| r.name.clone())
+                .unwrap_or_else(|| harness_label(&facts.harnesses, &entry.agent));
+            let closed = match held(entry.closed_at.as_deref().unwrap_or_default(), now_ms) {
+                Some(held) => format!("closed {held}"),
+                None => "closed".to_owned(),
+            };
+            let mark = match role {
+                Some(role) => glyph(
+                    Mark::of(Some(role)).glyph(),
+                    IconSize::Small,
+                    t.text_tertiary,
+                ),
+                None => role_slot(None, t),
+            };
+            ListRow::new(
+                key.clone(),
+                format!("{} · {kind} · {closed}", agent.card.name),
+            )
             .lead(dot(t.text_muted, DotShape::Hollow, DotSize::Regular))
-            .title_el(row_name(&key, agent, picked, t)),
+            .title_el(row_name(&key, agent, picked, t))
+            .aside(words(closed, Type::Small, t.text_tertiary).single_line())
+            .aside(mark)
+        }
     };
     row.role("treeitem")
         .unfocusable()
@@ -635,7 +691,7 @@ fn opens(link: Link<'_>, state: &State) -> Option<Pick> {
     match link {
         Link::Live(session) => Some(Pick::Agent(session.id.clone())),
         Link::Dormant(seed, _) => Some(Pick::Seed(seed.id.clone())),
-        Link::Closed(_) => goes(link, state)
+        Link::Closed(..) => goes(link, state)
             .into_iter()
             .find(|go| matches!(go, Go::Resume { .. }))
             .map(Pick::Go),

@@ -1719,15 +1719,78 @@ func (d *Daemon) decorateSessionDispatcher(session *protocol.Session, dispatcher
 	if dispatched {
 		session.Dispatcher = protocol.Ptr(parties.actor(dispatcher))
 	}
-	session.DispatcherSessionID = nil
-	if sessionID, ok := d.sessionOfActor(dispatcher); ok {
-		session.DispatcherSessionID = protocol.Ptr(sessionID)
-		return
+	session.DispatcherSessionID, session.ClosedDispatchers = d.chainAbove(dispatcher, dispatcherBySession, parties)
+}
+
+func (d *Daemon) chainAbove(dispatcher who.Actor, dispatchers map[protocol.SessionID]who.Actor, parties parties) (*protocol.SessionID, []protocol.ClosedDispatcher) {
+	first, entry := d.dispatcherSession(dispatcher, parties)
+	if first == "" {
+		return nil, nil
+	}
+	var closed []protocol.ClosedDispatcher
+	for entry != nil && !slices.ContainsFunc(closed, func(c protocol.ClosedDispatcher) bool { return c.Entry.ID == entry.ID }) {
+		link := protocol.ClosedDispatcher{Entry: *entry}
+		if role, err := d.store.SessionDelegationRole(entry.ID); err != nil {
+			d.logf("garden: read the delegation role of closed dispatcher %s: %v", entry.ID, err)
+		} else {
+			link.DelegationRole = role
+		}
+		above, dispatched := dispatchers[entry.ID]
+		if dispatched {
+			link.Dispatcher = protocol.Ptr(parties.actor(above))
+		}
+		var next protocol.SessionID
+		next, entry = d.dispatcherSession(above, parties)
+		if next != "" {
+			link.DispatcherSessionID = protocol.Ptr(next)
+		}
+		closed = append(closed, link)
+	}
+	return protocol.Ptr(first), closed
+}
+
+func (d *Daemon) projectDelegatesBelow(dispatcher protocol.SessionID) {
+	dispatchers := d.gardenDispatchersBySession()
+	for _, session := range d.store.List("") {
+		if dispatchedThrough(session.ID, dispatcher, dispatchers) {
+			d.projectSessionStateChanged(session.ID)
+		}
+	}
+}
+
+func dispatchedThrough(delegate, dispatcher protocol.SessionID, dispatchers map[protocol.SessionID]who.Actor) bool {
+	seen := map[protocol.SessionID]bool{}
+	for at := delegate; !seen[at]; {
+		seen[at] = true
+		party, isParty := dispatchers[at].Party()
+		above, isSession := party.Session()
+		if !isParty || !isSession {
+			return false
+		}
+		if above == dispatcher {
+			return true
+		}
+		at = above
+	}
+	return false
+}
+
+func (d *Daemon) dispatcherSession(dispatcher who.Actor, parties parties) (protocol.SessionID, *protocol.SessionLedgerEntry) {
+	if sessionID, live := d.sessionOfActor(dispatcher); live {
+		return sessionID, nil
 	}
 	party, isParty := dispatcher.Party()
-	if sessionID, isSession := party.Session(); isParty && isSession && d.isStandbyTender(parties, party) {
-		session.DispatcherSessionID = protocol.Ptr(sessionID)
+	sessionID, isSession := party.Session()
+	if !isParty || !isSession {
+		return "", nil
 	}
+	if d.isStandbyTender(parties, party) {
+		return sessionID, nil
+	}
+	if entry := d.closedSessionOf(parties, party); entry != nil {
+		return sessionID, entry
+	}
+	return "", nil
 }
 
 func (d *Daemon) gardenPrime(sessionID protocol.SessionID, profileID ...string) (*protocol.SeedReadyResult, error) {

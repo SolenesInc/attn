@@ -63,7 +63,7 @@ commands:
     doc: |
       Reads the session ledger, newest first: live sessions by default, `closed` for the ones that ended, `all` for both. When rows are omitted the notice names the id to pass to `before` for the next page. Filters combine and are applied before paging. `last` takes today, yesterday, 7d or 30d; `since` and `until` take a date or an RFC3339 instant and are half-open, so `until` excludes its own instant. `reopen` adds what would bring each closed row back, judging the whole page in one call; session_show explains any one of those verdicts.
 
-      `tree` shows every live session, and each closed agent on standby, nested under the session that dispatched it, sorted by label within each profile and branch. Rows carry short ids, agent, state, owed or snoozed turns and seed slugs. A delegate whose dispatcher is closed or absent becomes a root. A closed agent whose seed is on standby stays under its dispatcher with the state standby, and its seed column adds what it waits for. Shell split provenance is labeled separately. Inside attn the tree is limited to your session's profile; `profile` narrows it. Only `profile` goes with `tree`.
+      `tree` shows every live session, each closed agent on standby, and each other closed agent with a live or standby agent below it, nested under the session that dispatched it, sorted by label within each profile and branch. Rows carry short ids, agent, state, owed or snoozed turns and seed slugs. A closed agent with a live or standby agent below it keeps its place with the state closed, so a chain stays whole when an agent in its middle closes. A delegate whose dispatcher attn cannot show becomes a root, labeled so. A closed agent whose seed is on standby stays under its dispatcher with the state standby, and its seed column adds what it waits for. Shell split provenance is labeled separately. Inside attn the tree is limited to your session's profile; `profile` narrows it. Only `profile` goes with `tree`.
     args:
       - {name: closed, type: bool, cli: "--closed", doc: "the sessions that ended"}
       - {name: all, type: bool, cli: "--all", doc: "live and closed sessions together"}
@@ -75,7 +75,7 @@ commands:
       - {name: until, type: text, cli: "--until", placeholder: "<when>", doc: "only sessions before this date or RFC3339 instant"}
       - {name: profile, type: text, cli: "--profile", placeholder: "<id>", doc: "only sessions of this profile id, deleted profiles included"}
       - {name: reopen, type: bool, cli: "--reopen", doc: "judge every closed row and add what would bring it back"}
-      - {name: tree, type: bool, cli: "--tree", doc: "every live session, and each closed agent on standby, nested under its dispatcher"}
+      - {name: tree, type: bool, cli: "--tree", doc: "every live session, and each closed agent on standby or with a live agent below it, nested under its dispatcher"}
     result: SessionListResult
     errors:
       - {code: ambiguous_session, fix: "Give more of the full id; agent_list and session_list carry full ids."}

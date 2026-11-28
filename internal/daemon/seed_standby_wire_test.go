@@ -1575,4 +1575,13 @@ func TestALiveDelegateNamesItsDispatcherWhileThatDispatcherIsAClosedTenderOnStan
 	if tender == nil || tender.SessionID != middle.SessionID || protocol.Deref(tender.DispatcherSessionID) != "parent" {
 		t.Fatalf("the standby tender of %s = %+v, want closed session %s under parent", middle.SeedID, tender, middle.SessionID)
 	}
+
+	if closed := closeFromApp(app, "parent"); !closed.Accepted {
+		t.Fatalf("close parent: %s", protocol.Deref(closed.Error))
+	}
+	awaitClosed(app, "parent")
+	tender = lifeShow(t, cli, middle.SeedID).Seed.Standby.Tender
+	if tender == nil || protocol.Deref(tender.DispatcherSessionID) != "parent" || len(tender.ClosedDispatchers) != 1 || tender.ClosedDispatchers[0].Entry.ID != "parent" {
+		t.Fatalf("once parent closed, the standby tender of %s = %+v, want it under closed parent", middle.SeedID, tender)
+	}
 }

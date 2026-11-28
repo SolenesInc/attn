@@ -246,7 +246,8 @@ model Session {
   crew_member_name?: string;    // That member's name, present with crew_member.
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (recorded by the Garden dispatch)
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
-  dispatcher_session_id?: SessionID; // The session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session: the live session, or the closed session while that dispatcher is a standby tender. Absent when nothing resolves.
+  dispatcher_session_id?: SessionID; // The session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session: the live session, the closed session while that dispatcher is a standby tender, or the first of closed_dispatchers. Absent when nothing resolves.
+  closed_dispatchers?: ClosedDispatcher[]; // The closed sessions above this one in its delegation chain, nearest first, up to a dispatcher that is live, a standby tender, or no session. Absent while the dispatcher is live.
   dispatcher?: ActorView;       // Who dispatched this session, read from the dispatch record; present even when no live session resolves.
   delegation_role?: SessionDelegationRole;
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
@@ -6409,10 +6410,23 @@ model StandbyTender {
   "session_id": SessionID;
   "label": string;
   "agent": string;
-  // Set while the dispatcher's session is live.
+  // Set while the dispatcher's session is live, a standby tender, or the first of closed_dispatchers.
   "dispatcher_session_id"?: SessionID;
   // The agent that dispatched the tender. Absent when nobody dispatched it.
   "dispatcher"?: ActorView;
+  // As Session.closed_dispatchers.
+  "closed_dispatchers"?: ClosedDispatcher[];
+}
+
+// A closed session that still has a live agent, or a closed one on standby, below it in a
+// delegation chain. Chain views keep it in place so the chain above it stays whole.
+model ClosedDispatcher {
+  entry: SessionLedgerEntry;
+  delegation_role?: SessionDelegationRole;
+  // Its own dispatcher, resolved as Session.dispatcher_session_id is: the next entry of the
+  // list when that dispatcher closed too.
+  dispatcher_session_id?: SessionID;
+  dispatcher?: ActorView;
 }
 
 // A pull request a seed's mailbox watches. `state` is the pull request's own

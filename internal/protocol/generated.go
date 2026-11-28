@@ -2570,6 +2570,21 @@ type ClientHelloMessage struct {
 	Version string `json:"version"`
 }
 
+type ClosedDispatcher struct {
+	// DelegationRole corresponds to the JSON schema field "delegation_role".
+	DelegationRole *SessionDelegationRole `json:"delegation_role,omitempty,omitzero"`
+
+	// Dispatcher corresponds to the JSON schema field "dispatcher".
+	Dispatcher *ActorView `json:"dispatcher,omitempty,omitzero"`
+
+	// DispatcherSessionID corresponds to the JSON schema field
+	// "dispatcher_session_id".
+	DispatcherSessionID *SessionID `json:"dispatcher_session_id,omitempty,omitzero"`
+
+	// Entry corresponds to the JSON schema field "entry".
+	Entry SessionLedgerEntry `json:"entry"`
+}
+
 type CodeNavCheckResult struct {
 	// ElapsedMs corresponds to the JSON schema field "elapsed_ms".
 	ElapsedMs int `json:"elapsed_ms"`
@@ -12748,6 +12763,9 @@ type Session struct {
 	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
 	ChiefOfStaff *bool `json:"chief_of_staff,omitempty,omitzero"`
 
+	// ClosedDispatchers corresponds to the JSON schema field "closed_dispatchers".
+	ClosedDispatchers []ClosedDispatcher `json:"closed_dispatchers,omitempty,omitzero"`
+
 	// CommandTerminal corresponds to the JSON schema field "command_terminal".
 	CommandTerminal *bool `json:"command_terminal,omitempty,omitzero"`
 
@@ -14362,6 +14380,9 @@ type StandbySessionMessage struct {
 type StandbyTender struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent string `json:"agent"`
+
+	// ClosedDispatchers corresponds to the JSON schema field "closed_dispatchers".
+	ClosedDispatchers []ClosedDispatcher `json:"closed_dispatchers,omitempty,omitzero"`
 
 	// Dispatcher corresponds to the JSON schema field "dispatcher".
 	Dispatcher *ActorView `json:"dispatcher,omitempty,omitzero"`

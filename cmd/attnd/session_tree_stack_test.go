@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *testing.T) {
+func TestSessionTreeShowsDelegationChainsAndKeepsClosedDispatchersAboveTheirLiveDelegates(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
@@ -54,6 +54,15 @@ func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *
 	child := delegate(source, "builder", "Build the discount field")
 	grandchild := delegate(child.SessionID, "reviewer", "Review the discount field")
 	sibling := delegate(source, "writer", "Document the discount field")
+	outside := s.Run(testworld.Invocation{Args: []string{
+		"delegate", "--brief", "Audit the discount field", "--cwd", cwd, "--name", "auditor", "--agent", "claude", "--model", "default",
+	}})
+	if outside.Code != 0 {
+		t.Fatalf("delegating from a plain shell exited %d: %s", outside.Code, outside.Stderr)
+	}
+	var auditor delegated
+	outside.JSON(t, &auditor)
+	s.Launched(auditor.SessionID).Prompted()
 	until := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
 	app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: protocol.SessionID(child.SessionID), Until: until})
 	testworld.AwaitSession(app, child.SessionID, func(x protocol.Session) bool {
@@ -75,6 +84,9 @@ func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *
 		return got.Stdout
 	}
 	shown := tree()
+	if row := rowOf(shown, auditor.SessionID); !strings.Contains(row, "auditor (dispatcher ") || !strings.Contains(row, " closed or absent)") {
+		t.Errorf("a delegate started from a plain shell is the root row %q, want its label to say its dispatcher is closed or absent:\n%s", row, shown)
+	}
 	for _, prefix := range []string{
 		shortID(source) + "  orchestrator",
 		"├─ " + shortID(child.SessionID) + "  builder",
@@ -123,16 +135,19 @@ func TestSessionTreeShowsDelegationChainsAndKeepsChildrenOfClosedDispatchers(t *
 	}
 	shown = tree()
 	for _, row := range []string{
-		shortID(child.SessionID) + "  builder (dispatcher closed or absent)",
-		"└─ " + shortID(grandchild.SessionID) + "  reviewer",
-		shortID(sibling.SessionID) + "  writer (dispatcher closed or absent)",
+		shortID(source) + "  orchestrator",
+		"├─ " + shortID(child.SessionID) + "  builder",
+		"│  └─ " + shortID(grandchild.SessionID) + "  reviewer",
+		"└─ " + shortID(sibling.SessionID) + "  writer",
 	} {
 		if !strings.Contains(shown, "\n"+row) {
 			t.Errorf("tree after closing dispatcher is missing %q:\n%s", row, shown)
 		}
 	}
-	if strings.Contains(shown, shortID(source)+"  orchestrator") {
-		t.Errorf("tree still lists the closed dispatcher:\n%s", shown)
+	for _, line := range strings.Split(shown, "\n") {
+		if strings.HasPrefix(line, shortID(source)+"  orchestrator") && !slices.Contains(strings.Fields(line), "closed") {
+			t.Errorf("the closed dispatcher's row does not say it closed: %s", line)
+		}
 	}
 	app.TypeLine(shell, "exit")
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == shell })

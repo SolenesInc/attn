@@ -3439,7 +3439,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateSessionSeed(clone, seedBySession)
 	d.decorateSessionDispatcher(clone, dispatcherBySession, parties)
 	if seedBySession[clone.ID] != "" && clone.SeedID == nil {
-		clone.Dispatcher, clone.DispatcherSessionID = nil, nil
+		clone.Dispatcher, clone.DispatcherSessionID, clone.ClosedDispatchers = nil, nil, nil
 		clone.DelegatedFromChief = nil
 	}
 	d.decorateSessionWithCost(clone)

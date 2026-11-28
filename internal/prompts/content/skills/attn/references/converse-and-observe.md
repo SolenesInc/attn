@@ -26,8 +26,10 @@ pass an id: a name does not say who the caller is.
 `attn session list --tree` shows every live session under its dispatcher, with
 short ids, labels, harnesses, states, owed or snoozed turns, and seed slugs. Use
 it to see which agents belong to the same delegation chain before you act on
-them. A delegate whose dispatcher is closed or absent appears at the root, with a
-label that says so. A closed agent whose seed is on standby stays in the tree
+them. A closed agent with a live or standby agent below it keeps its place with
+the state `closed`, so the chain stays whole when an agent in its middle closes.
+A delegate whose dispatcher attn cannot show appears at the root, with a label
+that says so. A closed agent whose seed is on standby stays in the tree
 with the state `standby`, and its seed column adds what it waits for: a blocked
 resume, its reminder's time, its watched pull requests, or its note. Shells stay at the root with their split provenance labeled. A crew
 dispatcher follows the member's current session. Inside attn, the tree is

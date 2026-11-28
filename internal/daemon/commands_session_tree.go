@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -61,6 +62,15 @@ func (d *Daemon) sessionTree(ctx context.Context, c command.Caller, profileID st
 				node := dormantTreeNode(profile.ID, seed, time.Now())
 				nodes = append(nodes, node)
 				byID[node.session.ID] = node
+			}
+		}
+	}
+	for _, node := range slices.Clone(nodes) {
+		for _, closed := range node.session.ClosedDispatchers {
+			if byID[closed.Entry.ID] == nil && inView(closed.Entry.ProfileID) {
+				closedNode := closedTreeNode(closed)
+				nodes = append(nodes, closedNode)
+				byID[closed.Entry.ID] = closedNode
 			}
 		}
 	}
@@ -127,10 +137,18 @@ func dormantTreeNode(profileID string, seed protocol.SeedRow, now time.Time) *se
 		session: protocol.Session{
 			ID: tender.SessionID, Label: tender.Label, Agent: protocol.SessionAgent(tender.Agent), ProfileID: profileID,
 			State: "standby", SeedID: protocol.Ptr(seed.ID),
-			DispatcherSessionID: tender.DispatcherSessionID, Dispatcher: tender.Dispatcher,
+			DispatcherSessionID: tender.DispatcherSessionID, Dispatcher: tender.Dispatcher, ClosedDispatchers: tender.ClosedDispatchers,
 		},
 		seedSlug: seed.StepSlug + " · " + standbyWaitsFor(seed, now),
 	}
+}
+
+func closedTreeNode(closed protocol.ClosedDispatcher) *sessionTreeNode {
+	entry := closed.Entry
+	return &sessionTreeNode{session: protocol.Session{
+		ID: entry.ID, Label: entry.Label, Agent: protocol.SessionAgent(entry.Agent), ProfileID: entry.ProfileID,
+		State: "closed", DispatcherSessionID: closed.DispatcherSessionID, Dispatcher: closed.Dispatcher,
+	}}
 }
 
 func standbyWaitsFor(seed protocol.SeedRow, now time.Time) string {

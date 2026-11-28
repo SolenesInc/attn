@@ -226,6 +226,10 @@ func buildWireProjections() []projection {
 			},
 		},
 		{
+			filter: bus.Filter{FactSessionRegistered, FactSessionReregistered, FactSessionUnregistered},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectDelegatesBelow(protocol.SessionID(ev.Subject)) },
+		},
+		{
 			filter: bus.Filter{FactSessionRespawned},
 			apply: func(d *Daemon, ev bus.Event) {
 				respawn, _ := decodeFact[ptyRespawn](d, ev)

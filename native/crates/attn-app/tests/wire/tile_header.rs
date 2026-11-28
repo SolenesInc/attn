@@ -2,12 +2,12 @@ use std::time::Duration;
 
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
-    ActorView, AutomationProvenance, CommandUsage, Desktop, DesktopPane,
+    ActorView, AutomationProvenance, ClosedDispatcher, CommandUsage, Desktop, DesktopPane,
     GetCommandUsageResultMessage, InitialStateMessage, OutpostInfo, OutpostsUpdatedMessage,
     Profile, ProfileArrangementChangedMessage, PullRequestProvenance,
     RecordCommandUsageResultMessage, Seed, SeedStandbyView, Session, SessionAttention,
-    SessionDelegationRole, SessionPullRequest, SessionStateChangedMessage, SessionUsage,
-    SessionUsageModel, StandbyTender,
+    SessionDelegationRole, SessionLedgerEntry, SessionPullRequest, SessionStateChangedMessage,
+    SessionUsage, SessionUsageModel, StandbyTender,
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, World, key_event, message};
@@ -1245,6 +1245,7 @@ fn on_standby(id: &str, tender: &str, label: &str, dispatcher: &str) -> Seed {
             agent: "claude".into(),
             dispatcher_session_id: Some(format!("s-{dispatcher}")),
             dispatcher: Some(session_actor(dispatcher)),
+            ..StandbyTender::default()
         }),
         ..SeedStandbyView::default()
     });
@@ -2225,6 +2226,89 @@ fn with_role(name: &str, builtin: &str, session: Session) -> Session {
         }),
         ..session
     }
+}
+
+fn closed_orchestrator(id: &str, label: &str, dispatcher: &str) -> ClosedDispatcher {
+    ClosedDispatcher {
+        entry: SessionLedgerEntry {
+            id: format!("s-{id}"),
+            label: label.into(),
+            agent: "claude".into(),
+            directory: format!("/work/{id}"),
+            profile_id: "work".into(),
+            closed_at: Some("2026-11-27T18:00:00Z".into()),
+            ..SessionLedgerEntry::default()
+        },
+        delegation_role: Some(SessionDelegationRole {
+            name: "Orchestrator".into(),
+            builtin: Some("orchestrator".into()),
+            ..SessionDelegationRole::default()
+        }),
+        dispatcher_session_id: Some(format!("s-{dispatcher}")),
+        ..ClosedDispatcher::default()
+    }
+}
+
+fn under_closed(id: &str, label: &str, closed: &ClosedDispatcher) -> Session {
+    Session {
+        closed_dispatchers: Some(vec![closed.clone()]),
+        ..delegate_of(id, label, closed.entry.id.trim_start_matches("s-"))
+    }
+}
+
+#[test]
+fn a_closed_orchestrator_keeps_its_place_in_the_chain_from_below_and_above_and_return_resumes_it() {
+    let sync = closed_orchestrator("sync", "sync plan", "b");
+    let mut world = start_with(vec![
+        with_role(
+            "Reviewer",
+            "reviewer",
+            delegate_of("a", "push review", "push"),
+        ),
+        session("b", "notebook", None),
+        under_closed("push", "sync push", &sync),
+        under_closed("folders", "sync folders", &sync),
+    ]);
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("tile.b.role"))
+            .and_then(|n| n.name),
+        Some("Show delegation chain for notebook".into()),
+        "the top of the chain keeps its chain through the closed orchestrator"
+    );
+
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    let levels = chain_levels(&world);
+    assert_eq!(
+        levels,
+        [
+            ("notebook".to_owned(), 1),
+            ("sync plan".to_owned(), 2),
+            ("sync push".to_owned(), 3),
+            ("push review".to_owned(), 4),
+            ("sync folders".to_owned(), 3),
+        ],
+        "the closed orchestrator holds its place between the top and its builders"
+    );
+    let rows = chain(&world).expect("the chain is open");
+    assert!(
+        rows[1].starts_with("sync plan · Orchestrator · closed"),
+        "the closed orchestrator's row says it closed: {rows:?}"
+    );
+
+    key(&mut world, Key::Up);
+    key(&mut world, Key::Up);
+    let words = texts(&world, "tile.a.role.popover");
+    assert!(
+        words.contains(&"↵ resume".to_owned()),
+        "return on the closed orchestrator resumes it: {words:?}"
+    );
+    key(&mut world, Key::Enter);
+    let reopened = world.daemon.sent_of("session_reopen");
+    assert_eq!(reopened.len(), 1);
+    assert_eq!(reopened[0]["session_id"], "s-sync");
+    rest(&mut world);
 }
 
 fn chip(world: &World, row: &str) -> Option<String> {

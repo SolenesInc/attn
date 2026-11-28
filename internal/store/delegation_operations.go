@@ -124,6 +124,15 @@ func (s *Store) GetDelegationOperation(id string) (*DelegationOperationRecord, e
 }
 
 func (s *Store) SessionDelegationRoles() (map[protocol.SessionID]*protocol.SessionDelegationRole, error) {
+	return s.sessionDelegationRoles("session.closed_at = ''")
+}
+
+func (s *Store) SessionDelegationRole(id protocol.SessionID) (*protocol.SessionDelegationRole, error) {
+	roles, err := s.sessionDelegationRoles("session.id = ?", id)
+	return roles[id], err
+}
+
+func (s *Store) sessionDelegationRoles(where string, args ...any) (map[protocol.SessionID]*protocol.SessionDelegationRole, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	roles := map[protocol.SessionID]*protocol.SessionDelegationRole{}
@@ -132,8 +141,8 @@ func (s *Store) SessionDelegationRoles() (map[protocol.SessionID]*protocol.Sessi
 	}
 	rows, err := s.db.Query(`SELECT operation.session_id, operation.resolved_preferences
 		FROM sessions AS session JOIN delegation_operations AS operation ON operation.session_id = session.id
-		WHERE session.closed_at = '' AND operation.resolved_preferences != ''
-		ORDER BY operation.created_at, operation.request_id`)
+		WHERE `+where+` AND operation.resolved_preferences != ''
+		ORDER BY operation.created_at, operation.request_id`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read session delegation roles: %w", err)
 	}
