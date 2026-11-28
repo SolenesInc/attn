@@ -1,11 +1,13 @@
 package main_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -150,4 +152,73 @@ func TestAKeptViewIsEditedRestoredForkedPlacedAndDeletedThroughTheCLI(t *testing
 	}
 	refused(t, s.Attn("view", "list", "needs-me"), 1, "keeps no view needs-me")
 	requireStdout(t, s.Attn("view", "export", "mine", "--to", s.Path("mine-again")), "wrote version 1 of mine")
+}
+
+func TestAKeptViewThatRunsNothingDrawsFromTheHomeWhileTheOutpostItWasKeptFromIsOff(t *testing.T) {
+	home, outpost := testworld.NewStack(t, testworld.WithoutAgentKit()), testworld.NewStack(t)
+	outpost.Vars = append(outpost.Vars, "SHELL=/bin/bash")
+	writeView(t, outpost.Path("work", "data"), needsMe, map[string]string{"rows.json": `[{"name": "first"}]`})
+	where := outpost.Path("work", "where")
+	writeView(t, where, ":::data run=\"scripts/where.sh\"\n:::\n\n:::status state\n:::\n", map[string]string{})
+	if err := os.MkdirAll(filepath.Join(where, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(where, "scripts", "where.sh"), []byte("#!/bin/sh\necho \"{\\\"state\\\": \\\"$PWD\\\"}\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	home.Start()
+	outpost.Start()
+	pair.Connect()
+	app := pair.App
+	requireStdout(t, home.Attn("settings", "set", "views_enabled", "true"), "true")
+
+	shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), outpost.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	app.TypeLine(shell, "attn view keep "+outpost.Path("work", "data")+" --name needs-me && attn view keep "+where+" --name where && printf '__kept_%s\\n' yes")
+	app.AwaitScreen(shell, "__kept_yes")
+	profile := app.SelectedProfile()
+	homeDesktop := profiles.HomeDesktopID(profile)
+	app.Send(protocol.DesktopSetCurrentMessage{Cmd: protocol.CmdDesktopSetCurrent, ProfileID: profile, DesktopID: homeDesktop, RequestID: "home"})
+	requireStdout(t, home.Attn("view", "show", "where"), "put where on desktop "+homeDesktop)
+	requireStdout(t, home.Attn("view", "show", "needs-me"), "put needs-me on desktop "+homeDesktop)
+
+	mark := app.EventCount()
+	shownWhere := testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+		return m.TileID == "tile-view-where" && m.View != nil && len(m.View.Commands) == 1
+	})
+	app.Send(protocol.ViewStartMessage{Cmd: protocol.CmdViewStart, DesktopID: shownWhere.DesktopID, TileID: shownWhere.TileID})
+	ran := testworld.AwaitSince(app, mark, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+		return m.TileID == "tile-view-where" && m.View != nil && len(m.View.Values) == 1
+	})
+	if protocol.Deref(ran.Host) != pair.Host || !strings.Contains(fmt.Sprint(ran.View.Values[0].Values), outpost.Dir) {
+		t.Fatalf("the view with a command ran it on host %q with %+v; want the outpost %s, in its data folder %s", protocol.Deref(ran.Host), ran.View.Values[0].Values, pair.Host, outpost.Dir)
+	}
+	testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+		return m.TileID == "tile-view-needs-me" && m.Host == nil && m.View != nil && len(m.View.Values) == 1
+	})
+
+	outpost.Stop()
+	testworld.Await(home.App(), protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+		return m.TileID == "tile-view-needs-me" && m.Host == nil && m.View != nil && len(m.View.Values) == 1 && protocol.Deref(m.Error) == ""
+	})
+
+	exported := home.Path("where")
+	requireStdout(t, home.Attn("view", "export", "where", "--to", exported))
+	stamp, _, _ := strings.Cut(fileText(t, filepath.Join(exported, "view.md")), "\n")
+	writeView(t, exported, stamp+"\n# Where\n\nNothing runs here now.\n", map[string]string{})
+	requireStdout(t, home.Attn("view", "edit", "where", "--from", exported), "saved where as version 2")
+	var read protocol.ViewReadResult
+	home.Attn("view", "read", "where", "--json").JSON(t, &read)
+	if !strings.HasPrefix(read.Path, home.Dir) || !strings.Contains(read.Text, "Nothing runs here now.") {
+		t.Fatalf("where, once an edit took its command away, reads %+v; want it from the home's folder %s", read, home.Dir)
+	}
+
+	requireStdout(t, home.Attn("view", "export", "where", "--to", exported))
+	stamp, _, _ = strings.Cut(fileText(t, filepath.Join(exported, "view.md")), "\n")
+	writeView(t, exported, stamp+"\n:::data run=\"scripts/where.sh\"\n:::\n\n:::status state\n:::\n", map[string]string{})
+	requireStdout(t, home.Attn("view", "edit", "where", "--from", exported), "saved where as version 3")
+	home.Attn("view", "read", "where", "--json").JSON(t, &read)
+	if !strings.HasPrefix(read.Path, home.Dir) || len(read.Commands) != 1 {
+		t.Fatalf("where, once an edit on the home gave it a command again, reads %+v; want it with its command from the home's folder %s", read, home.Dir)
+	}
 }

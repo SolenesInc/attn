@@ -114,6 +114,9 @@ func BuildMovedHome(ctx context.Context, m MovedHome, snapshot, machineDB, out s
 				return fmt.Errorf("%s: %w", statement, err)
 			}
 		}
+		if err := moveHomeHeldViews(tx, m.Home, m.Target); err != nil {
+			return err
+		}
 		if m.TargetStream != "" {
 			for _, statement := range []string{
 				`INSERT INTO main.analytics_builds (build) SELECT build FROM machine.analytics_builds WHERE id IN (SELECT build_id FROM machine.analytics_outbox WHERE sent_at IS NULL) ON CONFLICT(build) DO NOTHING`,
@@ -231,4 +234,21 @@ func schemaOfThisBuild(path string) error {
 		return fmt.Errorf("the home's database is at schema %d and this machine's build at %d; both machines must run one build", version, latest)
 	}
 	return nil
+}
+
+// moveHomeHeldViews has the new home place again each kept view the home
+// holds, and keys what the user answered in it by the new home.
+func moveHomeHeldViews(tx *sql.Tx, from, to string) error {
+	const held = `SELECT folder || '/' || '` + viewFileName + `' FROM main.views WHERE machine_id = '' AND folder != ''`
+	for _, statement := range []string{
+		`UPDATE main.view_drafts SET host = ?2 WHERE host = ?1 AND path IN (` + held + `)`,
+		`UPDATE main.view_sends SET host = ?2 WHERE host = ?1 AND path IN (` + held + `)`,
+		`UPDATE main.attachments SET owner_id = ?2 || substr(owner_id, length(?1) + 1) WHERE owner_kind = 'view' AND substr(owner_id, length(?1) + 2) IN (` + held + `) AND substr(owner_id, 1, length(?1) + 1) = ?1 || ':'`,
+	} {
+		if _, err := tx.Exec(statement, from, to); err != nil {
+			return fmt.Errorf("%s: %w", statement, err)
+		}
+	}
+	_, err := tx.Exec(`UPDATE main.views SET folder_version = 0 WHERE machine_id = ''`)
+	return err
 }

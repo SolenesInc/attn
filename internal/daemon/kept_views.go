@@ -182,7 +182,7 @@ func viewPrograms(encoded string) ([]string, error) {
 // discardKeptViewFiles lets go of the files the user gave the kept view's
 // answers and no send gave an agent.
 func (d *Daemon) discardKeptViewFiles(view store.KeptView) error {
-	answers, err := d.store.ViewAnswers(store.HostPath{Host: view.MachineID, Path: view.ViewFile()})
+	answers, err := d.store.ViewAnswers(store.HostPath{Host: d.machineFor(view.MachineID).ID(), Path: view.ViewFile()})
 	if err != nil {
 		return err
 	}
@@ -254,7 +254,7 @@ func (d *Daemon) placeKeptView(ctx context.Context, profileID, name string) erro
 		if err != nil {
 			return fmt.Errorf("give %s its version %d: %w", name, view.Version, d.tileDocumentError(host, err))
 		}
-		if err := d.store.SetViewFolder(profileID, name, written.Folder, view.Version); err != nil {
+		if err := d.store.SetViewFolder(profileID, name, d.machineFor(view.MachineID).ID(), written.Folder, view.Version); err != nil {
 			return err
 		}
 		d.nudgeDesktopTileContent()

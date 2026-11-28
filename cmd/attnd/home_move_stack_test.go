@@ -20,6 +20,7 @@ import (
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -595,8 +596,19 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 	}
 
 	requireStdout(t, home.Attn("settings", "set", "views_enabled", "true"), "true")
-	writeView(t, home.Path("made"), needsMe, map[string]string{"rows.json": `[{"name": "first"}]`})
+	writeView(t, home.Path("made"), needsMe+"\n:::question size\nWhich size?\n- [ ] 48 px\n- [ ] 64 px\n:::\n", map[string]string{"rows.json": `[{"name": "first"}]`})
 	requireStdout(t, home.Attn("view", "keep", home.Path("made"), "--name", "needs-me"), "kept needs-me as version 1")
+	homeDesktop := profiles.HomeDesktopID(profile)
+	app.Send(protocol.DesktopSetCurrentMessage{Cmd: protocol.CmdDesktopSetCurrent, ProfileID: profile, DesktopID: homeDesktop, RequestID: "home"})
+	requireStdout(t, home.Attn("view", "show", "needs-me"), "put needs-me on desktop "+homeDesktop)
+	testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+		return m.TileID == "tile-view-needs-me" && m.View != nil
+	})
+	answered := testworld.Request(app, protocol.ViewAnswerMessage{Cmd: protocol.CmdViewAnswer, RequestID: "size", DesktopID: homeDesktop, TileID: "tile-view-needs-me", Answer: protocol.ViewAnswer{Part: protocol.Ptr("size"), Picked: []string{"64 px"}}},
+		protocol.EventViewAnswerResult, func(r protocol.ViewAnswerResultMessage) bool { return r.RequestID == "size" })
+	if !answered.Success {
+		t.Fatalf("answering needs-me before the move: %s", protocol.Deref(answered.Error))
+	}
 	requireStdout(t, home.Attn("view", "export", "needs-me", "--to", home.Path("exported")))
 	edited := strings.Replace(fileText(t, home.Path("exported", "view.md")), "# Needs me", "# Moved with the home", 1)
 	writeView(t, home.Path("exported"), edited, map[string]string{})
@@ -634,15 +646,18 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 			t.Fatalf("the Cloud Relay saw %d home sockets at once:\n%s", most, cloud.Connections())
 		}
 	})
-	t.Run("a kept view keeps its versions and the machine it was kept on", func(t *testing.T) {
+	t.Run("a kept view that runs no command keeps its versions and moves with the home", func(t *testing.T) {
 		if listing := viewListing(t, outpost, "needs-me"); len(listing.Versions) != 2 || protocol.Deref(listing.Version) != 2 {
 			t.Fatalf("needs-me at the new home: %+v", listing)
 		}
 		var read protocol.ViewReadResult
 		outpost.Attn("view", "read", "needs-me", "--json").JSON(t, &read)
-		if read.Path != keptBefore.Path || !strings.HasPrefix(read.Path, home.Dir) || read.Text != keptBefore.Text || !strings.Contains(read.Text, "# Moved with the home") || len(read.Values) != 1 {
+		if !strings.HasPrefix(keptBefore.Path, home.Dir) || !strings.HasPrefix(read.Path, outpost.Dir) || read.Text != keptBefore.Text || !strings.Contains(read.Text, "# Moved with the home") || len(read.Values) != 1 {
 			t.Fatalf("needs-me read at the new home: %+v; before the move: %+v", read, keptBefore)
 		}
+		testworld.Await(newHome, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+			return m.TileID == "tile-view-needs-me" && m.Answers != nil && len(m.Answers.Drafts) == 1 && slices.Equal(m.Answers.Drafts[0].Picked, []string{"64 px"})
+		})
 	})
 	t.Run("a home with more files than one ssh packet can name moves them all", func(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(outpost.Dir, "plugins", "many", fmt.Sprintf("module-%04d.js", manyPluginFiles-1))); err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/viewlang"
 	"github.com/victorarias/attn/internal/views"
 )
 
@@ -85,10 +86,7 @@ func (d *Daemon) callerViewFolder(ctx context.Context, c command.Caller, arg, va
 	if err != nil {
 		return nil, nil, "", err
 	}
-	host := ""
-	if origin, remote := OriginOf(ctx); remote {
-		host = origin.Host
-	}
+	host := callerHost(ctx)
 	read := protocol.ViewFolderReadMessage{Cmd: protocol.CmdViewFolderRead, Path: path}
 	if host != "" {
 		read.Host = protocol.Ptr(host)
@@ -105,8 +103,48 @@ func (d *Daemon) callerViewFolder(ctx context.Context, c command.Caller, arg, va
 	return files, folder.Missing, d.machineFor(host).ID(), err
 }
 
+func callerHost(ctx context.Context) string {
+	if origin, remote := OriginOf(ctx); remote {
+		return origin.Host
+	}
+	return ""
+}
+
+// viewMachine is the machine a version of a view made of files runs on: none,
+// so the home holds it, when it runs no command; else the machine its
+// commands already run on, or the machine of whoever saves the first version
+// with commands.
+func viewMachine(files views.Files, runsOn, saver string) string {
+	if len(viewCommands(viewlang.Check(string(files[views.ViewFile])).Parts)) == 0 {
+		return ""
+	}
+	if runsOn != "" {
+		return runsOn
+	}
+	return saver
+}
+
 func savedVersion(c command.Caller, note string) store.ViewVersion {
 	return store.ViewVersion{Note: strings.TrimSpace(note), SavedAt: time.Now(), SavedBy: string(c.Session)}
+}
+
+// replaced places the view's newest version, and takes the folder off the
+// machine that held view before, when the new version runs elsewhere.
+func (d *Daemon) replaced(ctx context.Context, view store.KeptView) {
+	d.placed(ctx, view.ProfileID, view.Name)
+	if now, kept, err := d.store.KeptView(view.ProfileID, view.Name); err == nil && kept && d.machineFor(now.MachineID).ID() != d.machineFor(view.MachineID).ID() {
+		d.removeKeptViewFolder(ctx, view)
+	}
+}
+
+func (d *Daemon) removeKeptViewFolder(ctx context.Context, view store.KeptView) {
+	remove := protocol.ViewFolderWriteMessage{Cmd: protocol.CmdViewFolderWrite, ProfileID: view.ProfileID, View: view.Name, Files: protocol.RecordString{}}
+	if host := d.machineFor(view.MachineID).Outpost(); host != "" {
+		remove.Host = protocol.Ptr(host)
+	}
+	if _, err := Call[protocol.ViewFolderWritten](ctx, d.router(), remove); err != nil {
+		d.logf("remove the folder of view %s from its machine: %v", view.Name, err)
+	}
 }
 
 func (d *Daemon) placed(ctx context.Context, profileID, name string) {
@@ -131,7 +169,7 @@ func (d *Daemon) runViewKeep(ctx context.Context, c command.Caller, a command.Vi
 	if err != nil {
 		return nil, refusedView(err)
 	}
-	if err := d.store.KeepView(profile.ID, a.Name, machineID, savedVersion(c, a.Note), files); errors.Is(err, store.ErrViewExists) {
+	if err := d.store.KeepView(profile.ID, a.Name, viewMachine(files, "", machineID), savedVersion(c, a.Note), files); errors.Is(err, store.ErrViewExists) {
 		return nil, command.Refuse(command.CodeExists, "this profile already keeps a view %s", a.Name)
 	} else if err != nil {
 		return nil, err
@@ -149,7 +187,7 @@ func (d *Daemon) runViewEdit(ctx context.Context, c command.Caller, a command.Vi
 	if err != nil {
 		return nil, err
 	}
-	folder, missing, _, err := d.callerViewFolder(ctx, c, "from", a.From)
+	folder, missing, saver, err := d.callerViewFolder(ctx, c, "from", a.From)
 	if err != nil {
 		return nil, err
 	}
@@ -161,13 +199,13 @@ func (d *Daemon) runViewEdit(ctx context.Context, c command.Caller, a command.Vi
 	if err != nil {
 		return nil, refusedView(err)
 	}
-	version, err := d.store.SaveViewVersion(profile.ID, view.Name, view.Version, savedVersion(c, a.Note), files)
+	version, err := d.store.SaveViewVersion(profile.ID, view.Name, view.Version, viewMachine(files, view.MachineID, saver), savedVersion(c, a.Note), files)
 	if errors.Is(err, store.ErrStaleView) {
 		return nil, command.Refuse(command.CodeStaleExport, "%s changed while saving; export it again and reapply your change", view.Name)
 	} else if err != nil {
 		return nil, err
 	}
-	d.placed(ctx, profile.ID, view.Name)
+	d.replaced(ctx, view)
 	return protocol.ViewEditResult{View: view.Name, Version: version, PreviousVersion: view.Version}, nil
 }
 
@@ -197,13 +235,13 @@ func (d *Daemon) runViewRestore(ctx context.Context, c command.Caller, a command
 	}
 	saved := savedVersion(c, "")
 	saved.RestoredFrom = restore
-	version, err := d.store.SaveViewVersion(profile.ID, view.Name, view.Version, saved, files)
+	version, err := d.store.SaveViewVersion(profile.ID, view.Name, view.Version, viewMachine(files, view.MachineID, d.machineFor(callerHost(ctx)).ID()), saved, files)
 	if errors.Is(err, store.ErrStaleView) {
 		return nil, command.Refuse(command.CodeStaleExport, "%s changed while restoring", view.Name)
 	} else if err != nil {
 		return nil, err
 	}
-	d.placed(ctx, profile.ID, view.Name)
+	d.replaced(ctx, view)
 	return protocol.ViewRestoreResult{View: view.Name, Version: version, RestoredFrom: restore}, nil
 }
 
@@ -262,16 +300,10 @@ func (d *Daemon) runViewDelete(ctx context.Context, c command.Caller, a command.
 	if err := d.discardKeptViewFiles(view); err != nil {
 		return nil, err
 	}
-	if err := d.store.DeleteView(view); err != nil {
+	if err := d.store.DeleteView(view, d.machineFor(view.MachineID).ID()); err != nil {
 		return nil, err
 	}
-	remove := protocol.ViewFolderWriteMessage{Cmd: protocol.CmdViewFolderWrite, ProfileID: profile.ID, View: view.Name, Files: protocol.RecordString{}}
-	if host := d.machineFor(view.MachineID).Outpost(); host != "" {
-		remove.Host = protocol.Ptr(host)
-	}
-	if _, err := Call[protocol.ViewFolderWritten](ctx, d.router(), remove); err != nil {
-		d.logf("remove the folder of deleted view %s: %v", view.Name, err)
-	}
+	d.removeKeptViewFolder(ctx, view)
 	return protocol.ViewDeleteResult{View: view.Name, Closed: closed}, nil
 }
 

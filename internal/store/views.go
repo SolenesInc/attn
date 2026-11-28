@@ -18,16 +18,20 @@ var ErrStaleView = errors.New("the view has a newer version")
 // commands run on, and the folder where that machine holds the version
 // FolderVersion.
 type KeptView struct {
-	ProfileID     string
-	Name          string
-	Version       int
+	ProfileID string
+	Name      string
+	Version   int
+	// MachineID is the machine the view's commands run on; a view without
+	// commands has none and is held by the home, wherever the home is.
 	MachineID     string
 	Folder        string
 	FolderVersion int
 }
 
+const viewFileName = "view.md"
+
 // ViewFile is where the machine of view holds its view file.
-func (v KeptView) ViewFile() string { return path.Join(v.Folder, "view.md") }
+func (v KeptView) ViewFile() string { return path.Join(v.Folder, viewFileName) }
 
 // ViewVersion is one saved state of a kept view.
 type ViewVersion struct {
@@ -66,7 +70,7 @@ func (s *Store) KeepView(profileID, name, machineID string, version ViewVersion,
 
 // SaveViewVersion saves the files as the view's next version, when after is
 // still its newest, and answers the version saved.
-func (s *Store) SaveViewVersion(profileID, name string, after int, version ViewVersion, files map[string][]byte) (int, error) {
+func (s *Store) SaveViewVersion(profileID, name string, after int, machineID string, version ViewVersion, files map[string][]byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -74,7 +78,9 @@ func (s *Store) SaveViewVersion(profileID, name string, after int, version ViewV
 		return 0, err
 	}
 	defer tx.Rollback()
-	result, err := tx.Exec(`UPDATE views SET version = version + 1 WHERE profile_id = ? AND name = ? AND version = ?`, profileID, name, after)
+	result, err := tx.Exec(`UPDATE views SET version = version + 1, machine_id = ?1,
+		folder = CASE WHEN machine_id = ?1 THEN folder ELSE '' END, folder_version = CASE WHEN machine_id = ?1 THEN folder_version ELSE 0 END
+		WHERE profile_id = ?2 AND name = ?3 AND version = ?4`, machineID, profileID, name, after)
 	if err != nil {
 		return 0, err
 	}
@@ -185,17 +191,43 @@ func (s *Store) ViewFiles(profileID, name string, version int) (map[string][]byt
 	return files, nil
 }
 
-// SetViewFolder records that the view's machine holds version in folder.
-func (s *Store) SetViewFolder(profileID, name, folder string, version int) error {
+// SetViewFolder records that host holds version of the kept view in folder.
+// When the folder moved on that host, as a home-held view's does when the
+// home moves to a machine with another data folder, what the user answered
+// in it moves along.
+func (s *Store) SetViewFolder(profileID, name, host, folder string, version int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`UPDATE views SET folder = ?, folder_version = ? WHERE profile_id = ? AND name = ?`, folder, version, profileID, name)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var was string
+	if err := tx.QueryRow(`SELECT folder FROM views WHERE profile_id = ? AND name = ?`, profileID, name).Scan(&was); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE views SET folder = ?, folder_version = ? WHERE profile_id = ? AND name = ?`, folder, version, profileID, name); err != nil {
+		return err
+	}
+	if was != "" && was != folder {
+		from, to := path.Join(was, viewFileName), path.Join(folder, viewFileName)
+		for _, statement := range []string{
+			`UPDATE view_drafts SET path = ?3 WHERE host = ?1 AND path = ?2`,
+			`UPDATE view_sends SET path = ?3 WHERE host = ?1 AND path = ?2`,
+			`UPDATE attachments SET owner_id = ?1 || ':' || ?3 WHERE owner_kind = 'view' AND owner_id = ?1 || ':' || ?2`,
+		} {
+			if _, err := tx.Exec(statement, host, from, to); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
 }
 
 // DeleteView forgets the kept view, its versions, and what the user started
 // and answered in it.
-func (s *Store) DeleteView(view KeptView) error {
+func (s *Store) DeleteView(view KeptView, host string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -211,9 +243,9 @@ func (s *Store) DeleteView(view KeptView) error {
 		{`DELETE FROM view_files WHERE profile_id = ? AND name = ?`, []any{view.ProfileID, view.Name}},
 		{`DELETE FROM view_versions WHERE profile_id = ? AND name = ?`, []any{view.ProfileID, view.Name}},
 		{`DELETE FROM views WHERE profile_id = ? AND name = ?`, []any{view.ProfileID, view.Name}},
-		{`DELETE FROM view_started WHERE profile_id = ? AND view = ? AND machine_id = ?`, []any{view.ProfileID, file, view.MachineID}},
-		{`DELETE FROM view_drafts WHERE host = ? AND path = ?`, []any{view.MachineID, file}},
-		{`DELETE FROM view_sends WHERE host = ? AND path = ?`, []any{view.MachineID, file}},
+		{`DELETE FROM view_started WHERE profile_id = ? AND view = ? AND machine_id = ?`, []any{view.ProfileID, file, host}},
+		{`DELETE FROM view_drafts WHERE host = ? AND path = ?`, []any{host, file}},
+		{`DELETE FROM view_sends WHERE host = ? AND path = ?`, []any{host, file}},
 	} {
 		if _, err := tx.Exec(statement.sql, statement.args...); err != nil {
 			return err
