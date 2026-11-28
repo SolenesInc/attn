@@ -129,7 +129,7 @@ attn open view.md
 
 A picture or an audio clip, chosen by the file's type. It stands on a line of its own.
 
-Keys: Space plays.
+Keys: Space plays and pauses a clip, ⇧← and ⇧→ move it 5 s.
 
 ```markdown
 # The new icon

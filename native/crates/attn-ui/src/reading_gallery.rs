@@ -5,9 +5,9 @@ use rune::{Cx, El, Playground, Story, Tx, col, el, row};
 
 use crate::Tokens;
 use crate::blocks::{
-    Bar, Block, Byline, Card, Chart, DataTable, Entry, Figure, Head, Hints, Inline, KeyFit,
-    KeyLine, Lane, Pane, Prose, Reader, Remark, Room, Section, Stack, Standing, Surface, Toolbar,
-    Trail, Tray, Voice, board, entries, key_hint, key_tab, lanes, place, rail,
+    Audio, Bar, Block, Byline, Card, Chart, DataTable, Entry, Figure, Head, Hints, Inline, KeyFit,
+    KeyLine, Lane, Pane, Playing, Prose, Reader, Remark, Room, Section, Stack, Standing, Surface,
+    Toolbar, Trail, Tray, Voice, board, entries, key_hint, key_tab, lanes, place, rail,
 };
 use crate::colors::scheme_for;
 use crate::system::{
@@ -78,6 +78,11 @@ pub const READING_SUBJECTS: &[(&str, &[&str], &[&str])] = &[
     ("Blocks/Tray", &["tray"], &[]),
     ("Blocks/Data table", &["table"], &["Lit"]),
     ("Blocks/Chart", &["chart"], &[]),
+    (
+        "Blocks/Audio",
+        &["audio.0", "audio.1", "audio.2", "audio.3"],
+        &["Lit"],
+    ),
 ];
 
 const LONG_TITLE: &str = "Move the reading surfaces onto blocks so the garden, the review reader and the markdown reader share one system";
@@ -120,6 +125,7 @@ fn view_of(name: &str) -> View {
         "Blocks/Tray" => tray_story,
         "Blocks/Data table" => table_story,
         "Blocks/Chart" => chart_story,
+        "Blocks/Audio" => audio_story,
         _ => board_story,
     }
 }
@@ -795,6 +801,35 @@ fn table_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
             .push(table.build(&t))
             .build("table.page", Room::Narrow, &t),
     )
+}
+
+fn audio_story(s: &Reading, cx: &mut Cx<Reading>) -> El {
+    let t = tokens(cx);
+    let clips = [
+        ("clip-03", Playing::Playing, 12.0, Some(43.0)),
+        ("clip-05", Playing::Paused, 0.0, Some(16.0)),
+        ("clip-07", Playing::Loading, 0.0, None),
+        (
+            "clip-09",
+            Playing::Unplayable("audio does not play on Linux yet".into()),
+            0.0,
+            None,
+        ),
+    ];
+    let reader = clips.into_iter().enumerate().fold(
+        Reader::new(),
+        |reader, (i, (name, playing, at, length))| {
+            reader.push(
+                Audio::new(format!("audio.{i}"), said(s, name))
+                    .playing(playing)
+                    .time(at, length)
+                    .highlighted(s.lit && i == 0)
+                    .on_toggle(|_: &mut Reading, _: &mut Tx| {})
+                    .build(&t),
+            )
+        },
+    );
+    stage(s, cx, &t, reader.build("audio.page", Room::Narrow, &t))
 }
 
 fn chart_story(s: &Reading, cx: &mut Cx<Reading>) -> El {

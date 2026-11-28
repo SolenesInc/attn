@@ -17,6 +17,8 @@ const maxAssetMessageBytes = 8 << 20
 
 const assetEnvelopeSlack = 4 << 10
 
+// The clips of the transcript task views were built for are at most 1.32 MiB (11 clips of 10 to
+// 43 s, 16 kHz mono WAV, measured 2026-11-28).
 const maxAssetBytes = (maxAssetMessageBytes - assetEnvelopeSlack) / 4 * 3
 
 var assetMimeTypes = map[string]string{
@@ -29,6 +31,15 @@ var assetMimeTypes = map[string]string{
 	".avif": "image/avif",
 	".bmp":  "image/bmp",
 	".ico":  "image/x-icon",
+	".wav":  "audio/wav",
+	".mp3":  "audio/mpeg",
+	".m4a":  "audio/mp4",
+	".aac":  "audio/aac",
+	".aif":  "audio/aiff",
+	".aiff": "audio/aiff",
+	".flac": "audio/flac",
+	".ogg":  "audio/ogg",
+	".opus": "audio/ogg",
 }
 
 func (d *Daemon) resolveFsRoot(client *wsClient, raw string) (string, error) {
@@ -186,7 +197,7 @@ func assetMimeTypeFor(path string) (string, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	mimeType, ok := assetMimeTypes[ext]
 	if !ok {
-		return "", errors.New("not a supported image asset")
+		return "", errors.New("not a picture or a sound attn shows")
 	}
 	return mimeType, nil
 }

@@ -1291,6 +1291,7 @@ const TEXT_INPUTS: &[(&str, bool)] = &[
     ("blocks::screen::Screen::showing(shown)", false),
     ("blocks::shelf::ShelfEntry::build(label)", false),
     ("blocks::shelf::ShelfCount::build(label)", false),
+    ("blocks::audio::Audio::new(label)", false),
     ("blocks::chart::Chart::new(label)", false),
     ("blocks::chart::Chart::point(name)", false),
     ("blocks::chart::Chart::point(shown)", false),

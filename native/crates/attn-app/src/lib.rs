@@ -245,6 +245,7 @@ pub fn bind(
     let wake: rune::Waker = Arc::new(move || woken(Box::new(|_, _| {})));
     deliver(Box::new(move |state, _| {
         state.pictures.start(wake.clone());
+        state.views.sounds.start(wake.clone());
         state.logos.start(wake);
         state
             .terminals
@@ -441,7 +442,9 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         | launch_desktop::poll(state, tx)
         | launcher::follow_highlight(state, answered, tx);
     let browsed = browsed | opener::browse_due(state, tx);
-    let pictured = markdown::follow_images(state, now, tx) | harness::logo::poll(state, tx);
+    let pictured = markdown::follow_images(state, now, tx)
+        | harness::logo::poll(state, tx)
+        | view::follow_sounds(state, tx);
     let reviewed = review::follow(state, tx);
     let noted = notebook::follow(state, now, tx);
     let drafted = markdown::drafts::follow(state, now, tx)

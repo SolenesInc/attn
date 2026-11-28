@@ -3,6 +3,7 @@
 //! each thing is, never a gap, a font or a corner.
 
 mod actions;
+mod audio;
 mod banner;
 mod bar;
 mod block;
@@ -66,6 +67,7 @@ mod tray;
 mod window;
 
 pub use actions::Actions;
+pub use audio::{Audio, Playing};
 pub use banner::{Banner, BannerTone};
 pub use bar::Bar;
 pub use block::Block;

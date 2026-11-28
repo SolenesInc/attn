@@ -131,7 +131,7 @@ var rowSlots = []Slot{
 
 var Parts = []Part{
 	{Name: "markdown", Written: "prose", Summary: "Prose, headings, links and code blocks, drawn as markdown.", Body: ProseBody, Example: "markdown.md"},
-	{Name: "media", Written: "![label](file)", Summary: "A picture or an audio clip, chosen by the file's type. It stands on a line of its own.", Body: MediaBody, Keys: "Space plays", Example: "media.md"},
+	{Name: "media", Written: "![label](file)", Summary: "A picture or an audio clip, chosen by the file's type. It stands on a line of its own.", Body: MediaBody, Keys: "Space plays and pauses a clip, ⇧← and ⇧→ move it 5 s", Example: "media.md"},
 	{Name: "tasks", Written: "- [ ] text", Summary: "A task list drawn as checkboxes.", Body: TasksBody, Keys: "x checks", Reports: "which tasks are checked", Example: "tasks.md"},
 	{Name: "question", Colons: 3, Summary: "A question with choices, written as in an ask: the question on the first line, then one `- [ ] choice` per line, and `Recommended:` if one choice is best. With no choices it takes text.", Args: []Arg{answerName}, Body: QuestionBody, Keys: "digits pick", Reports: "the choice", Example: "question.md"},
 	{Name: "question-multi", Colons: 3, Summary: "A question where the user picks any number of choices.", Args: []Arg{answerName}, Body: QuestionBody, Keys: "digits pick and unpick", Reports: "the choices", Example: "question-multi.md"},

@@ -4,6 +4,7 @@
 mod answers;
 mod draw;
 mod keys;
+mod sounds;
 mod start;
 mod values;
 
@@ -22,9 +23,11 @@ use crate::markdown::Document;
 
 pub(crate) use answers::Answers;
 pub(crate) use keys::{on_key, send_key};
+pub(crate) use sounds::follow as follow_sounds;
 pub(crate) use values::{Data, Scope};
 
-/// Each view tile's tile state, by tile, for as long as the window lives.
+/// What the window keeps for the views it shows, for as long as it lives: each view tile's tile
+/// state, by tile, what is written and refused there, and the clips the views play.
 #[derive(Default)]
 pub struct Tiles {
     /// Rises with every change, so the tiles a view draws in build again.
@@ -34,6 +37,7 @@ pub struct Tiles {
     pub(crate) writing: answers::Writing,
     /// Why the home last refused an answer or a send, by tile, until it takes one.
     refusals: HashMap<String, String>,
+    pub(crate) sounds: sounds::Sounds,
 }
 
 impl Tiles {
@@ -177,6 +181,76 @@ pub(crate) struct Room<'a> {
     pub(crate) t: &'a Tokens,
     pub(crate) document: &'a Document,
     pub(crate) pictures: &'a Rc<HashMap<String, Option<Image>>>,
+    pub(crate) heard: Heard<'a>,
+}
+
+/// The clips a view plays, on the machine its file is on.
+#[derive(Clone, Copy)]
+pub(crate) struct Heard<'a> {
+    sounds: &'a sounds::Sounds,
+    host: Option<&'a str>,
+}
+
+impl Heard<'_> {
+    /// The clip `file` names in the view at `document`, when it names a file.
+    pub(crate) fn clip(&self, document: &str, file: &str) -> Option<sounds::Clip> {
+        clip(self.host, document, file)
+    }
+
+    /// How `clip` stands: whether it plays, how far it has played, and its length once known.
+    pub(crate) fn of(&self, clip: &sounds::Clip) -> (attn_ui::blocks::Playing, f64, Option<f64>) {
+        self.sounds.of(clip)
+    }
+
+    /// Plays `clip`, or pauses it while it plays.
+    pub(crate) fn toggle(
+        &self,
+        clip: sounds::Clip,
+    ) -> impl Fn(&mut State, &mut rune::Tx) + 'static {
+        move |state: &mut State, _: &mut rune::Tx| sounds::toggle(state, &clip)
+    }
+}
+
+/// The clip `file` names in the view at `document` on `host`, when it names a file.
+fn clip(host: Option<&str>, document: &str, file: &str) -> Option<sounds::Clip> {
+    match crate::markdown::links::resolve(document, file)? {
+        crate::markdown::links::Target::Local(path) => Some(sounds::Clip {
+            host: host.map(str::to_owned),
+            path,
+        }),
+        _ => None,
+    }
+}
+
+/// Each view tile on the current desktop, by the revision of its content and a hash of its
+/// document, with the clips it draws now: the current item's alone in a `one-by-one`.
+fn drawn_clips(state: &State) -> Vec<(TileKey, (u64, u64), Vec<sounds::Clip>)> {
+    let Some(desktop) = state.facts.current_desktop() else {
+        return Vec::new();
+    };
+    let mut drawn = Vec::new();
+    for (place, content) in &state.facts.tile_contents.tiles {
+        let message = &content.message;
+        let Some(view) = &message.view else { continue };
+        if place.desktop != desktop.id {
+            continue;
+        }
+        let host = message.host.as_deref().filter(|h| !h.is_empty());
+        let mut found = Vec::new();
+        keys::clips(
+            &view.parts,
+            &Data::of(view).scope(0),
+            &format!("tile.{}.view", place.tile),
+            &|key, rows| keys::steps_at(state, place, key, rows),
+            &mut found,
+        );
+        let clips = (found.into_iter())
+            .filter_map(|(_, file)| clip(host, &message.path, &file))
+            .collect();
+        let document = sounds::document(&message.path, host, &message.content);
+        drawn.push((place.clone(), (content.revision, document), clips));
+    }
+    drawn
 }
 
 impl<'a> Doors<'a> {
@@ -316,6 +390,10 @@ pub(crate) fn body(
     );
     let pictures = pictures.of(host);
     let machine = machines.name(host);
+    let heard = Heard {
+        sounds: &tiles.sounds,
+        host,
+    };
     let drawn = memo(format!("{scroll_key}.view"), version, || {
         let data = Data::of(view);
         let doors = Doors {
@@ -332,6 +410,7 @@ pub(crate) fn body(
                 t,
                 document: &document,
                 pictures: &pictures,
+                heard,
             },
         };
         let problems = unplaced(view)

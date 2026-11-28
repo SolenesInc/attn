@@ -2,7 +2,9 @@
 
 use attn_protocol::{ViewCommandCall, ViewPart, ViewProblem, ViewTemplatePiece};
 use attn_ui::Tokens;
-use attn_ui::blocks::{Block, Card, Chart, DataTable, Facts, Inline, Notice, Reader, Standing};
+use attn_ui::blocks::{
+    Audio, Block, Card, Chart, DataTable, Facts, Inline, Notice, Playing, Reader, Standing,
+};
 use attn_ui::system::{
     Button, Choice, DotShape, DotSize, FieldState, GroupHead, ListRow, Look, Reveal, Size, Tone,
     Type, answers, area_box, checks, dot, keys_hint, tag, words,
@@ -67,21 +69,42 @@ pub(crate) fn markdown(part: &ViewPart, doors: &Doors<'_>) -> Block {
     prose(&text, doors)
 }
 
-/// Whether `file` is a sound, which a view plays once audio comes.
-fn sounds(file: &str) -> bool {
+/// Whether `file` is a sound, which a view plays rather than shows.
+pub(super) fn sounds(file: &str) -> bool {
     let ext = file.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
     matches!(
         ext.as_str(),
-        "wav" | "mp3" | "m4a" | "aac" | "ogg" | "flac" | "opus"
+        "wav" | "mp3" | "m4a" | "aac" | "aif" | "aiff" | "flac" | "ogg" | "opus"
     )
 }
 
 fn picture(label: &[ViewTemplatePiece], file: &[ViewTemplatePiece], doors: &Doors<'_>) -> Block {
     let (label, file) = (doors.values.text(label), doors.values.text(file));
     if sounds(&file) {
-        return not_yet(&doors.room.key, &format!("Playing {file}"), doors.room.t);
+        return audio(label, &file, doors);
     }
     prose(&format!("![{label}]({file})"), doors)
+}
+
+/// A clip's player, which plays it from its file, wherever the view's file is.
+fn audio(label: String, file: &str, doors: &Doors<'_>) -> Block {
+    let room = &doors.room;
+    let label = match label.trim() {
+        "" => file.rsplit('/').next().unwrap_or(file).to_owned(),
+        _ => label,
+    };
+    let player = Audio::new(room.key.clone(), label).highlighted(doors.tile.highlighted(&room.key));
+    let player = match room.heard.clip(&room.document.path, file) {
+        Some(clip) => {
+            let (playing, at, length) = room.heard.of(&clip);
+            player
+                .playing(playing)
+                .time(at, length)
+                .on_toggle(room.heard.toggle(clip))
+        }
+        None => player.playing(Playing::Unplayable(format!("{file} is not a file"))),
+    };
+    player.build(room.t)
 }
 
 pub(crate) fn media(part: &ViewPart, doors: &Doors<'_>) -> Block {

@@ -718,3 +718,5 @@ fn a_view_names_its_command_runs_nothing_until_r_and_says_when_its_script_change
     assert_eq!(world.daemon.sent_of("view_start").len(), 2);
     assert!(world.runtime_is_at_rest());
 }
+
+mod clips;

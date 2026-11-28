@@ -48,6 +48,8 @@ scripts/vm down
 
 - Display is 1920×1200 @ 2× (3840×2400 px). Boot takes seconds on a quiet Mac
   and up to 15 minutes under load.
+- The guest plays no sound: `afplay` hangs, and an app's AVPlayer never becomes
+  ready to play. Check audio playback on the host.
 - Right after boot, captures can fail with `could not create image from display`;
   retry.
 - **Frozen guest display:** the guest window server can stop presenting new

@@ -1,10 +1,11 @@
 //! The keys a view answers while its tile holds the keyboard: j and k move the highlight over
-//! the view's rows, foldable headings, questions and `one-by-one` parts; ↩ folds a heading,
-//! and keeps and goes on in a `one-by-one`, where s skips and ← and → step back and on. On a
-//! question, or in a `one-by-one` item that holds one, digits pick a choice and e writes the
+//! the view's rows, foldable headings, questions, clips and `one-by-one` parts; ↩ folds a
+//! heading, and keeps and goes on in a `one-by-one`, where s skips and ← and → step back and on.
+//! On a question, or in a `one-by-one` item that holds one, digits pick a choice and e writes the
 //! text; ⌘↩ sends the view's answers; r starts the view's commands while they wait for the user.
+//! Space plays or pauses the clip at the highlight, and Shift with ← or → moves it back or on.
 
-use attn_protocol::ViewPart;
+use attn_protocol::{DesktopTileContentMessage, ViewPart};
 use rune::{Key, KeyEvent, Tx};
 
 use attn_client::TileKey;
@@ -32,13 +33,17 @@ enum Stop {
         row: Option<String>,
         part: Box<ViewPart>,
     },
+    Clip(String),
 }
 
 impl Stop {
     fn key(&self) -> String {
         match self {
             Stop::Fold(list) => format!("{list}.head"),
-            Stop::Row(key) | Stop::Steps { key, .. } | Stop::Question { key, .. } => key.clone(),
+            Stop::Row(key)
+            | Stop::Steps { key, .. }
+            | Stop::Question { key, .. }
+            | Stop::Clip(key) => key.clone(),
         }
     }
 }
@@ -86,6 +91,62 @@ pub(crate) fn each_text(parts: &[ViewPart], scope: &Scope<'_>, out: &mut impl Fn
     }
 }
 
+/// The clips `parts` draws under `prefix`, each by its key and the file it names: every item's
+/// in an `each`, and in a `one-by-one` the item `at` gives for its key and its items' rows.
+pub(super) fn clips(
+    parts: &[ViewPart],
+    scope: &Scope<'_>,
+    prefix: &str,
+    at: &impl Fn(&str, &[String]) -> usize,
+    out: &mut Vec<(String, String)>,
+) {
+    for (i, part) in parts.iter().enumerate() {
+        if part.problem.is_some() {
+            continue;
+        }
+        let key = format!("{prefix}.{i}");
+        if let Some(media) = &part.media {
+            let file = scope.text(&media.file);
+            if draw::sounds(&file) {
+                out.push((key.clone(), file));
+            }
+        }
+        for (n, media) in part.compare.iter().flat_map(|c| &c.media).enumerate() {
+            let file = scope.text(&media.file);
+            if draw::sounds(&file) {
+                out.push((format!("{key}.{n}"), file));
+            }
+        }
+        if let Some(each) = &part.each {
+            for (n, item) in scope.items(&each.items).iter().enumerate() {
+                clips(
+                    &each.blocks,
+                    &scope.within(item),
+                    &format!("{key}.{n}"),
+                    at,
+                    out,
+                );
+            }
+        }
+        if let Some(steps) = &part.one_by_one {
+            let items = scope.items(&steps.items);
+            let rows: Vec<String> = (items.iter().enumerate())
+                .map(|(n, item)| row_id(item, n))
+                .collect();
+            let current = at(&key, &rows);
+            if let Some(item) = items.get(current) {
+                clips(
+                    &steps.blocks,
+                    &scope.within(item),
+                    &format!("{key}.{current}"),
+                    at,
+                    out,
+                );
+            }
+        }
+    }
+}
+
 /// The places the highlight can rest in `parts`, in order, as `parts` draws them under
 /// `prefix`.
 fn stops(
@@ -100,6 +161,18 @@ fn stops(
             continue;
         }
         let key = format!("{prefix}.{i}");
+        if part
+            .media
+            .as_ref()
+            .is_some_and(|media| draw::sounds(&scope.text(&media.file)))
+        {
+            out.push(Stop::Clip(key.clone()));
+        }
+        for (n, media) in part.compare.iter().flat_map(|c| &c.media).enumerate() {
+            if draw::sounds(&scope.text(&media.file)) {
+                out.push(Stop::Clip(format!("{key}.{n}")));
+            }
+        }
         if asked(part).is_some() {
             out.push(Stop::Question {
                 key: key.clone(),
@@ -269,7 +342,7 @@ fn answer_with(
 }
 
 /// The item a `one-by-one` keyed `key`, whose items are `rows`, rests on.
-fn steps_at(state: &State, place: &TileKey, key: &str, rows: &[String]) -> usize {
+pub(super) fn steps_at(state: &State, place: &TileKey, key: &str, rows: &[String]) -> usize {
     let moved = state
         .views
         .of(&place.tile)
@@ -290,6 +363,45 @@ pub(crate) fn resting(moved: Option<usize>, rows: &[String], answers: &Answers<'
     })
 }
 
+/// What a key does to the clip at the highlight.
+enum Listen {
+    Toggle,
+    Seek(f64),
+}
+
+/// The clip at the highlight of the view `message` shows at `place`: the first drawn at or
+/// inside what the highlight is on, or else the view's first.
+fn clip_at(
+    state: &State,
+    place: &TileKey,
+    message: &DesktopTileContentMessage,
+) -> Option<super::sounds::Clip> {
+    let view = message.view.as_ref()?;
+    let mut drawn = Vec::new();
+    clips(
+        &view.parts,
+        &Data::of(view).scope(0),
+        &format!("tile.{}.view", place.tile),
+        &|key, rows| steps_at(state, place, key, rows),
+        &mut drawn,
+    );
+    let highlight = state.views.of(&place.tile).highlight;
+    let inside = |key: &String| {
+        highlight.as_ref().is_some_and(|h| {
+            key == h
+                || key
+                    .strip_prefix(h.as_str())
+                    .is_some_and(|r| r.starts_with('.'))
+        })
+    };
+    let (_, file) = drawn
+        .iter()
+        .find(|(key, _)| inside(key))
+        .or(drawn.first())?;
+    let host = message.host.as_deref().filter(|h| !h.is_empty());
+    super::clip(host, &message.path, file)
+}
+
 /// A key the window heard while nothing has focus, which the view tile holding the keyboard
 /// takes.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -303,6 +415,21 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         desktop: content.message.desktop_id.clone(),
         tile: tile.clone(),
     };
+    let heard = match (&ev.key, ev.mods.shift) {
+        (Key::Text(text), _) if text == " " => Some(Listen::Toggle),
+        (Key::Left, true) => Some(Listen::Seek(-super::sounds::SEEK_SECONDS)),
+        (Key::Right, true) => Some(Listen::Seek(super::sounds::SEEK_SECONDS)),
+        _ => None,
+    };
+    if let Some(heard) = heard
+        && let Some(clip) = clip_at(state, &place, &content.message)
+    {
+        match heard {
+            Listen::Toggle => super::sounds::toggle(state, &clip),
+            Listen::Seek(by) => super::sounds::seek(state, &clip, by),
+        }
+        return true;
+    }
     let view = content.message.view.as_ref().expect("held holds a view");
     let data = Data::of(view);
     let tile_state = state.views.of(&tile);

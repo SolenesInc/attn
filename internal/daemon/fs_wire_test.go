@@ -248,7 +248,7 @@ func TestNotebookImageAssetsAreServedWithinTheMessageCap(t *testing.T) {
 	}{
 		{"../outside.png", ""},
 		{"assets/nope.png", ""},
-		{"assets/doc.pdf", "not a supported image asset"},
+		{"assets/doc.pdf", "not a picture or a sound attn shows"},
 		{"assets/huge.png", "cap"},
 	} {
 		if refused := fsAskAsset(app, c.path); refused.Success || refused.Error == nil || !strings.Contains(*refused.Error, c.want) {

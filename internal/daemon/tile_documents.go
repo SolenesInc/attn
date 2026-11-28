@@ -273,7 +273,7 @@ func (d *Daemon) readTileDocument(ctx context.Context, msg protocol.TileDocument
 
 func (d *Daemon) readTileAsset(_ context.Context, msg protocol.TileAssetReadMessage) (protocol.TileAssetReadResultMessage, error) {
 	if !filepath.IsAbs(msg.Path) {
-		return protocol.TileAssetReadResultMessage{}, fmt.Errorf("image path must be absolute: %s", msg.Path)
+		return protocol.TileAssetReadResultMessage{}, fmt.Errorf("the path must be absolute: %s", msg.Path)
 	}
 	mimeType, err := assetMimeTypeFor(msg.Path)
 	if err != nil {
@@ -292,14 +292,14 @@ func (d *Daemon) readTileAsset(_ context.Context, msg protocol.TileAssetReadMess
 		return protocol.TileAssetReadResultMessage{}, fmt.Errorf("not a regular file: %s", msg.Path)
 	}
 	if info.Size() > maxAssetBytes {
-		return protocol.TileAssetReadResultMessage{}, fmt.Errorf("image %s is %d bytes; a markdown tile loads images up to %d bytes", msg.Path, info.Size(), maxAssetBytes)
+		return protocol.TileAssetReadResultMessage{}, fmt.Errorf("%s is %d bytes; a tile loads files up to %d bytes", msg.Path, info.Size(), maxAssetBytes)
 	}
 	content, err := io.ReadAll(io.LimitReader(file, maxAssetBytes+1))
 	if err != nil {
 		return protocol.TileAssetReadResultMessage{}, err
 	}
 	if len(content) > maxAssetBytes {
-		return protocol.TileAssetReadResultMessage{}, fmt.Errorf("image %s is over %d bytes; a markdown tile loads images up to %d bytes", msg.Path, maxAssetBytes, maxAssetBytes)
+		return protocol.TileAssetReadResultMessage{}, fmt.Errorf("%s is over %d bytes; a tile loads files up to %d bytes", msg.Path, maxAssetBytes, maxAssetBytes)
 	}
 	return protocol.TileAssetReadResultMessage{
 		Event:   protocol.EventTileAssetReadResult,
