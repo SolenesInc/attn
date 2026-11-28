@@ -19,7 +19,9 @@ func lifecycleRecipients() []Recipient {
 			Description: "Separate model deciding whether a stopped or waiting agent's turn should open to the user.",
 			Events: []Event{On("supervisor", "headless_prompt", "internal/daemon.attentionHeadless",
 				template("attention.supervisor", "content/attention/supervisor.md",
-					TextField("facts", "The agent's facts as JSON.")))}},
+					TextField("facts", "The agent's facts as JSON."))),
+				waitCheckEvent(),
+				delegateCheckEvent()}},
 
 		{ID: "terminal",
 			Description: "A terminal an agent opened with a command.",

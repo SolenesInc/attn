@@ -62,7 +62,12 @@ func runDebugAttention(args []string) {
 
 func describeAttentionEntry(entry attention.LogEntry) string {
 	at := entry.At.Local().Format(time.DateTime)
-	if entry.Kind == attention.LogFollowUp {
+	switch entry.Kind {
+	case attention.LogNotice:
+		return fmt.Sprintf("%s %s %s notice to %s", at, entry.Session, entry.Checkpoint, entry.To)
+	case attention.LogWaitEnded:
+		return fmt.Sprintf("%s %s supervised wait ended", at, entry.Session)
+	case attention.LogFollowUp:
 		verdictAt := ""
 		if entry.VerdictAt != nil {
 			verdictAt = entry.VerdictAt.Local().Format(time.DateTime)

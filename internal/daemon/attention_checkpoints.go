@@ -61,12 +61,16 @@ type attentionCheckpoints struct {
 	judged      map[protocol.SessionID]judgedFacts
 	surfaced    map[protocol.SessionID]surfacedTurn
 	followUps   map[protocol.SessionID][]*attentionFollowUp
+	startedAt   time.Time
+	waits       map[protocol.SessionID]*supervisedWait
+	// dispatcherAsks holds, per delegate, the deadline of the notice that asked its dispatcher about it.
+	dispatcherAsks map[protocol.SessionID]stepclock.Timer
 }
 
 type elapsedCheckpoint struct {
-	timer stepclock.Timer
-	since time.Time
-	step  int
+	timer  stepclock.Timer
+	due    time.Time
+	silent time.Time
 }
 
 type judgedFacts struct {
@@ -158,6 +162,7 @@ func (d *Daemon) observeAttention(session protocol.SessionID, previous, view ses
 		}
 		d.armAttentionStop(session, view)
 	}
+	d.observeWait(session, previous, view)
 	d.armAttentionElapsed(session, record.Agent, view)
 }
 
@@ -191,18 +196,32 @@ func (d *Daemon) armAttentionStop(session protocol.SessionID, view sessionmonito
 
 func (d *Daemon) armAttentionElapsed(session protocol.SessionID, agent protocol.SessionAgent, view sessionmonitor.View) {
 	signals := d.signalsOf(agent)
-	since := elapsedSince(view)
+	silent := elapsedSince(view)
+	now := d.clock.Now()
+	a := &d.attention
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	since := silent
+	if wait := a.waits[session]; wait != nil {
+		since = wait.since
+	}
+	hold := a.startedAt.Add(attentionNoticeHoldAtStart)
+	passed := now
+	if now.Before(hold) {
+		passed = a.startedAt
+	}
 	step := slices.IndexFunc(attentionElapsedSteps, func(s struct {
 		after      time.Duration
 		checkpoint attention.Checkpoint
 	}) bool {
-		return since.Add(s.after).After(d.clock.Now())
+		return since.Add(s.after).After(passed)
 	})
-	a := &d.attention
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	var due time.Time
+	if step >= 0 {
+		due = latest(since.Add(attentionElapsedSteps[step].after), hold)
+	}
 	armed, ok := a.elapsed[session]
-	if ok && armed.since.Equal(since) && armed.step == step && elapsedCheckpointsApply(view, signals) {
+	if ok && armed.due.Equal(due) && armed.silent.Equal(silent) && elapsedCheckpointsApply(view, signals) {
 		return
 	}
 	if ok {
@@ -216,16 +235,16 @@ func (d *Daemon) armAttentionElapsed(session protocol.SessionID, agent protocol.
 	if a.elapsed == nil {
 		a.elapsed = map[protocol.SessionID]elapsedCheckpoint{}
 	}
-	timer := d.clock.AfterFunc(AttentionElapsedTimer, since.Add(attentionElapsedSteps[step].after).Sub(d.clock.Now()), func() {
+	timer := d.clock.AfterFunc(AttentionElapsedTimer, due.Sub(now), func() {
 		d.life.Do("attentionElapsed", func() {
 			current, _ := d.monitorViewFor(session)
-			if elapsedCheckpointsApply(current, signals) && elapsedSince(current).Equal(since) {
+			if elapsedCheckpointsApply(current, signals) && elapsedSince(current).Equal(silent) {
 				d.attentionCheckpoint(session, checkpoint)
 			}
 			d.armAttentionElapsed(session, agent, current)
 		})
 	})
-	a.elapsed[session] = elapsedCheckpoint{timer: timer, since: since, step: step}
+	a.elapsed[session] = elapsedCheckpoint{timer: timer, due: due, silent: silent}
 }
 
 func (d *Daemon) attentionFactChanged(event bus.Event) {
@@ -264,6 +283,13 @@ func (d *Daemon) forgetAttention(session protocol.SessionID) {
 	if armed, ok := a.elapsed[session]; ok {
 		armed.timer.Stop()
 	}
+	if wait := a.waits[session]; wait != nil {
+		a.endWaitLocked(session, wait)
+	}
+	if asked := a.dispatcherAsks[session]; asked != nil {
+		asked.Stop()
+	}
+	delete(a.dispatcherAsks, session)
 	delete(a.stops, session)
 	delete(a.elapsed, session)
 	delete(a.judged, session)
@@ -271,6 +297,9 @@ func (d *Daemon) forgetAttention(session protocol.SessionID) {
 }
 
 func (d *Daemon) startAttentionCheckpoints() {
+	d.attention.mu.Lock()
+	d.attention.startedAt = d.clock.Now()
+	d.attention.mu.Unlock()
 	d.loadAttentionLog()
 	d.life.Go("attentionDaemonStart", func() {
 		now := d.clock.Now()
@@ -279,6 +308,7 @@ func (d *Daemon) startAttentionCheckpoints() {
 				continue
 			}
 			view, _ := d.monitorViewFor(session.ID)
+			d.resumeWait(session.ID, view)
 			d.armAttentionElapsed(session.ID, session.Agent, view)
 			if !stoppedWithNoTurn(view, now) {
 				continue
@@ -316,7 +346,7 @@ func (d *Daemon) attentionCheckpoint(session protocol.SessionID, checkpoint atte
 		return
 	}
 	verdict := d.attentionSupervisor(record.Agent).Judge(ctx, facts)
-	d.actOnAttentionVerdict(d.recordAttentionVerdict(session, now, facts, key, stopJudgedBy(checkpoint, view), verdict))
+	d.actOnAttentionVerdict(d.recordAttentionVerdict(session, now, facts, key, stopJudgedBy(checkpoint, view), verdict), facts)
 }
 
 func stopJudgedBy(checkpoint attention.Checkpoint, view sessionmonitor.View) time.Time {

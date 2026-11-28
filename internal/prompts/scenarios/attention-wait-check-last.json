@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "attention-wait-check-last",
+  "description": "The 4-hour and last check of a background wait.",
+  "recipient": "attention",
+  "event": "wait-check",
+  "values": {
+    "wait": "task \"Wait until all CI on the new head completes\" (b6cp0grss)",
+    "age": "4 h",
+    "silent": "3 h",
+    "last": "true",
+    "answer": ""
+  }
+}

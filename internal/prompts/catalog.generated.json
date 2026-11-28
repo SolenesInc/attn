@@ -6057,6 +6057,185 @@
               }
             ]
           }
+        },
+        {
+          "id": "wait-check",
+          "delivery": "inbox_content",
+          "description": "A supervisor notice to an agent whose background wait passed an elapsed checkpoint.",
+          "body": {
+            "kind": "text",
+            "id": "attention.wait-check",
+            "source": "content/attention/wait-check.md",
+            "bindings": [
+              {
+                "name": "wait",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "wait",
+                    "kind": "text",
+                    "description": "The wait: task and its quoted description and id, or wait when the harness listed no task."
+                  }
+                }
+              },
+              {
+                "name": "age",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "age",
+                    "kind": "text",
+                    "description": "How long the wait has run, such as 20 min or 4 h."
+                  }
+                }
+              },
+              {
+                "name": "silent",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "silent",
+                    "kind": "text",
+                    "description": "How long since the agent's last model request."
+                  }
+                }
+              },
+              {
+                "name": "ask",
+                "node": {
+                  "kind": "compose",
+                  "children": [
+                    {
+                      "kind": "when",
+                      "condition": {
+                        "field": {
+                          "name": "answer",
+                          "kind": "text",
+                          "description": "The agent's answer to the previous check of this wait, when it answered one."
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "text",
+                          "id": "attention.wait-check-answered",
+                          "source": "content/attention/wait-check-answered.md",
+                          "bindings": [
+                            {
+                              "name": "answer",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "answer",
+                                  "kind": "text",
+                                  "description": "The agent's answer to the previous check of this wait, when it answered one."
+                                },
+                                "quote": true
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "last",
+                          "kind": "flag",
+                          "description": "The 4 h check, attn's last of this wait."
+                        },
+                        "test": "enabled"
+                      },
+                      "children": [
+                        {
+                          "kind": "text",
+                          "id": "attention.wait-check-last",
+                          "source": "content/attention/wait-check-last.md"
+                        },
+                        {
+                          "kind": "text",
+                          "id": "attention.wait-check-ask",
+                          "source": "content/attention/wait-check-ask.md"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "delegate-check",
+          "delivery": "inbox_content",
+          "description": "A supervisor notice to a live dispatcher whose delegate the supervisor judged open or finished, before attn opens the delegate's turn.",
+          "body": {
+            "kind": "text",
+            "id": "attention.delegate-check",
+            "source": "content/attention/delegate-check.md",
+            "bindings": [
+              {
+                "name": "delegate",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "delegate",
+                    "kind": "text",
+                    "description": "The delegate's name."
+                  }
+                }
+              },
+              {
+                "name": "session",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "session",
+                    "kind": "text",
+                    "description": "The delegate's short session id."
+                  }
+                }
+              },
+              {
+                "name": "reason",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "reason",
+                    "kind": "text",
+                    "description": "The verdict's reason."
+                  }
+                }
+              },
+              {
+                "name": "verdict",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "finished",
+                      "kind": "flag",
+                      "description": "The verdict is finished; otherwise open."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "attention.delegate-finished",
+                      "source": "content/attention/delegate-finished.md"
+                    },
+                    {
+                      "kind": "text",
+                      "id": "attention.delegate-open",
+                      "source": "content/attention/delegate-open.md"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
         }
       ]
     },
@@ -9944,5 +10123,5 @@
       ]
     }
   ],
-  "definitions_hash": "746285e70d7d75d628b26c4f1e6403bf3d4022fbae3173cd03b231ca90f9878d"
+  "definitions_hash": "958b052be1f89dff5d09f9a69d08b7068a098d4d6f1fcbd75e914c375d57f403"
 }

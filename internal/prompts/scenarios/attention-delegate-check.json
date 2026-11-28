@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "attention-delegate-check",
+  "description": "A dispatcher asked about a delegate the supervisor judged open.",
+  "recipient": "attention",
+  "event": "delegate-check",
+  "values": {
+    "delegate": "Port agent and session commands",
+    "session": "ag-nrkwhp",
+    "finished": "false",
+    "reason": "it promises to continue when 4f9959148 lands, and nothing will wake it"
+  }
+}

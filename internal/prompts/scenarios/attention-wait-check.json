@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "id": "attention-wait-check",
+  "description": "The 60-minute check of a CI wait the agent answered at 20 minutes.",
+  "recipient": "attention",
+  "event": "wait-check",
+  "values": {
+    "wait": "task \"Wait until all CI on the new head completes\" (b6cp0grss)",
+    "age": "1 h",
+    "silent": "39 min",
+    "last": "false",
+    "answer": "CI is still running on d40f056; it should finish within 15 min."
+  }
+}

@@ -163,14 +163,18 @@ profile the vent belongs to.
 ### Attention verdicts
 
 An `attention_verdict` record measures the attention supervisor, which judges
-whether a stopped or waiting agent needs you. It runs in shadow for now: a
-verdict opens no turn, closes nothing and changes nothing you see.
+whether a stopped or waiting agent needs you. With `attention_supervisor` off it
+runs in shadow: a verdict opens no turn, sends no notice and changes nothing you
+see.
 
 The supervisor judges an agent at a checkpoint: 15 minutes after a stop that
 opened no turn, when something that could wake the agent changes, 20 minutes,
 60 minutes and 4 hours after the agent's last model request or finished tool
 while a background task runs or, in Claude Code, while it works, and when the
-daemon starts. Its rules decide first. When no rule
+daemon starts. A background wait keeps counting from where it began, not from
+the agent's answers to the supervisor's notices, and none of these 20-minute,
+60-minute or 4-hour checkpoints falls in the 5 minutes after the daemon starts.
+Its rules decide first. When no rule
 decides, Attn makes one call to the small model that judges your sessions'
 states, through the session's harness or, for a harness with no classifier,
 Claude Code, on your harness account. The call sends what Attn knows of the

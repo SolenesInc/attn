@@ -1,0 +1,1 @@
+This is attn's last check of this wait. Check whether it can still finish: look at what it waits for, not at the task's own output. If you keep waiting, attn opens your turn for the user, so say in one line what you wait for and when it ends. Otherwise stop or fix the wait and carry on, or run `attn turn open` and say what you need.
