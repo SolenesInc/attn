@@ -1022,6 +1022,7 @@ fn over_tiles(state: &State, t: &Tokens, scale: f32) -> Vec<El> {
         Some(Layer::Overview) | None => {}
     }
     layers.extend(crate::home::pull_requests::merge_confirmation(state, t));
+    layers.extend(crate::view::confirmation(state, t));
     crate::notebook::root_picker_overlay(state, t, &mut layers);
     crate::automations::form::overlay(state, t, &mut layers);
     layers.extend(crate::desktop::width_control_layer(state, t));

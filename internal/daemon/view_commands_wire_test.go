@@ -22,6 +22,11 @@ const jobsView = `# Jobs
 :::commands
 rerun: ./rerun.sh {title} --id={id}
 fail: ./fail.sh
+note: ./rerun.sh
+:::
+
+:::entry note
+Write a note
 :::
 
 :::list jobs
@@ -36,8 +41,13 @@ const rerunScript = "#!/bin/sh\nprintf '%s\\n' \"$#\" > got.txt\nfor word in \"$
 
 func runViewCommandOn(t *testing.T, app *testworld.Peer, tile protocol.DesktopTileContentMessage, command string, part int, rows ...string) protocol.ViewRunResultMessage {
 	t.Helper()
+	return requestViewRun(app, protocol.ViewRunMessage{DesktopID: tile.DesktopID, TileID: tile.TileID, Command: command, Part: part, Rows: rows})
+}
+
+func requestViewRun(app *testworld.Peer, run protocol.ViewRunMessage) protocol.ViewRunResultMessage {
 	requestID := uuid.NewString()
-	return testworld.Request(app, protocol.ViewRunMessage{Cmd: protocol.CmdViewRun, RequestID: requestID, DesktopID: tile.DesktopID, TileID: tile.TileID, Command: command, Part: part, Rows: rows},
+	run.Cmd, run.RequestID = protocol.CmdViewRun, requestID
+	return testworld.Request(app, run,
 		protocol.EventViewRunResult, func(r protocol.ViewRunResultMessage) bool { return r.RequestID == requestID })
 }
 
@@ -84,7 +94,7 @@ func TestAViewsOwnCommandRunsFromARowWithEachFieldAsOneArgumentOnlyOnceStarted(t
 		for _, command := range opened.View.Commands {
 			names = append(names, protocol.Deref(command.Name)+" "+string(command.State))
 		}
-		if want := []string{"rerun waiting", "fail waiting"}; !slices.Equal(names, want) {
+		if want := []string{"rerun waiting", "fail waiting", "note waiting"}; !slices.Equal(names, want) {
 			t.Fatalf("the opened view lists commands %q, want %q", names, want)
 		}
 		part := listLine(t, opened.View)
@@ -131,6 +141,18 @@ func TestAViewsOwnCommandRunsFromARowWithEachFieldAsOneArgumentOnlyOnceStarted(t
 		testworld.AwaitSince(app, mark, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
 			return m.Path == view && viewCommandPhase(m, "fail") == "failed fail exited with status 3: the runner is gone"
 		})
+
+		entry := slices.IndexFunc(started.View.Parts, func(p protocol.ViewPart) bool { return p.Entry != nil })
+		mark = len(app.Log())
+		if ran := requestViewRun(app, protocol.ViewRunMessage{DesktopID: started.DesktopID, TileID: started.TileID, Command: "note", Part: started.View.Parts[entry].Line, Text: protocol.Ptr(shellTitle)}); !ran.Success {
+			t.Fatalf("running note from the entry: %s", protocol.Deref(ran.Error))
+		}
+		testworld.AwaitSince(app, mark, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+			return m.Path == view && viewCommandPhase(m, "note") == "done"
+		})
+		if got, _ := os.ReadFile(filepath.Join(folder, "got.txt")); string(got) != "1\n["+shellTitle+"]\n" {
+			t.Errorf("the entry's program received\n%s\nwant the typed text as its one argument", got)
+		}
 
 		gone := runViewCommandOn(t, app, started, "rerun", part, "j9")
 		if gone.Success {

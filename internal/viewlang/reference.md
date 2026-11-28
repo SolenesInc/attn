@@ -518,11 +518,11 @@ It goes at the top level of a view, not inside a four-colon part.
 
 :::commands
 rerun: scripts/rerun.sh {id}
-cancel: confirm="Cancel {name}?" scripts/cancel.sh --job={id}
+stop: confirm="Stop {name}?" scripts/stop.sh --job={id}
 :::
 
 :::list ci.jobs
 title: {name}
-controls: rerun, cancel
+controls: rerun, stop
 :::
 ```

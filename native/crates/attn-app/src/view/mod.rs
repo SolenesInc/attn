@@ -2,6 +2,7 @@
 //! from the values of the view's sources.
 
 mod answers;
+mod commands;
 mod draw;
 mod keys;
 mod sounds;
@@ -12,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
 
 use attn_client::TileKey;
-use attn_protocol::{ViewCommandCall, ViewDocument, ViewPart, ViewParts};
+use attn_protocol::{ViewDocument, ViewPart, ViewParts};
 use attn_ui::Tokens;
 use attn_ui::blocks::{Block, Notice, Reader, Surface};
 use rune::{El, Image, ScrollSpec, col, memo};
@@ -22,6 +23,7 @@ use crate::State;
 use crate::markdown::Document;
 
 pub(crate) use answers::{Answers, keep_paused as keep_writing};
+pub(crate) use commands::{Commands, confirmation};
 pub(crate) use keys::{on_key, send_key};
 pub(crate) use sounds::follow as follow_sounds;
 pub(crate) use values::{Data, Scope};
@@ -37,9 +39,13 @@ pub struct Tiles {
     pub(crate) writing: answers::Writing,
     /// The files being uploaded into each tile's file questions.
     pub(crate) choosing: answers::Choosing,
-    /// Why the home last refused an answer or a send, by tile, until it takes one.
+    /// Why the home last refused an answer, a send or a command, by tile, until it takes one.
     refusals: HashMap<String, String>,
     pub(crate) sounds: sounds::Sounds,
+    /// The text being typed into each entry, by the entry's key.
+    pub(crate) entries: HashMap<String, rune::TextEdit>,
+    /// The command waiting for the user's yes before it runs.
+    pub(crate) confirming: Option<commands::Confirming>,
 }
 
 impl Tiles {
@@ -56,6 +62,11 @@ impl Tiles {
     pub(crate) fn keep_only(&mut self, shown: &std::collections::HashSet<String>) {
         self.tiles.retain(|tile, _| shown.contains(tile));
         self.refusals.retain(|tile, _| shown.contains(tile));
+        self.entries.retain(|key, _| {
+            shown
+                .iter()
+                .any(|tile| key.starts_with(&format!("tile.{tile}.")))
+        });
         self.writing.keep_only(shown);
         self.choosing.keep_only(shown);
     }
@@ -119,24 +130,14 @@ const DRAWN: ViewParts<Draw> = ViewParts {
 pub(crate) struct Doors<'a> {
     /// Values in: the view's data around the part, and how each source stands.
     pub(crate) values: Scope<'a>,
-    /// View commands: which run, and the calls out.
-    pub(crate) commands: Commands,
+    /// View commands: which run, how their runs stand, and the calls out.
+    pub(crate) commands: Commands<'a>,
     /// Answers: what the user answered, and the drafts out.
     pub(crate) answers: Answers<'a>,
     /// Tile state: what the tile remembers about the part, and its changes.
     pub(crate) tile: TileDoor<'a>,
     /// Its box: where it stands, the theme, and what it draws pictures and links with.
     pub(crate) room: Room<'a>,
-}
-
-/// The view commands a part may offer. None runs yet: attn's own and a view's own commands
-/// come with the children of the plot that build them.
-pub(crate) struct Commands;
-
-impl Commands {
-    pub(crate) fn runs(&self, _: &ViewCommandCall) -> bool {
-        false
-    }
 }
 
 /// A part's tile state, and the handlers that change it.
@@ -266,7 +267,7 @@ impl<'a> Doors<'a> {
     ) -> Doors<'a> {
         Doors {
             values: scope,
-            commands: Commands,
+            commands: self.commands.clone(),
             answers: self.answers.clone(),
             tile: TileDoor { ..self.tile },
             room: Room {
@@ -302,7 +303,8 @@ fn parts(parts: &[ViewPart], doors: &Doors<'_>) -> Vec<Block> {
         let next_is_list = parts
             .get(i + 1)
             .is_some_and(|p| p.list.is_some() && p.problem.is_none());
-        let inner = doors.inner(i, doors.values.clone(), heading.take());
+        let mut inner = doors.inner(i, doors.values.clone(), heading.take());
+        inner.commands = inner.commands.at(shown.line);
         if let (true, Some(prose)) = (next_is_list, shown.markdown.as_ref()) {
             let text = inner.values.text(&prose.text);
             if let Some((above, last)) = draw::last_heading(&text) {
@@ -401,7 +403,12 @@ pub(crate) fn body(
         let data = Data::of(view);
         let doors = Doors {
             values: data.scope(now_ms),
-            commands: Commands,
+            commands: Commands::of(
+                &place,
+                view,
+                content.message.view_commands.as_deref().unwrap_or_default(),
+                &tiles.entries,
+            ),
             answers: Answers::of(&place, content.message.answers.as_ref(), tiles),
             tile: TileDoor {
                 tile,

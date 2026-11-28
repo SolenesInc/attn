@@ -28,9 +28,10 @@ pub(crate) fn start(state: &mut State, desktop: &str, tile: &str) {
 }
 
 fn how_often(command: &ViewRunCommand) -> String {
-    match &command.every {
-        Some(every) => format!(" every {every}"),
-        None => " once each time the view is shown".to_owned(),
+    match (&command.name, &command.every) {
+        (Some(_), _) => " when you press its control".to_owned(),
+        (None, Some(every)) => format!(" every {every}"),
+        (None, None) => " once each time the view is shown".to_owned(),
     }
 }
 

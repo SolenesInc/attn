@@ -41,7 +41,7 @@
             ],
             "confirm": [
               {
-                "text": "Cancel "
+                "text": "Stop "
               },
               {
                 "field": [
@@ -52,9 +52,9 @@
                 "text": "?"
               }
             ],
-            "name": "cancel",
-            "program": "scripts/cancel.sh",
-            "written": "cancel: confirm=\"Cancel {name}?\" scripts/cancel.sh --job={id}"
+            "name": "stop",
+            "program": "scripts/stop.sh",
+            "written": "stop: confirm=\"Stop {name}?\" scripts/stop.sh --job={id}"
           }
         ]
       },
@@ -78,7 +78,7 @@
             },
             {
               "args": [],
-              "command": "cancel"
+              "command": "stop"
             }
           ],
           "title": [

@@ -6,13 +6,15 @@ use attn_ui::blocks::{
     Audio, Block, Card, Chart, DataTable, Facts, Inline, Notice, Playing, Reader, Standing,
 };
 use attn_ui::system::{
-    Button, Choice, DotShape, DotSize, FieldState, GroupHead, ListRow, Look, Reveal, Size, Tone,
-    Type, answers, area_box, checks, dot, keys_hint, tag, words,
+    Button, Choice, DotShape, DotSize, FieldState, GroupHead, IconSize, ListRow, Look, Reveal,
+    Size, Tone, Type, answers, area_box, checks, dot, glyph, keys_hint, line_box, tag, words,
 };
 use rune::{El, Key, KeyEvent, Tx, col, row};
 use rune_kit::TextArea;
 use serde_json::Value;
 
+use super::commands::{Commands, Phase};
+use super::values::Scope;
 use super::{Doors, not_yet, parts};
 
 /// The problem a part has, in its place.
@@ -429,31 +431,50 @@ pub(crate) fn facts(part: &ViewPart, doors: &Doors<'_>) -> Block {
         .build(doors.room.t)
 }
 
-/// A command a part offers, drawn as a button that stays off until its command runs.
-fn control(key: &str, call: &ViewCommandCall, doors: &Doors<'_>) -> El {
-    let runs = doors.commands.runs(call);
-    let shown: String = (call.command.chars().enumerate())
-        .map(|(i, c)| match (i, c) {
-            (0, c) => c.to_ascii_uppercase(),
-            (_, '-' | '_') => ' ',
-            (_, c) => c,
-        })
-        .collect();
-    let button = Button::new(shown)
-        .look(Look::Quiet)
+/// A command a part offers, drawn as a button that shows how its last run here stands, and
+/// stays off until its command can run.
+fn control(
+    key: &str,
+    call: &ViewCommandCall,
+    (commands, scope): (&Commands<'_>, &Scope<'_>),
+    t: &Tokens,
+) -> El {
+    let name = super::commands::named(&call.command);
+    let key = format!("{key}.{}", call.command);
+    let button = match commands.phase(call) {
+        Phase::Unavailable(why) => Button::new(name).disabled(true).help(why),
+        Phase::Busy => Button::new(format!("{name}…"))
+            .disabled(true)
+            .help(format!("{name} is running")),
+        Phase::Done => Button::new(name.clone())
+            .leading(glyph(attn_ui::glyph::CHECK, IconSize::Small, t.success))
+            .help(format!("{name} finished")),
+        Phase::Failed(why) => Button::new(format!("{name} failed"))
+            .look(Look::Danger)
+            .help(why.to_owned()),
+        Phase::Ready => Button::new(name),
+    };
+    let button = match commands.phase(call) {
+        Phase::Failed(_) => button,
+        _ => button.look(Look::Quiet),
+    };
+    let press = commands.press(call, scope, &key);
+    let button = button
         .size(Size::Compact)
-        .disabled(!runs)
-        .help(format!("{} is not available yet", call.command))
-        .build(doors.room.t);
-    El::from(button).key(format!("{key}.{}", call.command))
+        .on_press_tx(move |state: &mut crate::State, tx: &mut Tx| press(state, None, tx))
+        .build(t);
+    El::from(button).key(key)
 }
 
 fn controls_of<'a>(
     key: &'a str,
     calls: &'a [ViewCommandCall],
-    doors: &'a Doors<'_>,
+    (commands, scope): (&'a Commands<'_>, &'a Scope<'_>),
+    t: &'a Tokens,
 ) -> impl Iterator<Item = El> + 'a {
-    calls.iter().map(move |call| control(key, call, doors))
+    calls
+        .iter()
+        .map(move |call| control(key, call, (commands, scope), t))
 }
 
 /// `text` in words, its `code` spans set in Mono.
@@ -509,7 +530,12 @@ pub(crate) fn list(part: &ViewPart, doors: &Doors<'_>) -> Block {
             ));
         }
         if let Some(calls) = &slots.group_controls {
-            head = head.aside(Inline::tight().children(controls_of(&head_key, calls, doors)));
+            head = head.aside(Inline::tight().children(controls_of(
+                &head_key,
+                calls,
+                (&doors.commands, &doors.values),
+                t,
+            )));
         }
         let head = if foldable { head.open(!folded) } else { head };
         let head = head.build(t);
@@ -522,6 +548,7 @@ pub(crate) fn list(part: &ViewPart, doors: &Doors<'_>) -> Block {
     let rows = (!folded).then(|| {
         items.iter().enumerate().map(|(i, item)| {
             let scope = doors.values.within(item);
+            let commands = doors.commands.within(super::values::row_id(item, i));
             let row_key = format!("{key}.row.{i}");
             let title = slots
                 .title
@@ -540,13 +567,16 @@ pub(crate) fn list(part: &ViewPart, doors: &Doors<'_>) -> Block {
                 row = row.aside(words(scope.text(s), Type::Mono, t.text_tertiary));
             }
             if let Some(calls) = &slots.controls {
-                row = row.controls(controls_of(&row_key, calls, doors), Reveal::Quiet);
+                row = row.controls(
+                    controls_of(&row_key, calls, (&commands, &scope), t),
+                    Reveal::Quiet,
+                );
             }
             row.disabled(
                 slots
                     .press
                     .as_ref()
-                    .is_some_and(|call| !doors.commands.runs(call)),
+                    .is_some_and(|call| !commands.runs(call)),
             )
             .build(t)
         })
@@ -644,6 +674,7 @@ pub(crate) fn chart(part: &ViewPart, doors: &Doors<'_>) -> Block {
 fn item(blocks: &[ViewPart], item: &Value, n: usize, doors: &Doors<'_>) -> El {
     let mut inner = doors.inner(n, doors.values.within(item), None);
     inner.answers = inner.answers.within(super::values::row_id(item, n));
+    inner.commands = inner.commands.within(super::values::row_id(item, n));
     Reader::new()
         .push_all(parts(blocks, &inner))
         .bare(doors.room.t)
@@ -739,11 +770,61 @@ pub(crate) fn one_by_one(part: &ViewPart, doors: &Doors<'_>) -> Block {
     Block::custom(format!("{key}.slot"), card)
 }
 
-pub(crate) fn entry(_: &ViewPart, doors: &Doors<'_>) -> Block {
-    not_yet(
-        &doors.room.key,
-        "Typing into a view's command",
-        doors.room.t,
+/// A line to type into; ↩ runs its command with the text, and the line says how the run went.
+pub(crate) fn entry(part: &ViewPart, doors: &Doors<'_>) -> Block {
+    let (key, t) = (&doors.room.key, doors.room.t);
+    let Some(entry) = &part.entry else {
+        return Block::custom(key.clone(), col());
+    };
+    let call = &entry.command;
+    let field = field_key(key);
+    let empty = rune::TextEdit::new("");
+    let edit = doors.commands.typed(&field).unwrap_or(&empty);
+    let phase = doors.commands.phase(call);
+    let press = doors.commands.press(call, &doors.values, &field);
+    let (typing, submitted) = (field.clone(), field.clone());
+    let input = rune_kit::TextInput::new(edit)
+        .key(field.clone())
+        .label(super::commands::named(&call.command))
+        .placeholder(entry.text.clone().unwrap_or_default())
+        .on_edit(move |state: &mut crate::State| {
+            state.views.revision += 1;
+            (state.views.entries.entry(typing.clone())).or_insert_with(|| rune::TextEdit::new(""))
+        })
+        .on_submit(move |state: &mut crate::State, tx: &mut Tx| {
+            let text = (state.views.entries.remove(&submitted))
+                .map(|e| e.text.clone())
+                .unwrap_or_default();
+            state.views.revision += 1;
+            if !text.trim().is_empty() {
+                press(state, Some(text), tx);
+            }
+        })
+        .on_key(leave_field);
+    let state = match &phase {
+        Phase::Unavailable(_) => FieldState::Disabled,
+        Phase::Failed(_) => FieldState::Failed,
+        _ => FieldState::Ready,
+    };
+    let said = match phase {
+        Phase::Unavailable(why) => Some((why, t.text_tertiary)),
+        Phase::Busy => Some((
+            format!("{}…", super::commands::named(&call.command)),
+            t.text_secondary,
+        )),
+        Phase::Done => Some(("Done".to_owned(), t.text_tertiary)),
+        Phase::Failed(why) => Some((why.to_owned(), t.error)),
+        Phase::Ready => None,
+    };
+    Block::custom(
+        format!("{key}.slot"),
+        attn_ui::blocks::Stack::tight()
+            .key(key.clone())
+            .w_full()
+            .child(El::from(line_box(input, state, t)))
+            .children(
+                said.map(|(said, ink)| words(said, Type::Small, ink).key(format!("{key}.said"))),
+            ),
     )
 }
 
@@ -753,7 +834,7 @@ pub(crate) fn controls(part: &ViewPart, doors: &Doors<'_>) -> Block {
         .controls
         .as_ref()
         .map_or(&[][..], |c| c.controls.as_slice());
-    let buttons = controls_of(key, calls, doors);
+    let buttons = controls_of(key, calls, (&doors.commands, &doors.values), doors.room.t);
     Block::custom(
         format!("{key}.slot"),
         Inline::tight().key(key.clone()).children(buttons),
@@ -761,9 +842,5 @@ pub(crate) fn controls(part: &ViewPart, doors: &Doors<'_>) -> Block {
 }
 
 pub(crate) fn commands(_: &ViewPart, doors: &Doors<'_>) -> Block {
-    not_yet(
-        &doors.room.key,
-        "Running a view's own commands",
-        doors.room.t,
-    )
+    Block::custom(doors.room.key.clone(), col())
 }

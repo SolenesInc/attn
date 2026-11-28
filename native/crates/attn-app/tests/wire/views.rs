@@ -5,8 +5,8 @@ use std::time::Duration;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     Attachment, AttachmentOwner, Desktop, DesktopPane, DesktopTileContentMessage,
-    InitialStateMessage, Profile, Session, ViewAnswer, ViewAnswers, ViewDocument, ViewProblem,
-    ViewRunCommand, ViewSent, ViewSource, ViewValues,
+    InitialStateMessage, Profile, Session, ViewAnswer, ViewAnswers, ViewCommand, ViewDocument,
+    ViewProblem, ViewRunCommand, ViewSent, ViewSource, ViewValues,
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, WALL_START_MS, World, key_event};
@@ -20,6 +20,7 @@ const DESKTOP: &str = "work/desktop_1";
 const VIEW: &str = "/work/a/release/view.md";
 const EVERY_STATIC_PART: &str =
     include_str!("../../../../../internal/viewlang/testdata/v1/views/every-static-part.json");
+const ENTRY: &str = include_str!("../../../../../internal/viewlang/testdata/v1/views/entry.json");
 const COMMANDS: &str =
     include_str!("../../../../../internal/viewlang/testdata/v1/views/commands.json");
 const QUESTION: &str =
@@ -465,23 +466,6 @@ fn a_views_ages_move_on_while_the_window_is_idle() {
 }
 
 #[test]
-fn parts_attn_cannot_run_yet_say_so_in_their_place() {
-    let mut world = start();
-    let parts = parts_of(COMMANDS);
-    let view = ViewDocument {
-        language: 1,
-        parts,
-        ..ViewDocument::default()
-    };
-    show(&mut world, view);
-    assert!(
-        says(&world, "Running a view's own commands is not available yet"),
-        "{:#?}",
-        shown(&world)
-    );
-}
-
-#[test]
 fn the_overview_shows_a_view_tile_by_its_card() {
     let mut world = start();
     show(&mut world, every_static_part());
@@ -889,6 +873,7 @@ fn ci_view(state: &str, source: &str, values: Option<Value>) -> ViewDocument {
             script_sha256: "5e1f".into(),
             state: state.into(),
             change: (state == "changed").then(|| "changed since you started it".into()),
+            ..ViewRunCommand::default()
         }],
         ..ViewDocument::default()
     }
@@ -943,3 +928,225 @@ fn a_view_names_its_command_runs_nothing_until_r_and_says_when_its_script_change
 }
 
 mod clips;
+
+/// The CI view of the `commands` fixture with its jobs, where the user started its commands
+/// when `started`, and its controls' runs stand as `ran`.
+fn jobs_view(started: bool) -> ViewDocument {
+    let state = if started { "started" } else { "waiting" };
+    let own = |name: &str, line: &str| ViewRunCommand {
+        line: line.into(),
+        name: Some(name.into()),
+        script_sha256: "7a2c".into(),
+        state: state.into(),
+        ..ViewRunCommand::default()
+    };
+    ViewDocument {
+        commands: vec![
+            own("rerun", "rerun: scripts/rerun.sh {id}"),
+            own(
+                "stop",
+                "stop: confirm=\"Stop {name}?\" scripts/stop.sh --job={id}",
+            ),
+        ],
+        ..ci_view(
+            state,
+            "ok",
+            Some(json!({"ci": {"jobs": [
+                {"id": "j1", "name": "build"},
+                {"id": "j2", "name": "lint"},
+            ]}})),
+        )
+    }
+}
+
+fn show_ran(world: &mut World, view: ViewDocument, ran: Vec<ViewCommand>) {
+    world.daemon.emit(DesktopTileContentMessage {
+        view_commands: Some(ran),
+        ..content(Some(view), None)
+    });
+    world.settle();
+}
+
+fn ran(command: &str, phase: &str, error: Option<&str>) -> ViewCommand {
+    ViewCommand {
+        command: command.into(),
+        part: 9,
+        rows: Some(vec!["j2".into()]),
+        phase: phase.into(),
+        error: error.map(Into::into),
+    }
+}
+
+const LINT_RERUN: &str = "tile.m.view.2.row.1.rerun";
+const LINT_STOP: &str = "tile.m.view.2.row.1.stop";
+
+fn click(world: &mut World, target: Target) {
+    world.gesture(|app| app.click(target));
+    world.settle();
+}
+
+fn control(world: &World, key: &str) -> attn_testkit::Node {
+    world.screen().get(Target::key(key))
+}
+
+#[test]
+fn a_rows_control_runs_the_views_command_in_its_row_and_shows_busy_done_and_failed() {
+    let mut world = start();
+    world.daemon.on(
+        "view_run",
+        |r| json!({"event": "view_run_result", "request_id": r["request_id"], "success": true}),
+    );
+    show(&mut world, jobs_view(false));
+    assert!(world.runtime_is_at_rest());
+    assert!(
+        control(&world, LINT_RERUN).is("disabled"),
+        "a control of a command the user has not started is on"
+    );
+    click(&mut world, Target::key(LINT_RERUN));
+    assert!(world.daemon.sent_of("view_run").is_empty());
+
+    show(&mut world, jobs_view(true));
+    click(&mut world, Target::key(LINT_RERUN));
+    let runs = world.daemon.sent_of("view_run");
+    assert_eq!(runs.len(), 1, "{runs:?}");
+    assert_eq!(
+        (
+            &runs[0]["command"],
+            &runs[0]["part"],
+            &runs[0]["rows"],
+            &runs[0]["tile_id"]
+        ),
+        (&json!("rerun"), &json!(9), &json!(["j2"]), &json!("m"))
+    );
+
+    show_ran(
+        &mut world,
+        jobs_view(true),
+        vec![ran("rerun", "busy", None)],
+    );
+    let busy = control(&world, LINT_RERUN);
+    assert_eq!(busy.name.as_deref(), Some("Rerun…"));
+    assert!(busy.is("disabled"));
+    assert!(
+        !control(&world, "tile.m.view.2.row.0.rerun").is("disabled"),
+        "the run on lint made the control on build busy too"
+    );
+
+    show_ran(
+        &mut world,
+        jobs_view(true),
+        vec![ran("rerun", "done", None)],
+    );
+    let done = control(&world, LINT_RERUN);
+    assert_eq!(
+        (done.name.as_deref(), done.is("disabled")),
+        (Some("Rerun"), false)
+    );
+    assert_eq!(done.description.as_deref(), Some("Rerun finished"));
+
+    show_ran(
+        &mut world,
+        jobs_view(true),
+        vec![ran(
+            "rerun",
+            "failed",
+            Some("rerun exited with status 3: the runner is gone"),
+        )],
+    );
+    let failed = control(&world, LINT_RERUN);
+    assert_eq!(failed.name.as_deref(), Some("Rerun failed"));
+    assert_eq!(
+        failed.description.as_deref(),
+        Some("rerun exited with status 3: the runner is gone")
+    );
+}
+
+#[test]
+fn a_command_that_asks_first_runs_only_on_the_users_yes() {
+    let mut world = start();
+    world.daemon.on(
+        "view_run",
+        |r| json!({"event": "view_run_result", "request_id": r["request_id"], "success": true}),
+    );
+    show(&mut world, jobs_view(true));
+
+    click(&mut world, Target::key(LINT_STOP));
+    assert!(world.daemon.sent_of("view_run").is_empty());
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Stop lint?"))
+            .is_some(),
+        "no question \"Stop lint?\" over the window:\n{}",
+        world.screen()
+    );
+    click(&mut world, Target::key("view.confirm.cancel"));
+    assert!(world.screen().find(Target::role("dialog")).is_none());
+    assert!(world.daemon.sent_of("view_run").is_empty());
+
+    click(&mut world, Target::key(LINT_STOP));
+    click(&mut world, Target::key("view.confirm.yes"));
+    let runs = world.daemon.sent_of("view_run");
+    assert_eq!(runs.len(), 1, "{runs:?}");
+    assert_eq!(
+        (&runs[0]["command"], &runs[0]["rows"]),
+        (&json!("stop"), &json!(["j2"]))
+    );
+}
+
+#[test]
+fn a_run_the_home_refuses_says_why_on_the_tile() {
+    let mut world = start();
+    world.daemon.on("view_run", |r| {
+        json!({"event": "view_run_result", "request_id": r["request_id"], "success": false, "error": "rerun runs once you start the view's commands: press r on its tile"})
+    });
+    show(&mut world, jobs_view(true));
+    click(&mut world, Target::key(LINT_RERUN));
+    assert!(
+        says(&world, "rerun runs once you start the view's commands"),
+        "{:#?}",
+        shown(&world)
+    );
+}
+
+#[test]
+fn an_entry_runs_its_command_with_the_text_typed_and_clears() {
+    let mut world = start();
+    world.daemon.on(
+        "view_run",
+        |r| json!({"event": "view_run_result", "request_id": r["request_id"], "success": true}),
+    );
+    show(
+        &mut world,
+        ViewDocument {
+            language: 1,
+            parts: parts_of(ENTRY),
+            commands: vec![ViewRunCommand {
+                line: "note: scripts/add-note.sh".into(),
+                name: Some("note".into()),
+                script_sha256: "9b0e".into(),
+                state: "started".into(),
+                ..ViewRunCommand::default()
+            }],
+            ..ViewDocument::default()
+        },
+    );
+    click(&mut world, Target::key("tile.m.view.1.text"));
+    typed(&mut world, "ship it; rm -rf ~");
+    press(&mut world, Key::Enter);
+    let runs = world.daemon.sent_of("view_run");
+    assert_eq!(runs.len(), 1, "{runs:?}");
+    assert_eq!(
+        (&runs[0]["command"], &runs[0]["part"], &runs[0]["text"]),
+        (&json!("note"), &json!(5), &json!("ship it; rm -rf ~"))
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("tile.m.view.1.text"))
+            .value
+            .as_deref()
+            .unwrap_or_default(),
+        ""
+    );
+}
