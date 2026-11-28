@@ -55,6 +55,12 @@
             "name": "stop",
             "program": "scripts/stop.sh",
             "written": "stop: confirm=\"Stop {name}?\" scripts/stop.sh --job={id}"
+          },
+          {
+            "args": [],
+            "name": "sync",
+            "program": "scripts/sync.sh",
+            "written": "sync: scripts/sync.sh"
           }
         ]
       },
@@ -62,7 +68,19 @@
       "name": "commands"
     },
     {
-      "line": 9,
+      "controls": {
+        "controls": [
+          {
+            "args": [],
+            "command": "sync"
+          }
+        ]
+      },
+      "line": 10,
+      "name": "controls"
+    },
+    {
+      "line": 14,
       "list": {
         "items": {
           "field": [
@@ -81,6 +99,10 @@
               "command": "stop"
             }
           ],
+          "press": {
+            "args": [],
+            "command": "rerun"
+          },
           "title": [
             {
               "field": [

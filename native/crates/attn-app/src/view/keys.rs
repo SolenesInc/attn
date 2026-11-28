@@ -4,13 +4,17 @@
 //! On a question, or in a `one-by-one` item that holds one, digits pick a choice and e writes the
 //! text; ↩ on a file question, or f in a `one-by-one` item, chooses its file, and ⌫ takes it back;
 //! ⌘↩ sends the view's answers; r starts the view's commands while they wait for the user.
+//! ↩ on a list's row runs its `press:` command, and a control's letter runs its command: on the
+//! highlighted row for a row's control, from anywhere for one in `:::controls`.
 //! Space plays or pauses the clip at the highlight, and Shift with ← or → moves it back or on.
 
-use attn_protocol::{DesktopTileContentMessage, ViewPart};
+use attn_protocol::{DesktopTileContentMessage, ViewCommandCall, ViewPart};
 use rune::{Key, KeyEvent, Tx};
+use serde_json::Value;
 
 use attn_client::TileKey;
 
+use super::Commands;
 use super::answers::{self, Answers, KEPT, SKIPPED};
 use super::values::{Data, Scope, row_id};
 use super::{TileState, draw};
@@ -22,6 +26,12 @@ enum Stop {
     /// A list's foldable heading, by the list's key.
     Fold(String),
     Row(String),
+    /// A list's row: the list, and the items it is inside of, each with its row, then its own.
+    ListRow {
+        key: String,
+        list: Box<ViewPart>,
+        trail: Vec<(Value, String)>,
+    },
     /// A `one-by-one`: the rows of its items, and what each item shows.
     Steps {
         key: String,
@@ -42,6 +52,7 @@ impl Stop {
         match self {
             Stop::Fold(list) => format!("{list}.head"),
             Stop::Row(key)
+            | Stop::ListRow { key, .. }
             | Stop::Steps { key, .. }
             | Stop::Question { key, .. }
             | Stop::Clip(key) => key.clone(),
@@ -152,11 +163,12 @@ pub(super) fn clips(
 /// `prefix`.
 fn stops(
     parts: &[ViewPart],
-    (scope, row): (&Scope<'_>, Option<&str>),
+    (scope, trail): (&Scope<'_>, &[(Value, String)]),
     prefix: &str,
     state: &TileState,
     out: &mut Vec<Stop>,
 ) {
+    let row = trail.last().map(|(_, row)| row.as_str());
     for (i, part) in parts.iter().enumerate() {
         if part.problem.is_some() {
             continue;
@@ -192,7 +204,15 @@ fn stops(
                 out.push(Stop::Fold(key.clone()));
             }
             if !state.folded.contains(&key) {
-                out.extend((0..items.len()).map(|n| Stop::Row(format!("{key}.row.{n}"))));
+                out.extend(items.iter().enumerate().map(|(n, item)| {
+                    let mut trail = trail.to_vec();
+                    trail.push((item.clone(), row_id(item, n)));
+                    Stop::ListRow {
+                        key: format!("{key}.row.{n}"),
+                        list: Box::new(part.clone()),
+                        trail,
+                    }
+                }));
             }
         }
         if let Some(table) = &part.table {
@@ -201,9 +221,11 @@ fn stops(
         }
         if let Some(each) = &part.each {
             for (n, item) in scope.items(&each.items).iter().enumerate() {
+                let mut inside = trail.to_vec();
+                inside.push((item.clone(), row_id(item, n)));
                 stops(
                     &each.blocks,
-                    (&scope.within(item), Some(&row_id(item, n))),
+                    (&scope.within(item), &inside),
                     &format!("{key}.{n}"),
                     state,
                     out,
@@ -225,7 +247,7 @@ fn stops(
 
 /// The view tile holding the keyboard, with nothing over it: its tile and its content.
 fn held(state: &State) -> Option<(String, &attn_client::TileContent)> {
-    if !state.window.tiles_in_front() {
+    if !state.window.tiles_in_front() || state.views.confirming.is_some() {
         return None;
     }
     let holder = state.window.keyboard.as_ref()?;
@@ -440,7 +462,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let mut found = Vec::new();
     stops(
         &view.parts,
-        (&data.scope(0), None),
+        (&data.scope(0), &[]),
         &format!("tile.{tile}.view"),
         &tile_state,
         &mut found,
@@ -454,6 +476,10 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     };
     let digit = typed.parse::<usize>().ok().filter(|d| (1..=9).contains(d));
     let waits = super::start::waits(view);
+    let header: Vec<(i64, Vec<ViewCommandCall>)> = (view.parts.iter())
+        .filter(|part| part.problem.is_none())
+        .filter_map(|part| Some((part.line, part.controls.as_ref()?.controls.clone())))
+        .collect();
     match (&ev.key, typed, here) {
         (_, "r", _) if waits => {
             super::start::start(state, &place.desktop, &tile);
@@ -538,9 +564,81 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         {
             answer_with(state, (&place, row), (&key, &part), digit, tx)
         }
+        (Key::Enter, _, Some(Stop::ListRow { list, trail, .. })) => {
+            if let Some(call) = list.list.as_ref().and_then(|l| l.slots.press.as_ref()) {
+                run_keyed(
+                    state,
+                    &place,
+                    (list.line, &trail),
+                    |_| Some(call.clone()),
+                    tx,
+                );
+            }
+            true
+        }
         (Key::Enter, _, Some(Stop::Row(_))) => true,
+        (Key::Text(_), letter, here) if letter.len() == 1 => {
+            let on_row = match &here {
+                Some(Stop::ListRow { list, trail, .. }) => {
+                    let calls = (list.list.as_ref())
+                        .and_then(|l| l.slots.controls.clone())
+                        .unwrap_or_default();
+                    run_keyed(
+                        state,
+                        &place,
+                        (list.line, trail),
+                        |commands| commands.lettered(&calls, letter).cloned(),
+                        tx,
+                    )
+                }
+                _ => false,
+            };
+            on_row
+                || header.iter().any(|(line, calls)| {
+                    run_keyed(
+                        state,
+                        &place,
+                        (*line, &[]),
+                        |commands| commands.lettered(calls, letter).cloned(),
+                        tx,
+                    )
+                })
+        }
         _ => false,
     }
+}
+
+/// Runs the command `pick` chooses from the commands of the part on `line`, in the rows of
+/// `trail`, as a press of its control would. Whether `pick` chose one.
+fn run_keyed(
+    state: &mut State,
+    place: &TileKey,
+    (line, trail): (i64, &[(Value, String)]),
+    pick: impl FnOnce(&Commands<'_>) -> Option<ViewCommandCall>,
+    tx: &mut Tx,
+) -> bool {
+    let run = {
+        let Some(content) = answers::content_of(state, place) else {
+            return false;
+        };
+        let Some(view) = content.message.view.as_ref() else {
+            return false;
+        };
+        let ran = content.message.view_commands.as_deref().unwrap_or_default();
+        let data = Data::of(view);
+        let mut scope = data.scope(0);
+        let mut commands = Commands::of(place, view, ran, &state.views.entries).at(line);
+        for (item, row) in trail {
+            scope = scope.within(item);
+            commands = commands.within(row.clone());
+        }
+        let Some(call) = pick(&commands) else {
+            return false;
+        };
+        commands.keyed(&call, &scope)
+    };
+    run(state, tx);
+    true
 }
 
 /// The send key on a view tile holding the keyboard: sends its answers to the agent that opened

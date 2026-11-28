@@ -458,7 +458,16 @@ fn control(
         Phase::Failed(_) => button,
         _ => button.look(Look::Quiet),
     };
-    let press = commands.press(call, scope, &key);
+    let button = match commands.letter(&call.command) {
+        Some(letter) => {
+            let cap = letter.to_ascii_uppercase().to_string();
+            button
+                .shortcut(cap.clone())
+                .trailing(attn_ui::system::keycaps([cap], t).a11y_hidden())
+        }
+        None => button,
+    };
+    let press = commands.press(call, scope, Some(&key));
     let button = button
         .size(Size::Compact)
         .on_press_tx(move |state: &mut crate::State, tx: &mut Tx| press(state, None, tx))
@@ -781,7 +790,7 @@ pub(crate) fn entry(part: &ViewPart, doors: &Doors<'_>) -> Block {
     let empty = rune::TextEdit::new("");
     let edit = doors.commands.typed(&field).unwrap_or(&empty);
     let phase = doors.commands.phase(call);
-    let press = doors.commands.press(call, &doors.values, &field);
+    let press = doors.commands.press(call, &doors.values, Some(&field));
     let (typing, submitted) = (field.clone(), field.clone());
     let input = rune_kit::TextInput::new(edit)
         .key(field.clone())
@@ -792,10 +801,9 @@ pub(crate) fn entry(part: &ViewPart, doors: &Doors<'_>) -> Block {
             (state.views.entries.entry(typing.clone())).or_insert_with(|| rune::TextEdit::new(""))
         })
         .on_submit(move |state: &mut crate::State, tx: &mut Tx| {
-            let text = (state.views.entries.remove(&submitted))
+            let text = (state.views.entries.get(&submitted))
                 .map(|e| e.text.clone())
                 .unwrap_or_default();
-            state.views.revision += 1;
             if !text.trim().is_empty() {
                 press(state, Some(text), tx);
             }

@@ -1,11 +1,12 @@
 //! A view's commands as its parts offer them: which run, how each control's last run stands,
-//! and the call out that runs one, after the user says yes when the command asks first.
+//! the letter each control answers, and the call out that runs one, after the user says yes
+//! when the command asks first.
 
 use std::collections::HashMap;
 
 use attn_client::TileKey;
 use attn_protocol::{
-    ViewCommand, ViewCommandCall, ViewDocument, ViewOwnCommand, ViewRunMessage,
+    ViewCommand, ViewCommandCall, ViewDocument, ViewOwnCommand, ViewPart, ViewRunMessage,
     ViewRunResultMessage,
 };
 use attn_ui::blocks::Actions;
@@ -24,8 +25,63 @@ pub(crate) struct Commands<'a> {
     view: &'a ViewDocument,
     ran: &'a [ViewCommand],
     typed: &'a HashMap<String, TextEdit>,
+    letters: Vec<(String, char)>,
     part: i64,
     rows: Vec<String>,
+}
+
+/// What a key does to the view's commands, once the state it read is let go.
+pub(crate) type Keyed = Box<dyn Fn(&mut State, &mut Tx)>;
+
+/// The commands of the controls the keys reach in `parts`, in order: those of `:::controls` and
+/// of the rows of each list, inside `::::each` too. A `::::one-by-one` item's rows are never
+/// highlighted, so its controls take no letter.
+fn keyed_calls(parts: &[ViewPart], out: &mut Vec<ViewCommandCall>) {
+    for part in parts {
+        out.extend(
+            part.controls
+                .iter()
+                .flat_map(|c| c.controls.iter().cloned()),
+        );
+        out.extend(
+            (part.list.iter())
+                .flat_map(|l| l.slots.controls.iter().flatten())
+                .cloned(),
+        );
+        if let Some(each) = &part.each {
+            keyed_calls(&each.blocks, out);
+        }
+    }
+}
+
+/// The keys a view's tile already answers, which no control's letter takes.
+const TILE_KEYS: &str = "jkresfx";
+
+/// The letter of each command the view's controls run, in the order the view first offers it:
+/// the first letter of its name that the tile does not already answer and no command before
+/// it took. A command whose name has no such letter has none.
+fn letters(view: &ViewDocument) -> Vec<(String, char)> {
+    let mut calls = Vec::new();
+    keyed_calls(&view.parts, &mut calls);
+    let mut letters: Vec<(String, char)> = Vec::new();
+    for call in calls {
+        if letters.iter().any(|(name, _)| name == &call.command) {
+            continue;
+        }
+        let free = call
+            .command
+            .chars()
+            .map(|c| c.to_ascii_lowercase())
+            .find(|c| {
+                c.is_ascii_lowercase()
+                    && !TILE_KEYS.contains(*c)
+                    && !letters.iter().any(|(_, taken)| taken == c)
+            });
+        if let Some(letter) = free {
+            letters.push((call.command.clone(), letter));
+        }
+    }
+    letters
 }
 
 /// How a control stands: why it cannot run, or its last run.
@@ -43,7 +99,7 @@ pub(crate) struct Confirming {
     run: ViewRunMessage,
     question: String,
     yes: String,
-    back: String,
+    back: Option<String>,
 }
 
 impl<'a> Commands<'a> {
@@ -58,9 +114,29 @@ impl<'a> Commands<'a> {
             view,
             ran,
             typed,
+            letters: letters(view),
             part: 0,
             rows: Vec::new(),
         }
+    }
+
+    /// The letter that runs `command` from a control.
+    pub(crate) fn letter(&self, command: &str) -> Option<char> {
+        (self.letters.iter())
+            .find(|(name, _)| name == command)
+            .map(|(_, letter)| *letter)
+    }
+
+    /// Which of `calls` the letter `typed` runs.
+    pub(crate) fn lettered<'c>(
+        &self,
+        calls: &'c [ViewCommandCall],
+        typed: &str,
+    ) -> Option<&'c ViewCommandCall> {
+        calls.iter().find(|call| {
+            self.letter(&call.command)
+                .is_some_and(|l| typed == l.to_string())
+        })
     }
 
     /// The commands of the part on `line`.
@@ -121,14 +197,33 @@ impl<'a> Commands<'a> {
         }
     }
 
+    /// What a key that names `call` does here: runs it as a press would, says why it cannot
+    /// run, or nothing while it runs.
+    pub(crate) fn keyed(&self, call: &ViewCommandCall, scope: &Scope<'_>) -> Keyed {
+        match self.phase(call) {
+            Phase::Unavailable(why) => {
+                let tile = self.place.tile.clone();
+                Box::new(move |state: &mut State, _: &mut Tx| {
+                    state.views.refused(&tile, Some(why.clone()))
+                })
+            }
+            Phase::Busy => Box::new(|_: &mut State, _: &mut Tx| {}),
+            _ => {
+                let press = self.press(call, scope, None);
+                Box::new(move |state: &mut State, tx: &mut Tx| press(state, None, tx))
+            }
+        }
+    }
+
     /// Runs `call` from here, with `text` when the user typed it, once the user says yes if
-    /// the command asks first. `scope` fills the question; `back` is the control the keyboard
-    /// returns to after the question.
+    /// the command asks first. `scope` fills the question. `from` is the control pressed,
+    /// which the keyboard returns to after the question, and for an entry the field whose text
+    /// goes once the home takes the run.
     pub(crate) fn press(
         &self,
         call: &ViewCommandCall,
         scope: &Scope<'_>,
-        back: &str,
+        from: Option<&str>,
     ) -> impl Fn(&mut State, Option<String>, &mut Tx) + 'static {
         let run = ViewRunMessage {
             desktop_id: self.place.desktop.clone(),
@@ -141,7 +236,11 @@ impl<'a> Commands<'a> {
         let question = (self.own(&call.command))
             .and_then(|own| own.confirm.as_ref())
             .map(|confirm| scope.text(confirm));
-        let (place, yes, back) = (self.place.clone(), named(&call.command), back.to_owned());
+        let (place, yes, back) = (
+            self.place.clone(),
+            named(&call.command),
+            from.map(str::to_owned),
+        );
         move |state: &mut State, text: Option<String>, tx: &mut Tx| {
             let run = ViewRunMessage {
                 text,
@@ -157,8 +256,9 @@ impl<'a> Commands<'a> {
                         back: back.clone(),
                     });
                     state.views.revision += 1;
+                    tx.focus("view.confirm.yes".to_owned(), true);
                 }
-                None => send(state, &place, run, tx),
+                None => send(state, &place, (run, back.clone()), tx),
             }
         }
     }
@@ -175,9 +275,16 @@ pub(crate) fn named(command: &str) -> String {
         .collect()
 }
 
-/// Sends `run` to the home, which keeps how it goes on the tile.
-fn send(state: &mut State, place: &TileKey, run: ViewRunMessage, tx: &mut Tx) {
+/// Sends `run` to the home, which keeps how it goes on the tile. Once the home takes a run
+/// with typed text, the text leaves the entry `from`.
+fn send(
+    state: &mut State,
+    place: &TileKey,
+    (run, from): (ViewRunMessage, Option<String>),
+    tx: &mut Tx,
+) {
     let tile = place.tile.clone();
+    let typed = run.text.is_some().then_some(from).flatten();
     state.ask(
         move |request_id| ViewRunMessage {
             request_id,
@@ -192,6 +299,12 @@ fn send(state: &mut State, place: &TileKey, run: ViewRunMessage, tx: &mut Tx) {
                 ),
                 None => Some("the daemon did not answer, so the command may not have run".into()),
             };
+            if refused.is_none()
+                && let Some(field) = &typed
+                && state.views.entries.remove(field).is_some()
+            {
+                state.views.revision += 1;
+            }
             state.views.refused(&tile, refused);
         },
         tx,
@@ -202,13 +315,18 @@ fn send(state: &mut State, place: &TileKey, run: ViewRunMessage, tx: &mut Tx) {
 fn end_confirming(state: &mut State, tx: &mut Tx) -> Option<Confirming> {
     let confirming = state.views.confirming.take()?;
     state.views.revision += 1;
-    tx.focus(confirming.back.clone(), true);
+    if let Some(back) = &confirming.back {
+        tx.focus(back.clone(), true);
+    }
     Some(confirming)
 }
 
 fn confirm(state: &mut State, tx: &mut Tx) {
-    if let Some(Confirming { place, run, .. }) = end_confirming(state, tx) {
-        send(state, &place, run, tx);
+    if let Some(Confirming {
+        place, run, back, ..
+    }) = end_confirming(state, tx)
+    {
+        send(state, &place, (run, back), tx);
     }
 }
 

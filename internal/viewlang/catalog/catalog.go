@@ -152,7 +152,7 @@ var Parts = []Part{
 		itemsArg,
 		{Name: "foldable", Kind: FlagArg, Doc: "the heading above the list folds it"},
 		{Name: "count", Kind: FlagArg, Doc: "the heading above the list shows how many items it has"},
-	}, Body: SlotsBody, Slots: rowSlots, Keys: "j and k move, ↩ runs press", Reports: "the row's answers", Example: "list.md"},
+	}, Body: SlotsBody, Slots: rowSlots, Keys: "j and k move, ↩ runs press, and a row control's letter runs it on the highlighted row", Reports: "the row's answers", Example: "list.md"},
 	{Name: "table", Colons: 3, Summary: "One table line per item. The body is a markdown table whose one row is the template for each item.", Args: []Arg{itemsArg}, Body: TableBody, Keys: "j and k move", Example: "table.md"},
 	{Name: "chart", Colons: 3, Summary: "A line chart of the items.", Args: []Arg{
 		itemsArg,

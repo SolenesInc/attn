@@ -947,6 +947,7 @@ fn jobs_view(started: bool) -> ViewDocument {
                 "stop",
                 "stop: confirm=\"Stop {name}?\" scripts/stop.sh --job={id}",
             ),
+            own("sync", "sync: scripts/sync.sh"),
         ],
         ..ci_view(
             state,
@@ -970,15 +971,16 @@ fn show_ran(world: &mut World, view: ViewDocument, ran: Vec<ViewCommand>) {
 fn ran(command: &str, phase: &str, error: Option<&str>) -> ViewCommand {
     ViewCommand {
         command: command.into(),
-        part: 9,
+        part: 14,
         rows: Some(vec!["j2".into()]),
         phase: phase.into(),
         error: error.map(Into::into),
     }
 }
 
-const LINT_RERUN: &str = "tile.m.view.2.row.1.rerun";
-const LINT_STOP: &str = "tile.m.view.2.row.1.stop";
+const LINT_RERUN: &str = "tile.m.view.3.row.1.rerun";
+const LINT_STOP: &str = "tile.m.view.3.row.1.stop";
+const SYNC: &str = "tile.m.view.2.sync";
 
 fn click(world: &mut World, target: Target) {
     world.gesture(|app| app.click(target));
@@ -1016,7 +1018,7 @@ fn a_rows_control_runs_the_views_command_in_its_row_and_shows_busy_done_and_fail
             &runs[0]["rows"],
             &runs[0]["tile_id"]
         ),
-        (&json!("rerun"), &json!(9), &json!(["j2"]), &json!("m"))
+        (&json!("rerun"), &json!(14), &json!(["j2"]), &json!("m"))
     );
 
     show_ran(
@@ -1028,7 +1030,7 @@ fn a_rows_control_runs_the_views_command_in_its_row_and_shows_busy_done_and_fail
     assert_eq!(busy.name.as_deref(), Some("Rerun…"));
     assert!(busy.is("disabled"));
     assert!(
-        !control(&world, "tile.m.view.2.row.0.rerun").is("disabled"),
+        !control(&world, "tile.m.view.3.row.0.rerun").is("disabled"),
         "the run on lint made the control on build busy too"
     );
 
@@ -1110,12 +1112,17 @@ fn a_run_the_home_refuses_says_why_on_the_tile() {
 }
 
 #[test]
-fn an_entry_runs_its_command_with_the_text_typed_and_clears() {
+fn an_entry_keeps_its_text_until_the_home_takes_the_run() {
     let mut world = start();
-    world.daemon.on(
-        "view_run",
-        |r| json!({"event": "view_run_result", "request_id": r["request_id"], "success": true}),
-    );
+    let refuse = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let refusing = refuse.clone();
+    world.daemon.on("view_run", move |r| {
+        if refusing.load(std::sync::atomic::Ordering::SeqCst) {
+            json!({"event": "view_run_result", "request_id": r["request_id"], "success": false, "error": "note runs once you start the view's commands: press r on its tile"})
+        } else {
+            json!({"event": "view_run_result", "request_id": r["request_id"], "success": true})
+        }
+    });
     show(
         &mut world,
         ViewDocument {
@@ -1134,7 +1141,24 @@ fn an_entry_runs_its_command_with_the_text_typed_and_clears() {
     click(&mut world, Target::key("tile.m.view.1.text"));
     typed(&mut world, "ship it; rm -rf ~");
     press(&mut world, Key::Enter);
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("tile.m.view.1.text"))
+            .value
+            .as_deref(),
+        Some("ship it; rm -rf ~"),
+        "a refused run took the typed text"
+    );
+    assert!(
+        says(&world, "note runs once you start"),
+        "{:#?}",
+        shown(&world)
+    );
+    refuse.store(false, std::sync::atomic::Ordering::SeqCst);
+    press(&mut world, Key::Enter);
     let runs = world.daemon.sent_of("view_run");
+    let runs = &runs[1..];
     assert_eq!(runs.len(), 1, "{runs:?}");
     assert_eq!(
         (&runs[0]["command"], &runs[0]["part"], &runs[0]["text"]),
@@ -1148,5 +1172,95 @@ fn an_entry_runs_its_command_with_the_text_typed_and_clears() {
             .as_deref()
             .unwrap_or_default(),
         ""
+    );
+}
+
+fn runs_of(world: &World) -> Vec<(Value, Value, Value)> {
+    (world.daemon.sent_of("view_run").iter())
+        .map(|r| (r["command"].clone(), r["part"].clone(), r["rows"].clone()))
+        .collect()
+}
+
+#[test]
+fn keys_alone_run_a_rows_press_its_controls_and_the_views_own_controls() {
+    let mut world = start();
+    world.daemon.on(
+        "view_run",
+        |r| json!({"event": "view_run_result", "request_id": r["request_id"], "success": true}),
+    );
+    show(&mut world, jobs_view(true));
+    let shown: Vec<_> = [SYNC, LINT_RERUN, LINT_STOP]
+        .iter()
+        .map(|key| control(&world, key).shortcut)
+        .collect();
+    assert_eq!(
+        shown,
+        ["Y", "U", "T"].map(|s| Some(s.to_owned())),
+        "each control shows the letter that runs it"
+    );
+    typed(&mut world, "j");
+    typed(&mut world, "j");
+    assert_eq!(highlighted(&world).as_deref(), Some("tile.m.view.3.row.1"));
+
+    press(&mut world, Key::Enter);
+    typed(&mut world, "u");
+    assert_eq!(
+        runs_of(&world),
+        vec![
+            (json!("rerun"), json!(14), json!(["j2"])),
+            (json!("rerun"), json!(14), json!(["j2"])),
+        ]
+    );
+
+    typed(&mut world, "t");
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Stop lint?"))
+            .is_some(),
+        "t on lint asked nothing:\n{}",
+        world.screen()
+    );
+    assert_eq!(
+        runs_of(&world).len(),
+        2,
+        "stop ran before the user said yes"
+    );
+    assert!(
+        world
+            .screen()
+            .get(Target::key("view.confirm.yes"))
+            .is("focused"),
+        "the question does not hold the keyboard"
+    );
+    typed(&mut world, " ");
+    assert_eq!(
+        runs_of(&world).last(),
+        Some(&(json!("stop"), json!(14), json!(["j2"])))
+    );
+
+    typed(&mut world, "y");
+    assert_eq!(
+        runs_of(&world).last(),
+        Some(&(json!("sync"), json!(10), Value::Null))
+    );
+    typed(&mut world, "j");
+    assert_eq!(
+        highlighted(&world).as_deref(),
+        Some("tile.m.view.3.row.1"),
+        "the keys left the view after the question"
+    );
+}
+
+#[test]
+fn a_letter_for_a_command_the_user_has_not_started_says_why_and_runs_nothing() {
+    let mut world = start();
+    show(&mut world, jobs_view(false));
+    typed(&mut world, "y");
+    assert!(world.daemon.sent_of("view_run").is_empty());
+    assert!(
+        says(&world, "sync runs once you start the view's commands"),
+        "{:#?}",
+        shown(&world)
     );
 }

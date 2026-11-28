@@ -105,7 +105,7 @@ The commands of a view with a store, such as `press: toggle done` and `:::entry 
 - `toggle <field>`: switches the row's yes-no field.
 - `remove`: removes the row.
 
-A view defines its own commands in `:::commands`. Each is a program and its arguments, run on the view's machine in the view's folder and never through a shell. Fields such as `{id}` in its arguments take the values of the row whose control the user pressed, and each reaches the program as one argument, whatever characters it holds. `:::entry` gives it the typed text as its last argument. `confirm="Rerun {name}?"` before the program asks the user first. The command runs only once the user starts the view's commands with `r` on its tile, and its control shows while it runs, and whether it finished or failed. A view's own command cannot take the name of one of attn's commands or of a store's commands.
+A view defines its own commands in `:::commands`. Each is a program and its arguments, run on the view's machine in the view's folder and never through a shell. Fields such as `{id}` in its arguments take the values of the row whose control the user pressed, and each reaches the program as one argument, whatever characters it holds. `:::entry` gives it the typed text as its last argument. `confirm="Rerun {name}?"` before the program asks the user first. The command runs only once the user starts the view's commands with `r` on its tile, and its control shows while it runs, and whether it finished or failed. Each control outside a `::::one-by-one` shows the letter that runs it: the first letter of its command's name that the tile does not already use (j, k, r, e, s, f, x) and no command before it in the view took, so `rerun` is u. A row's control runs on the highlighted row, and a `:::controls` control from anywhere in the view. A view's own command cannot take the name of one of attn's commands or of a store's commands.
 
 ## markdown
 
@@ -348,7 +348,7 @@ Slots:
 - `group-aside`: text at the end of the heading above the list.
 - `group-controls`: the commands the heading above the list offers, separated by commas.
 
-Keys: j and k move, ↩ runs press.
+Keys: j and k move, ↩ runs press, and a row control's letter runs it on the highlighted row.
 
 Reports: the row's answers.
 
@@ -519,10 +519,16 @@ It goes at the top level of a view, not inside a four-colon part.
 :::commands
 rerun: scripts/rerun.sh {id}
 stop: confirm="Stop {name}?" scripts/stop.sh --job={id}
+sync: scripts/sync.sh
+:::
+
+:::controls
+sync
 :::
 
 :::list ci.jobs
 title: {name}
+press: rerun
 controls: rerun, stop
 :::
 ```

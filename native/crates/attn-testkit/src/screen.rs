@@ -62,6 +62,8 @@ pub struct Node {
     /// What assistive technology hears about the element's state: `focused`, `disabled`,
     /// `checked`, `selected` and the like.
     pub states: Vec<String>,
+    /// The key the element shows that presses it, as its keycap reads.
+    pub shortcut: Option<String>,
 }
 
 impl Node {
@@ -229,6 +231,7 @@ fn node(value: &Value) -> Node {
         name: field("name"),
         value: field("value"),
         description: field("description"),
+        shortcut: field("shortcut"),
         active_descendant: field("activeDescendant"),
         level: value.get("level").and_then(Value::as_u64),
         selection: value
