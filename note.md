@@ -1,0 +1,1 @@
+`attn seed plot -f <file>` and `attn automation run --input-file <file>` work again. Since afbb46e6b, the CLI parsed every JSON-valued flag as JSON, and that included the flags that name a file, so these commands refused their own path as "not JSON". The JSON catalog test now also passes a JSON object to `view data add/set --item`, and its stand-in daemon answers `view export`.
