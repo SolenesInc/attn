@@ -1,0 +1,3 @@
+With `attention_supervisor` on, the attention supervisor now asks before it opens a turn that someone other than the user can settle. An agent on a long background wait gets an inbox notice at 60 min and 4 h, and at 20 min when the wait looks stuck, naming the task and its age; its turn opens only if it makes no model request within 5 min, or keeps waiting after the last check. A delegate whose result goes to a live dispatcher has that dispatcher asked first. The supervised wait, the agent's background tasks and its run starter survive a daemon restart; a dispatcher's 5-min deadline does not.
+
+With the setting off, which stays the default, the daemon only logs the notice it would send.
