@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "View text drafts can be lost while the editor is focused",
+  "at": "2026-11-28T02:32:55.981Z",
+  "detail": "At a9c79387, typed view text remains in the focused editor until blur or Send. native/crates/attn-app/src/view/draw.rs:206 and view/answers.rs:183–207,219–233,274–280 trace the local state and flush paths. Abrupt app termination with focus still in the field loses unflushed text. Seed s-g4rn05 requires each answer saved as a draft when given and surviving app and daemon restarts. Persist text edits while focused and add an app-loss regression that never blurs the field before restart. Two reviewers confirmed the path in code. A fresh runtime reproduction was not completed.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/view/draw.rs",
+    "line": 206
+  },
+  "culprit": "39cbf5efe2bbe19ea6eb222ecb60f25c08b12c68"
+}
