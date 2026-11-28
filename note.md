@@ -1,0 +1,1 @@
+A view's `:::entry` no longer loses text typed after ↩: when the home takes the run, the field clears only if it still holds the text it sent, so later typing stays. Fixes bug 14f46a9 from eaabe6ae0; views stay behind `views_enabled`.
