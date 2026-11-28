@@ -42,12 +42,8 @@ type supervisedWait struct {
 	notice    attention.Checkpoint
 	noticedAt time.Time
 	silent    time.Time
-	answer    time.Time
+	answered  bool
 	deadline  stepclock.Timer
-}
-
-func (w *supervisedWait) answered() bool {
-	return !w.answer.IsZero()
 }
 
 func (w *supervisedWait) stopDeadline() {
@@ -65,6 +61,9 @@ func sessionAttention(entry attention.LogEntry, at time.Time) protocol.SessionAt
 }
 
 func (d *Daemon) actOnAttentionVerdict(verdict attention.LogEntry, facts attention.Facts) {
+	if facts.TurnOwed || facts.OpenTool != nil {
+		return
+	}
 	if verdict.Checkpoint.Elapsed() && !onlyTheUserCanAct(verdict) {
 		if verdict.Checkpoint != attention.CheckpointElapsed20m || verdict.Verdict == attention.Open {
 			d.checkOnWait(verdict, facts)
@@ -149,7 +148,7 @@ func (d *Daemon) checkOnWait(verdict attention.LogEntry, facts attention.Facts) 
 	answer := ""
 	if previous != nil {
 		wait.since = previous.since
-		if previous.answered() {
+		if previous.answered {
 			answer = answerTail(facts.LastMessage)
 		}
 	}
@@ -189,8 +188,8 @@ func (d *Daemon) resumeWait(session protocol.SessionID, view sessionmonitor.View
 	if wait == nil {
 		return
 	}
-	if request := view.LastModelRequestAt.V; !request.Equal(wait.silent) {
-		wait.answer = request
+	if !view.LastModelRequestAt.V.Equal(wait.silent) {
+		wait.answered = true
 		return
 	}
 	d.armWaitDeadlineLocked(session, wait, latest(wait.noticedAt.Add(attentionNoticeAnswerWindow), a.startedAt.Add(attentionNoticeHoldAtStart)).Sub(d.clock.Now()))
@@ -205,18 +204,18 @@ func (d *Daemon) observeWait(session protocol.SessionID, previous, view sessionm
 		return
 	}
 	moved := false
-	if request := view.LastModelRequestAt.V; !request.Equal(previous.LastModelRequestAt.V) {
-		if wait.answered() {
+	if !view.LastModelRequestAt.V.Equal(previous.LastModelRequestAt.V) {
+		if wait.answered {
 			moved = true
 		} else {
-			wait.answer = request
+			wait.answered = true
 			wait.stopDeadline()
 		}
 	}
 	resting := !sessionmonitor.RunsIn(view.State.V.State)
 	over := resting && !waitsOnBackground(view)
 	stopped := resting && view.State.V.Sequence != previous.State.V.Sequence
-	keptWaiting := !moved && !over && stopped && wait.answered() && wait.notice == attention.CheckpointElapsed4h
+	keptWaiting := !moved && !over && stopped && wait.answered && wait.notice == attention.CheckpointElapsed4h
 	a.mu.Unlock()
 	if (moved || over || keptWaiting) && d.endWait(session, wait) && keptWaiting {
 		d.raiseAttention(attention.LogEntry{At: d.clock.Now(), Session: session, Verdict: attention.Open, Decider: "rule:kept_waiting", Label: attention.LabelStuckWait,

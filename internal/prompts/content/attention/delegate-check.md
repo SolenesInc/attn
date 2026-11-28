@@ -4,7 +4,7 @@ attn's supervisor judged that your delegate {{delegate}} ({{session}}) {{verdict
 
 Its result goes to you, so attn asks you before it opens the delegate's turn to the user. Do one of these:
 
-- Nothing is left for the user: close the delegate with `attn agent close {{session}}`.
+- Nothing is left for the user: close the delegate with `attn agent close {{session}} -m "<why>"`.
 - The user must decide something: open an ask for them with `attn ask`.
 - It needs nothing from anyone now: leave it.
 

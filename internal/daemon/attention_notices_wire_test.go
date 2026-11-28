@@ -428,6 +428,41 @@ func TestADelegateWithNoLiveDispatcherGetsTheVerdictsActionAtOnce(t *testing.T) 
 	}
 }
 
+func TestADelegateWhoseTurnIsOwedSendsItsDispatcherNoNoticeWhileItWaits(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Claude)
+	w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
+		switch {
+		case strings.Contains(task.Prompt, supervisorQuestion):
+			task.Answer(stuckWaitAnswer)
+		case strings.Contains(task.Prompt, "Classify how this assistant message ends"):
+			task.Answer(`{"verdict":"DONE"}`)
+		default:
+			task.Answer("Migration")
+		}
+	})
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "queue_mode_enabled", "true")
+	setSetting(t, app, "attention_supervisor", "true")
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	delegated, err := cli.Delegate(delegateFrom("caller", cwd, "Migrate the first table", fakeagent.Claude))
+	if err != nil {
+		t.Fatal(err)
+	}
+	delegate := string(delegated.SessionID)
+	agent := w.Launched(delegate)
+	agent.Prompted()
+	working := testworld.AwaitSession(app, delegate, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.LaunchBackgroundShell("bdeploy", "Deploy staging", "./deploy.sh staging")
+	if owed := runEnds(w, app, agent, working, "Started the staging deploy; I'll report when it ends."); !protocol.Deref(owed.TurnOwed) {
+		t.Fatalf("the delegate's stop left %+v, want its turn owed to the user", owed)
+	}
+	w.awaitTimer(daemon.AttentionElapsedTimer)
+	w.advance(time.Hour + noticeAnswerTime)
+	if notices := supervisorNotices(t, cli, "caller"); len(notices) != 0 {
+		t.Errorf("an hour into the wait of a delegate the user already owes a turn, its dispatcher got the notices %q", notices)
+	}
+}
+
 func TestWithTheSupervisorOffADispatcherNoticeIsLoggedAndNotSent(t *testing.T) {
 	d := delegateStopsQuietly(t, false, "", openDelegateAnswer)
 	d.judged()
