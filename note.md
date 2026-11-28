@@ -1,0 +1,3 @@
+Child 3 of the attention judge (seed s-rm5ga2). With the experimental `attention_supervisor` setting on, an open verdict now opens the turn of an agent that stopped quietly: the home sends the agent's monitor a new `surface` command, which refuses while a turn is owed, while the agent is snoozed or once it no longer stops. `Session.attention` carries the verdict and its reason while that turn is owed, so the tile's chip from child 6 shows it, and `attn state explain` prints each agent's latest verdict.
+
+Trade-off: a daemon restart no longer re-judges a stop the supervisor already judged. Without that, a user's settle of a surfaced turn changed the facts key, and the restart reopened the turn they settled.
