@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "7d1fb5789dcfeb31b89d28cf983fb94d338fa354",
+  "head": "ff3dc34021f8682b05c2563f5fd9bbdd4ecf13b5",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 139.599,
+    "ranOn": "ff3dc34021f8682b05c2563f5fd9bbdd4ecf13b5"
+  },
+  "fixesBugs": [
+    "3d134bd"
+  ],
+  "noMediaReason": "CLI behavior only; proven by a stack test through the real CLI and daemon",
+  "recordings": []
+}
