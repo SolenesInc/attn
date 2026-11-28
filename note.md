@@ -1,0 +1,1 @@
+A kept view's store is now reached only through `attn view data`: `attn doc` refuses the `views/` namespaces as it refuses `core/garden`. Deleting a view removes its stores first, so a failed delete never leaves items for a view kept again under the same name, and a kept view's sidebar row says VIEW like attn's own views.

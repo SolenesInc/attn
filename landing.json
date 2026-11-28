@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "7bcfb5f8aa93e6e7a22a62e7acdf81b3d07a21f2",
+  "head": "fd2aeb1339f08334139cb0bf780d5ddcac13201d",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 154.838,
+    "ranOn": "fd2aeb1339f08334139cb0bf780d5ddcac13201d"
+  },
+  "noMediaReason": "the s-ytftfs media belongs to its own landing at 7bcfb5f8a; this landing's proof is wire tests and a CLI transcript",
+  "recordings": []
+}
