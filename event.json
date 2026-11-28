@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Confirmation cancellation now retains typed entry text",
+  "at": "2026-11-28T04:04:34.685Z",
+  "fixesBug": "73a643d"
+}
