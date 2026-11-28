@@ -1,0 +1,7 @@
+{
+  "kind": "finding",
+  "state": "fail",
+  "title": "P1: View command acceptance can clear text edited after submit",
+  "at": "2026-11-28T04:04:30.013Z",
+  "detail": "At e8e73b24, an entry remains editable while the home handles its submitted command. If the user edits before the home acknowledges the start, the success callback clears the current entry and deletes the subsequent edits. native/crates/attn-app/src/view/draw.rs:795–815 snapshots the submitted text and leaves the editor editable; view/commands.rs:302 clears the whole field. Preserve edits made after submission while retaining normal clear on acceptance for an unchanged entry. Two reviewers confirmed by source trace; focused wire reproduction is pending.\n"
+}
