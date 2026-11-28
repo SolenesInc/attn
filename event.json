@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Restart drops pending supervisor notices to dispatchers",
+  "at": "2026-11-28T03:03:33.115Z",
+  "detail": "At 94cddbae, restarting the daemon after a supervisor notice to a live dispatcher but before its five-minute deadline drops the pending notice from the in-memory dispatcherAsks timer (internal/daemon/attention_actions.go:258). Log recovery restores only self notices (internal/daemon/attention_log.go:84), and startup skips the already judged stop. With no new dispatcher model request, the delegate can stay quietly stopped indefinitely. Plot s-4kr3bn D12 requires the delegate's turn to open. Recover the pending notice and request baseline across restart, respecting resolution and closure. Two reviewers confirmed by source inspection; the existing deadline test does not restart and no fresh runtime reproduction was completed.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "internal/daemon/attention_actions.go",
+    "line": 258
+  },
+  "culprit": "41010903d7ce67726a2416e84a97fc29f40567f7"
+}
