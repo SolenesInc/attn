@@ -17,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/sessionref"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/shortid"
+	"github.com/victorarias/attn/internal/whatsnew"
 )
 
 type named[T any] struct {
@@ -72,6 +73,8 @@ func writeConstants(out *strings.Builder) {
 		{"SERVER_CALLER_PREFIX", harness.ServerCallerPrefix},
 		{"ID_ALPHABET", shortid.Alphabet},
 		{"SESSION_SHORT_ID_PREFIX", sessionref.Prefix},
+		{"WHATS_NEW_RELEASE", whatsnew.Release},
+		{"WHATS_NEW_BANNER", whatsnew.Banner},
 		{"CREW_KEY_REF_PREFIX", crew.KeyRefPrefix},
 		{"AGENT_MSG_STATUS_QUEUED", string(protocol.AgentMsgStatusQueued)},
 		{"LAUNCH_DESKTOP_KIND_AUTOMATION", string(protocol.LaunchDesktopKindAutomation)},

@@ -44,7 +44,7 @@ func (d *Daemon) runView(profileID string, msg *protocol.ViewRunMessage) error {
 	if err != nil {
 		return err
 	}
-	view := d.heldView(tile.document)
+	view := d.heldView(tile.document, profileID)
 	if view == nil {
 		return fmt.Errorf("%s is not shown as a view", tile.document.path)
 	}

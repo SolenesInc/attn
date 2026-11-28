@@ -236,6 +236,7 @@ type Daemon struct {
 	inboxUnsubscribe         func()
 	monitorPolicyUnsubscribe func()
 	askTerminalsUnsubscribe  func()
+	dataSetsUnsubscribe      func()
 	askTerminalsUnsettled    atomic.Bool
 	crewStartMu              sync.Mutex
 	crewExitedMu             sync.Mutex
@@ -290,6 +291,7 @@ type Daemon struct {
 	desktopTiles   desktopTileDelivery
 	tileDocuments  tileDocumentWatch
 	viewRuns       viewRuns
+	dataSets       dataSets
 	codeNav        *codenav.Manager
 	codeNavOutside codeNavOutside
 	codeNavSetups  codeNavSetups
@@ -531,6 +533,7 @@ func New(socketPath string) *Daemon {
 		desktopTiles:        newDesktopTileDelivery(),
 		tileDocuments:       newTileDocumentWatch(),
 		viewRuns:            newViewRuns(),
+		dataSets:            newDataSets(),
 		logger:              logger,
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
@@ -721,6 +724,7 @@ func (d *Daemon) Start() error {
 
 	d.life.Go("runDesktopTileContent", func() { d.runDesktopTileContent(d.life.Done()) })
 	d.life.Go("runTileDocumentWatcher", func() { d.runTileDocumentWatcher(d.life.Done()) })
+	d.life.Go("runDataSets", func() { d.runDataSets(d.life.Done()) })
 	d.life.Go("tileDocumentsHere", func() { d.keepTileDocumentsWatched(d.life.Context(), "", nil) })
 
 	if hooks, ok := d.ptyBackend.(ptybackend.LifecycleHooks); ok {

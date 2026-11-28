@@ -188,15 +188,20 @@ func (d *Daemon) viewAnswersChanged(document tileDocument) {
 	d.nudgeDesktopTileContent()
 }
 
-// heldView is the view the home last read for document, if any tile shows it.
-func (d *Daemon) heldView(document tileDocument) *protocol.ViewDocument {
+// heldView is the view the home last read for document, if any tile shows
+// it, with attn's data sets as profileID sees them, as its tiles show it.
+func (d *Daemon) heldView(document tileDocument, profileID string) *protocol.ViewDocument {
 	delivery := &d.desktopTiles
 	delivery.mu.Lock()
-	defer delivery.mu.Unlock()
+	var view *protocol.ViewDocument
 	if held := delivery.documents[document]; held != nil {
-		return held.view
+		view = held.view
 	}
-	return nil
+	delivery.mu.Unlock()
+	if filled, _, shaped := d.withDataSets(view, profileID); shaped {
+		return filled
+	}
+	return view
 }
 
 func (d *Daemon) handleViewSend(client *wsClient, msg *protocol.ViewSendMessage) {
@@ -217,7 +222,7 @@ func (d *Daemon) sendView(profileID string, msg *protocol.ViewSendMessage) (prot
 	if err != nil {
 		return protocol.ViewSent{}, err
 	}
-	view := d.heldView(tile.document)
+	view := d.heldView(tile.document, profileID)
 	if view == nil {
 		return protocol.ViewSent{}, fmt.Errorf("%s is not shown as a view, so there is nothing to send", tile.document.path)
 	}

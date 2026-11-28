@@ -15,8 +15,7 @@ use crate::shell::Layer;
 mod scenes;
 use scenes::Scene;
 
-/// The story this release tells. A new story gets a new id, so everyone sees it once.
-pub const RELEASE: &str = "new-look-2026-11";
+pub use attn_protocol::go_values::WHATS_NEW_RELEASE as RELEASE;
 /// The release whose tour the user finished or closed.
 pub const SEEN_PREF: &str = "attn.whats_new.last_seen";
 /// The release whose Home banner the user dismissed.
@@ -220,7 +219,7 @@ pub(crate) fn banner(state: &State, t: &Tokens) -> Option<Block> {
     Some(
         Notice::accent(
             "home.intro-banner",
-            "New in attn: a new look, and how to switch back.",
+            attn_protocol::go_values::WHATS_NEW_BANNER,
         )
         .action(
             Inline::tight()

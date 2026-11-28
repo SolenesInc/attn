@@ -454,6 +454,7 @@ func (d *Daemon) ensureEventBus() {
 	d.subscribeInboxFacts()
 	d.subscribeMonitorPolicyFacts()
 	d.subscribeAskTerminalSettling()
+	d.subscribeDataSetFacts()
 	d.subscribeAttentionFacts()
 	d.subscribeDocumentFacts()
 	d.subscribeSessionPullRequestFacts()
@@ -482,6 +483,7 @@ func (d *Daemon) stopEventBus() {
 	}
 	d.unsubscribeMonitorPolicyFacts()
 	d.unsubscribeAskTerminalSettling()
+	d.unsubscribeDataSetFacts()
 	d.unsubscribeAttentionFacts()
 	d.unsubscribeDocumentFacts()
 	d.unsubscribeSessionPullRequestFacts()

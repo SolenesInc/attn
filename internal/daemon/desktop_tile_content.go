@@ -47,6 +47,8 @@ type heldTileDocument struct {
 type deliveredTileFile struct {
 	document tileDocument
 	serial   int
+	// The newest revision of the data sets its view shows.
+	dataSets int
 }
 
 type tileWatcher struct {
@@ -189,10 +191,12 @@ func (d *Daemon) deliverDesktopTileContent() {
 	defer delivery.mu.Unlock()
 	connected := map[*wsClient]bool{}
 	shown := map[tileDocument][]string{}
+	wanted := map[dataSetKey]bool{}
 	for _, client := range clients {
 		connected[client] = true
-		d.deliverToClient(client, shown)
+		d.deliverToClient(client, shown, wanted)
 	}
+	d.dataSets.want(wanted)
 	for client := range delivery.delivered {
 		if !connected[client] {
 			delete(delivery.delivered, client)
@@ -213,7 +217,7 @@ func (d *Daemon) deliverDesktopTileContent() {
 	}
 }
 
-func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument][]string) {
+func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument][]string, wanted map[dataSetKey]bool) {
 	delivery := &d.desktopTiles
 	client.arrangementMu.Lock()
 	defer client.arrangementMu.Unlock()
@@ -229,11 +233,20 @@ func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument][]stri
 		if held.serial == 0 {
 			continue
 		}
-		want := deliveredTileFile{document: tile.document, serial: held.serial}
+		profileID := client.selectedProfile()
+		for _, name := range viewDataSets(held.view) {
+			wanted[dataSetKey{profileID: profileID, name: name}] = true
+		}
+		view, revision, shaped := d.withDataSets(held.view, profileID)
+		if !shaped {
+			continue
+		}
+		want := deliveredTileFile{document: tile.document, serial: held.serial, dataSets: revision}
 		if delivered[tile.key] == want {
 			continue
 		}
 		message := desktopTileContentMessage(tile.key, tile.document, held)
+		message.View = view
 		message.Review = d.withCodeNavSetups(tile.document.host, message.Review)
 		if !d.sendToClient(client, message) {
 			continue
