@@ -2,7 +2,7 @@
 //! the view's rows, foldable headings, questions and `one-by-one` parts; ↩ folds a heading,
 //! and keeps and goes on in a `one-by-one`, where s skips and ← and → step back and on. On a
 //! question, or in a `one-by-one` item that holds one, digits pick a choice and e writes the
-//! text; ⌘↩ sends the view's answers.
+//! text; ⌘↩ sends the view's answers; r starts the view's commands while they wait for the user.
 
 use attn_protocol::ViewPart;
 use rune::{Key, KeyEvent, Tx};
@@ -322,7 +322,12 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         _ => "",
     };
     let digit = typed.parse::<usize>().ok().filter(|d| (1..=9).contains(d));
+    let waits = super::start::waits(view);
     match (&ev.key, typed, here) {
+        (_, "r", _) if waits => {
+            super::start::start(state, &place.desktop, &tile);
+            true
+        }
         (Key::Down, _, _) | (_, "j", _) => {
             highlight(state, &tile, &found, at.map_or(0, |at| at + 1), tx)
         }

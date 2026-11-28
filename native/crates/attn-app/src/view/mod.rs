@@ -4,6 +4,7 @@
 mod answers;
 mod draw;
 mod keys;
+mod start;
 mod values;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -314,6 +315,7 @@ pub(crate) fn body(
         *t,
     );
     let pictures = pictures.of(host);
+    let machine = machines.name(host);
     let drawn = memo(format!("{scroll_key}.view"), version, || {
         let data = Data::of(view);
         let doors = Doors {
@@ -340,6 +342,11 @@ pub(crate) fn body(
             .map(|why| draw::notice(&format!("tile.{tile}.view.refused"), why, t));
         let sending = (keys::asks(&view.parts) && session.is_some())
             .then(|| draw::sending(&format!("tile.{tile}.view.send"), send_key, &doors));
+        let waiting = start::notice(view, (&content.message.desktop_id, tile), &machine, t);
+        let stopped = start::stopped(view);
+        let drawn = parts(&view.parts, &doors)
+            .into_iter()
+            .map(|part| if stopped { part.faded() } else { part });
         col()
             .key(format!("tile.{tile}.view"))
             .role("group")
@@ -347,8 +354,9 @@ pub(crate) fn body(
             .w_full()
             .child(
                 Reader::new()
+                    .push_all(waiting)
                     .push_all(problems)
-                    .push_all(parts(&view.parts, &doors))
+                    .push_all(drawn)
                     .push_all(refused)
                     .push_all(sending)
                     .bare(t)

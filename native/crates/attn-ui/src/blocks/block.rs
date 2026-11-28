@@ -54,6 +54,14 @@ impl Block {
         }
     }
 
+    /// The block drawn faded, for what it shows is out of date: still readable, no longer current.
+    pub fn faded(self) -> Block {
+        Block {
+            el: self.el.opacity(crate::system::disabled::STRENGTH),
+            ..self
+        }
+    }
+
     /// Names the block as tests and assistive tools find it.
     pub fn key(self, key: impl Into<String>) -> Block {
         Block::new(self.kind, self.el.key(key.into()))

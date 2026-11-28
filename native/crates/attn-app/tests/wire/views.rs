@@ -4,7 +4,8 @@ use std::time::Duration;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     Desktop, DesktopPane, DesktopTileContentMessage, InitialStateMessage, Profile, Session,
-    ViewAnswer, ViewAnswers, ViewDocument, ViewProblem, ViewSent, ViewSource, ViewValues,
+    ViewAnswer, ViewAnswers, ViewDocument, ViewProblem, ViewRunCommand, ViewSent, ViewSource,
+    ViewValues,
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, WALL_START_MS, World, key_event};
@@ -432,18 +433,10 @@ fn parts_attn_cannot_run_yet_say_so_in_their_place() {
     let view = ViewDocument {
         language: 1,
         parts,
-        sources: vec![ViewSource {
-            id: "scripts/main-status.sh".into(),
-            kind: "run".into(),
-            data: true,
-            state: "unavailable".into(),
-            ..ViewSource::default()
-        }],
         ..ViewDocument::default()
     };
     show(&mut world, view);
     for said in [
-        "run=\"scripts/main-status.sh\" is not available yet",
         "Running a view's own commands is not available yet",
         "Answering \"Which screenshot shows the problem?\" with a file in a view is not available yet",
     ] {
@@ -645,4 +638,83 @@ fn a_view_no_agent_opened_has_no_send() {
     );
     press_action(&mut world, &Action::MarkdownSendAnnotations);
     assert!(world.daemon.sent_of("view_send").is_empty());
+}
+
+/// The CI view of the `commands` fixture, whose one command stands as `state`, with the values
+/// of its last run when it has them.
+fn ci_view(state: &str, source: &str, values: Option<Value>) -> ViewDocument {
+    ViewDocument {
+        language: 1,
+        parts: parts_of(COMMANDS),
+        sources: vec![ViewSource {
+            id: "scripts/main-status.sh".into(),
+            kind: "run".into(),
+            data: true,
+            state: source.into(),
+            ..ViewSource::default()
+        }],
+        values: values
+            .map(|values| ViewValues {
+                source: "scripts/main-status.sh".into(),
+                values,
+            })
+            .into_iter()
+            .collect(),
+        commands: vec![ViewRunCommand {
+            line: "scripts/main-status.sh".into(),
+            every: Some("30s".into()),
+            script_sha256: "5e1f".into(),
+            state: state.into(),
+            change: (state == "changed").then(|| "changed since you started it".into()),
+        }],
+        ..ViewDocument::default()
+    }
+}
+
+#[test]
+fn a_view_names_its_command_runs_nothing_until_r_and_says_when_its_script_changed() {
+    let mut world = start();
+    show(&mut world, ci_view("waiting", "waiting", None));
+    for said in [
+        "This view runs a command on This Mac. It runs once you start it.",
+        "scripts/main-status.sh every 30s",
+    ] {
+        assert!(
+            says(&world, said),
+            "{said:?} is not said in {:#?}",
+            shown(&world)
+        );
+    }
+    assert!(world.daemon.sent_of("view_start").is_empty());
+
+    typed(&mut world, "r");
+    let started = world.daemon.sent_of("view_start");
+    assert_eq!(started.len(), 1, "{started:?}");
+    assert_eq!(
+        (&started[0]["desktop_id"], &started[0]["tile_id"]),
+        (&json!(DESKTOP), &json!("m"))
+    );
+
+    let jobs = json!({"ci": {"jobs": [{"name": "build"}, {"name": "lint"}]}});
+    show(&mut world, ci_view("started", "ok", Some(jobs.clone())));
+    assert!(says(&world, "lint"));
+    assert!(!says(&world, "runs once you start it"));
+    typed(&mut world, "r");
+    assert_eq!(world.daemon.sent_of("view_start").len(), 1);
+
+    show(&mut world, ci_view("changed", "out_of_date", Some(jobs)));
+    for said in [
+        "attn stopped running a command that changed. It runs again once you start it.",
+        "scripts/main-status.sh changed since you started it",
+        "lint",
+    ] {
+        assert!(
+            says(&world, said),
+            "{said:?} is not said in {:#?}",
+            shown(&world)
+        );
+    }
+    typed(&mut world, "r");
+    assert_eq!(world.daemon.sent_of("view_start").len(), 2);
+    assert!(world.runtime_is_at_rest());
 }
