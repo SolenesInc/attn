@@ -1,0 +1,3 @@
+Kept views: with `views_enabled` on, an agent or the user can keep a view folder under a name (`attn view keep`, or `view_keep` in `attn_do`), then export, edit, restore, fork, show, hide, list, read and delete it. The home's database holds every version and the files the view names, up to 4 MiB, so a home move takes them along. The current version is written into the data dir of the machine the view was kept from, and a `{"view": name}` tile reads it from there.
+
+An edit has to come from an export of the newest version, and a view with problems is refused with each problem's line. attn's own three views can be shown and hidden but not yet edited; that comes with the built-in overrides child.
