@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Canceling a view command clears its typed entry",
+  "at": "2026-11-28T03:33:35.050Z",
+  "detail": "At 2d6d4637, typing into a view entry with a confirm command, pressing Enter, and selecting Cancel clears the text. The submit path removes the text before opening the dialog (native/crates/attn-app/src/view/draw.rs:794), and cancellation discards the pending run (view/commands.rs:202–216). The user must retype even though the command was canceled. Preserve the entry draft across cancellation and verify the entry and confirmation paths together with a benign input. Two readers confirmed the code trace. No fresh live reproduction was completed.\n",
+  "severity": "p1",
+  "source": "review",
+  "location": {
+    "path": "native/crates/attn-app/src/view/draw.rs",
+    "line": 794
+  },
+  "culprit": "8583bfe2f8c5622c64727fc6bb1e4771cd6f0522"
+}
