@@ -1,0 +1,7 @@
+{
+  "kind": "repair",
+  "state": "pass",
+  "title": "Fixed: CLI parsed file-path flags (seed plot -f, automation run --input-file) as JSON",
+  "at": "2026-11-28T06:12:02.347Z",
+  "fixesBug": "471cd96f71910523d44c8a4e8b545dbc660a2374"
+}
