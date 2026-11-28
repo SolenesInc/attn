@@ -197,8 +197,11 @@ attention queue           agents in order of the attention they are owed
    ├─ checkpoint (0..n)     a moment the supervisor judges one agent
    ├─ facts (1 per checkpoint)  what attn knows of the agent at that moment:
    │                        state, waits, wakes, delegates, seeds and PR watches
-   └─ verdict (1 per checkpoint)  open, quiet or finished, and the decider
-                            (a rule or a model) that gave it
+   ├─ verdict (1 per checkpoint)  open, quiet or finished, and the decider
+   │                        (a rule or a model) that gave it
+   └─ finished mark (at most 1 per agent)  the supervisor's mark that an agent
+                            has nothing left to do; like a "done" label. The
+                            user's settle then closes the agent
 run                       one stretch of agent work, from the moment the
                           agent goes working to its stop; an approval wait
                           does not end it
