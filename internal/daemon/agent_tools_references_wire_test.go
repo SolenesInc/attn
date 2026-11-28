@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -76,6 +77,9 @@ func shownArgs(text string) (args []shownArg, partial, closed bool) {
 }
 
 func typeOf(written string) string {
+	if len(written) > 1 && strings.HasPrefix(written, "'") && strings.HasSuffix(written, "'") {
+		return "string"
+	}
 	var value any
 	if json.Unmarshal([]byte(written), &value) != nil {
 		switch {
@@ -104,7 +108,7 @@ type toolArguments struct {
 	Required   []string
 }
 
-func commandArguments(t *testing.T, offered offeredTools) map[string]toolArguments {
+func callArguments(t *testing.T, agent agentToolsCaller, offered offeredTools) map[string]toolArguments {
 	t.Helper()
 	data, err := os.ReadFile("agent_tools_generated.json")
 	if err != nil {
@@ -124,6 +128,25 @@ func commandArguments(t *testing.T, offered offeredTools) map[string]toolArgumen
 		if offered[tool.Name] {
 			arguments[tool.Name] = tool.InputSchema
 		}
+	}
+	connected, err := agent.connect(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	served, err := connected.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range served.Tools {
+		var schema toolArguments
+		data, err := json.Marshal(tool.InputSchema)
+		if err == nil {
+			err = json.Unmarshal(data, &schema)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		arguments[tool.Name] = schema
 	}
 	return arguments
 }
@@ -203,7 +226,7 @@ func TestAReferenceReadThroughAToolTeachesTheToolsAndReadFromTheCLIKeepsItsText(
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(session))}
 	tools := listOfferedTools(t, agent)
-	arguments := commandArguments(t, tools)
+	arguments := callArguments(t, agent, tools)
 	calls := 0
 
 	read := func(tool, command string, args map[string]any, want string) string {
@@ -290,7 +313,7 @@ func TestALaunchWithToolsWritesEachCommandAsACallAScriptCanMake(t *testing.T) {
 	plain := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(plain))}
 	tools := listOfferedTools(t, agent)
-	arguments := commandArguments(t, tools)
+	arguments := callArguments(t, agent, tools)
 	delegated := agent.mustCall(t, "delegate", map[string]any{"brief": "Fix the parser.", "cwd": w.Path("shop"), "model": "default"})
 	var started protocol.DelegationOperation
 	structuredAs(t, delegated, &started)

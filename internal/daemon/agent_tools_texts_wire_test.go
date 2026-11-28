@@ -25,7 +25,7 @@ func TestEveryTextAttnTypesToASessionWithToolsWritesItsCommandsAsCalls(t *testin
 	plain := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := agentToolsCaller{w: w, bearer: terminalCredential(t, w, app.Terminal(plain))}
 	tools := listOfferedTools(t, agent)
-	arguments := commandArguments(t, tools)
+	arguments := callArguments(t, agent, tools)
 
 	var planted struct{ ID string }
 	structuredAs(t, agent.mustCall(t, "seed_plant", map[string]any{"title": "Fix the parser", "body": "Make the parser accept a trailing comma.", "checks": []string{"The parser accepts [1, 2,]."}}), &planted)
@@ -93,7 +93,7 @@ func TestTheRecipientsHarnessDecidesWhetherAGardenBellNamesACallOrACommand(t *te
 		gardenNudgeNote(t, cli, "worker", seed, "please look", true)
 		w.advance(0)
 
-		if got := watcher.promptsContaining("Read them with `agent_inbox()` in `attn_record`."); got != 1 {
+		if got := watcher.promptsContaining("Read them with `attn_record({script: 'agent_inbox()'})`."); got != 1 {
 			t.Errorf("the Claude watcher with tools was rung with %q; want the doorbell that names agent_inbox()", watcher.prompts())
 		}
 		items := readInbox(t, cli, watcher.id, 0).Items
@@ -363,7 +363,7 @@ func TestAPeerTurnsReplyLineNamesACallOnlyForASessionWithTools(t *testing.T) {
 				}
 				want := "reply: attn agent msg "
 				if tools {
-					want = "reply: agent_msg({target: "
+					want = "reply: attn_do({script: 'agent_msg({target: "
 				}
 				if len(typed) != 1 || !strings.Contains(typed[0], "New code logs through slog.") || !strings.Contains(typed[0], want) {
 					t.Fatalf("the %s reached the Claude session as %q, want its reply line to read %q", turn, typed, want)

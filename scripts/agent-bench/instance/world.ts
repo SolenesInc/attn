@@ -453,6 +453,18 @@ export const claudeRequests = (record: any[], from: number) =>
       .map(({ message: { id, usage: u } }) => ({ id, tokens: u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens })),
   )
 
+/** The calls of attn's tools that Claude Code refused to send because they pass an argument the tool does not declare.
+ * They reached no attn, so the daemon's log never sees them. The record repeats a code-mode script's refusal in the
+ * results of the script and of the next Poll, so only the result of the tool's own call counts. */
+export function claudeNotSent(record: any[], from: number): number {
+  const lines = record.filter((l) => !l.isSidechain && Date.parse(l.timestamp) >= from && Array.isArray(l.message?.content))
+  const attn = new Set(lines.filter((l) => l.type === "assistant").flatMap((l) => l.message.content).filter((c: any) => c.type === "tool_use" && TOOL_NAME.test(c.name)).map((c: any) => c.id))
+  return lines
+    .filter((l) => l.type === "user")
+    .flatMap((l) => l.message.content)
+    .filter((c: any) => c.type === "tool_result" && attn.has(c.tool_use_id) && /Not sent: \w+ does not declare/.test(JSON.stringify(c.content))).length
+}
+
 /** Codex's auto-review and subagents run in threads of their own, whose record names a parent. */
 export function codexRequests(record: any[], from: number) {
   const threads = new Set(record.filter((l) => l.type === "session_meta" && !l.payload.parent_thread_id).map((l) => l.payload.id))
@@ -479,7 +491,7 @@ export type Metrics = {
   referenceReads: number
 }
 
-export function metrics(events: any[], calls: Call[], blocked = 0): Metrics {
+export function metrics(events: any[], calls: Call[], blocked = 0, notSent = 0): Metrics {
   let turns = 0
   let inAssistant = false
   let searches = 0
@@ -499,7 +511,7 @@ export function metrics(events: any[], calls: Call[], blocked = 0): Metrics {
     cliFailures: cli.filter((c) => c.refused !== undefined).length,
     sandboxBlocked: blocked,
     harnessDenied: deniedCalls(events),
-    usageRefusals: [...tool, ...cli].filter(isUsageRefusal).length,
+    usageRefusals: [...tool, ...cli].filter(isUsageRefusal).length + notSent,
     searches,
     cliHelpReads: calls.filter(isHelp).length,
     referenceReads: calls.filter((c) => !isHelp(c) && isCommand(c, ["skill", "guide"])).length,

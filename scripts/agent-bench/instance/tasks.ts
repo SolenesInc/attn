@@ -1,7 +1,7 @@
 import { cpSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { offers, openAsks, recommends } from "./asks.ts"
-import { type Call, type Check, isCommand, isUsageRefusal, STAYS, type Task, type World } from "./world.ts"
+import { type Call, type Check, isCommand, isUsageRefusal, reached, STAYS, type Task, type World } from "./world.ts"
 
 const verdict = (problems: string[], ok: string): Check =>
   problems.length === 0 ? { pass: true, why: ok } : { pass: false, why: problems.join("; ") }
@@ -594,7 +594,61 @@ const findExisting: Task = {
 
 export const HARDER_TASKS: Task[] = [seedLifecycle, plotOrder, openAskRefusal, codingTests]
 
-export const UNGROUPED_TASKS: Task[] = [askStillMatters, msgDelegateStalled, findExisting]
+
+const RUNBOOK_CLI = `# Test triage runbook
+
+1. Count the FAIL lines in results.txt, and note which tests they are.
+2. Record the count and the test names on your seed: \`attn seed note <seed> -m "<count> failing: <names>"\`.
+3. Set the seed's pulse: \`attn seed pulse <seed> -m "Triaged: <count> failing"\`.
+4. Report check C1 with results.txt as its evidence: \`attn seed check report <seed> C1 -m "<summary>" --evidence results.txt\`.
+5. When you are done, harvest your seed and close yourself in one shell command: \`attn seed harvest <seed> -m "<summary>" && attn agent close --self -m "<what you settled>"\`.
+`
+const RESULTS = "PASS TestLogin\nFAIL TestUploadRetry\nPASS TestLogout\nFAIL TestQuotaExceeded\nFAIL TestTokenRefresh\nPASS TestSearch\n"
+
+const PROMPTS = join(import.meta.dir, "../../../internal/prompts/content/delegation")
+const contract = (seed: string) =>
+  readFileSync(join(PROMPTS, "seed-tools.md"), "utf8")
+    .replaceAll("{{seed_title}}", "Triage the failing tests")
+    .replaceAll("{{seed_id}}", seed)
+    .replaceAll("{{completion}}", readFileSync(join(PROMPTS, "seed-checks-tools.md"), "utf8").trim().replaceAll("{{check_ids}}", "C1"))
+    .trim()
+
+const delegatedRunbook: Task = {
+  id: "delegated-runbook",
+  title: "A delegate follows a runbook written as CLI lines",
+  settings: { garden_v2_enabled: "true" },
+  setup: (w) => {
+    const seed = plant(w, "Triage the failing tests", "Follow RUNBOOK.md for results.txt.", ["--check", "The failing tests are counted and named on the seed"])
+    w.attn(["seed", "tend", seed], { session: w.session })
+    w.sh("cat > RUNBOOK.md", RUNBOOK_CLI)
+    w.sh("cat > results.txt", RESULTS)
+    w.state.seed = seed
+    return [
+      "You are working in an attn delegation. Follow the task brief and the task's authorization.",
+      "",
+      "---",
+      "",
+      "Read RUNBOOK.md in your working directory and follow it.",
+      "",
+      "---",
+      "",
+      contract(seed),
+    ].join("\n")
+  },
+  check: (w, calls, ended) => {
+    const seed = w.state.seed as string
+    const s = show(w, seed).seed
+    const problems: string[] = []
+    if (!notesBy(w, seed, w.session).some((n) => /\b3\b|three/i.test(n))) problems.push("no note gives the count, 3")
+    if (!reached(calls, "seed pulse")) problems.push("never set the pulse")
+    if (s.checks[0]?.state !== "reported") problems.push(`C1 is ${s.checks[0]?.state}, not reported`)
+    if (s.status !== "harvested") problems.push(`the seed is ${s.status}, not harvested`)
+    if (ended !== "closed itself") problems.push("the session did not close itself")
+    return verdict(problems, "noted, pulsed, reported, harvested and closed")
+  },
+}
+
+export const UNGROUPED_TASKS: Task[] = [askStillMatters, msgDelegateStalled, findExisting, delegatedRunbook]
 
 export const TASKS: Task[] = [progress, plotNotes, ask, msgDelegate, standby, coding, fail]
 

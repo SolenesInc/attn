@@ -87,7 +87,7 @@ var (
 	})
 	AgentToolsEnabled = feature("agent_tools_enabled", "Serve attn's commands to agents as MCP tools: true or false. Experimental; off by default.", Info{
 		Name:    "Agent tools",
-		Summary: "Agents call attn through MCP tools instead of the attn CLI. Codex keeps the CLI.",
+		Summary: "Agents call attn through MCP tools instead of the attn CLI.",
 		Group:   Agents,
 		Applies: NewAgents,
 		Stage:   Experimental,

@@ -14,7 +14,7 @@ server:
   name: attn
   description: attn's commands to track, report or hand off work, and to reach the user and other agents.
   intro: |
-    attn runs the commands below. Call them as functions in a script, and pick the script's tool by one question: does a command in it act? If none acts, because each only reads or records your work, call `attn_record`, which needs no permission. If one acts, such as `seed_harvest`, `agent_msg` or `delegate`, call `attn_do`. `ask` and `skill` are also tools of their own. Find a command by the words below. Call a command whose signature `attn_record` or `attn_do` shows. Before you first call any other, read its row's reference, named in parentheses, with `skill({reference: "…"})`, or its rules with `skill({command: "…"})`. For `guide X`, call `guide({topic: "X"})`.
+    attn runs the commands below. Call them as functions in a script, and pick the script's tool by one question: does a command in it act? If none acts, because each only reads or records your work, call `attn_record`, which needs no permission. If one acts, such as `seed_harvest`, `agent_msg` or `delegate`, call `attn_do`. Each takes one argument, `script`: the script's text. `ask` and `skill` are also tools of their own. Find a command by the words below. Call a command whose signature `attn_record` or `attn_do` shows. Before you first call any other, read its row's reference, named in parentheses, with `skill({reference: "…"})`, or its rules with `skill({command: "…"})`. For `guide X`, call `guide({topic: "X"})`.
   record:
     title: Read and record with attn commands
     script: the script, in JavaScript

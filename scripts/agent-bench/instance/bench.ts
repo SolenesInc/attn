@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path"
 import { ASK_TASKS, OUTPOST_ASK_TASKS } from "./asks.ts"
 import { GRID_PROBES, PROBES } from "./probes.ts"
 import { HARDER_TASKS, SCRIPT_TASKS, UNGROUPED_TASKS, TASKS } from "./tasks.ts"
-import { attnCalls, blockedRuns, type Call, type Check, claudeRequests, cliRuns, codexRequests, codexRuns, isCommand, metrics, type Metrics, type Records, type Requests, retryWaitMs, run, shellRuns, takesProfile, type Task, toolOutcomes, unrecorded, type World } from "./world.ts"
+import { attnCalls, blockedRuns, type Call, type Check, claudeNotSent, claudeRequests, cliRuns, codexRequests, codexRuns, isCommand, metrics, type Metrics, type Records, type Requests, retryWaitMs, run, shellRuns, takesProfile, type Task, toolOutcomes, unrecorded, type World } from "./world.ts"
 
 const repository = resolve(import.meta.dir, "../../..")
 /** Tripwires. The prototype's runs took 13 to 38 s and C16's under a minute; a run that reaches these is stuck. */
@@ -606,6 +606,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
     const record = harnessRecord(cell, directory, started)
     const held = toolsHeld(cell, record)
     const requests = (cell.harness.agent === "codex" ? codexRequests : claudeRequests)(record, before > 0 ? turn.at : 0)
+    const notSent = cell.harness.agent === "codex" ? 0 : claudeNotSent(record, before > 0 ? turn.at : 0)
     const codex = cell.harness.agent === "codex" && !remote
     const retryMs = codex ? Math.min(codexRetryWaitMs(conversation, turn.at), turn.turnMs) : 0
     const missed = records ? unrecorded(codex ? codexRuns(codexRollout(conversation), turn.at) : shellRuns(events), records) : []
@@ -618,7 +619,7 @@ async function runOnce(cell: Cell, task: Task, n: number): Promise<RunResult> {
           : faultOf(cell, held, used, events)
     const result: RunResult = {
       task: task.id, cell: cell.id, n, pass: verdict.pass && !fault, why: fault ? `bench: ${fault}; ${verdict.why}` : verdict.why, fault, ended,
-      tools: cell.tools, toolsHeld: held, missed, metrics: metrics(events, calls, blockedRuns(records)), requests, usage: used, launchMs: turn.launchMs, turnMs: turn.turnMs, retryMs,
+      tools: cell.tools, toolsHeld: held, missed, metrics: metrics(events, calls, blockedRuns(records), notSent), requests, usage: used, launchMs: turn.launchMs, turnMs: turn.turnMs, retryMs,
     }
     writeFileSync(join(evidence, "calls.json"), JSON.stringify(calls, null, 1))
     if (records) writeFileSync(join(evidence, "records.json"), JSON.stringify(records, null, 1))
