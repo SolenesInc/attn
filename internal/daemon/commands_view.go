@@ -201,7 +201,7 @@ func (d *Daemon) runViewEdit(ctx context.Context, c command.Caller, a command.Vi
 	}
 	version, err := d.store.SaveViewVersion(profile.ID, view.Name, view.Version, viewMachine(files, view.MachineID, saver), savedVersion(c, a.Note), files)
 	if errors.Is(err, store.ErrStaleView) {
-		return nil, command.Refuse(command.CodeStaleExport, "%s changed while saving; export it again and reapply your change", view.Name)
+		return nil, command.Refuse(command.CodeStaleExport, "%s changed while saving; export it again into another folder and reapply your change", view.Name)
 	} else if err != nil {
 		return nil, err
 	}

@@ -54,7 +54,7 @@ commands:
     grant: full
     effect: read
     doc: |
-      Gives the newest version of a kept view to edit, in the current language. The tool answers with the text of each file and writes nothing; the CLI writes the files to the folder `to`, ./<view> by default. The view file's first line is the export's stamp: keep it, edit the copy, try it with `open`, then save it with `view_edit`. Files that are not text, such as a clip, are listed in `kept` by name; an edit keeps each one its folder does not replace.
+      Gives the newest version of a kept view to edit, in the current language. The tool answers with the text of each file and writes nothing; the CLI writes the files to the folder `to`, ./<view> by default. It writes nothing, and names each differing file, when a file there holds other text than the export, so an export never replaces an edit; the view file's first line does not count. The view file's first line is the export's stamp: keep it, edit the copy, try it with `open`, then save it with `view_edit`. Files that are not text, such as a clip, are listed in `kept` by name; an edit keeps each one its folder does not replace.
     args:
       - {name: view, type: name, required: true, cli: pos}
       - {name: to, type: path, cli: "--to", cli_only: true, placeholder: "<dir>", doc: "the folder to write, ./<view> by default"}
@@ -90,7 +90,7 @@ commands:
     grant: full
     effect: act
     doc: |
-      Saves the folder `from`, which holds an export of the view with its first-line stamp, as the view's next version, with `note` saying what changed. attn refuses an export of an older version, because the view changed since: export again and reapply your change. It refuses a view with problems, with each problem and its line. Nothing is saved when it refuses. A version that adds the view's first command runs it on the machine you edit from, one that takes every command away hands the view to the home, and otherwise its commands stay on their machine.
+      Saves the folder `from`, which holds an export of the view with its first-line stamp, as the view's next version, with `note` saying what changed. attn refuses an export of an older version, because the view changed since: export again into another folder and reapply your change. It refuses a view with problems, with each problem and its line. Nothing is saved when it refuses. A version that adds the view's first command runs it on the machine you edit from, one that takes every command away hands the view to the home, and otherwise its commands stay on their machine.
     args:
       - {name: view, type: name, required: true, cli: pos}
       - {name: from, type: path, required: true, cli: "--from", placeholder: "<dir>", doc: "the folder that holds the edited export, or its view file"}
@@ -102,7 +102,7 @@ commands:
       - {code: built_in, fix: "attn's own views cannot be edited yet."}
       - {code: not_stamped, fix: "Export the view with view_export, edit that copy and keep its first line."}
       - {code: other_view, fix: "Save the folder as the view its first line names, or export {view} and reapply your change."}
-      - {code: stale_export, fix: "Export again and reapply your change. Nothing was saved."}
+      - {code: stale_export, fix: "Export again into another folder and reapply your change. Nothing was saved."}
       - {code: has_problems, fix: "Correct each line, then call view_edit again. Nothing was saved."}
       - {code: too_large, fix: "Keep large files out of the view's folder, or name them from a source's rows."}
 

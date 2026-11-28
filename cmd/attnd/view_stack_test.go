@@ -154,6 +154,44 @@ func TestAKeptViewIsEditedRestoredForkedPlacedAndDeletedThroughTheCLI(t *testing
 	requireStdout(t, s.Attn("view", "export", "mine", "--to", s.Path("mine-again")), "wrote version 1 of mine")
 }
 
+func TestAViewExportRefusesToReplaceTextAnEditChangedAndWritesNothing(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	requireStdout(t, s.Attn("settings", "set", "views_enabled", "true"), "true")
+	made := s.Path("made")
+	writeView(t, made, needsMe, map[string]string{"rows.json": `[{"name": "first"}]`})
+	requireStdout(t, s.Attn("view", "keep", made, "--name", "needs-me"), "kept needs-me as version 1")
+
+	mine := s.Path("mine")
+	requireStdout(t, s.Attn("view", "export", "needs-me", "--to", mine), "wrote version 1 of needs-me")
+	requireStdout(t, s.Attn("view", "export", "needs-me", "--to", mine), "wrote version 1 of needs-me")
+	myView := strings.Replace(fileText(t, filepath.Join(mine, "view.md")), "# Needs me", "# Mine", 1)
+	writeView(t, mine, myView, map[string]string{})
+	if err := os.Remove(filepath.Join(mine, "rows.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	theirs := s.Path("theirs")
+	requireStdout(t, s.Attn("view", "export", "needs-me", "--to", theirs))
+	writeView(t, theirs, strings.Replace(fileText(t, filepath.Join(theirs, "view.md")), "# Needs me", "# Theirs", 1), map[string]string{})
+	requireStdout(t, s.Attn("view", "edit", "needs-me", "--from", theirs), "saved needs-me as version 2")
+	refused(t, s.Attn("view", "edit", "needs-me", "--from", mine), 1, "its newest version is 2")
+
+	refused(t, s.Attn("view", "export", "needs-me", "--to", mine), 1, filepath.Join(mine, "view.md")+"; export into another folder")
+	if got := fileText(t, filepath.Join(mine, "view.md")); got != myView {
+		t.Fatalf("the refused export replaced the edited view file with:\n%s", got)
+	}
+	if _, err := os.Stat(filepath.Join(mine, "rows.json")); !os.IsNotExist(err) {
+		t.Fatalf("the refused export wrote rows.json: %v", err)
+	}
+
+	requireStdout(t, s.Attn("view", "export", "needs-me", "--to", theirs), "wrote version 2 of needs-me")
+	if got := fileText(t, filepath.Join(theirs, "view.md")); !strings.HasPrefix(got, "<!-- attn-view 1 needs-me@2 -->\n# Theirs\n") {
+		t.Fatalf("exporting again into the folder version 2 was saved from wrote:\n%s", got)
+	}
+}
+
 func TestAKeptViewThatRunsNothingDrawsFromTheHomeWhileTheOutpostItWasKeptFromIsOff(t *testing.T) {
 	home, outpost := testworld.NewStack(t, testworld.WithoutAgentKit()), testworld.NewStack(t)
 	outpost.Vars = append(outpost.Vars, "SHELL=/bin/bash")

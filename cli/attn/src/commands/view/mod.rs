@@ -12,6 +12,8 @@ use attn_protocol::{
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+const VIEW_FILE: &str = "view.md";
+
 struct View;
 
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
@@ -197,6 +199,21 @@ fn written_export(
     } else {
         to
     });
+    let replaced: Vec<String> = exported
+        .files
+        .iter()
+        .filter(|(name, text)| !holds_export(&folder.join(name), name, text))
+        .map(|(name, _)| folder.join(name).display().to_string())
+        .collect();
+    if !replaced.is_empty() {
+        return Err(View.fail(
+            "export",
+            &format!(
+                "wrote nothing: writing would lose the other text these files hold: {}; export into another folder with --to <dir>",
+                replaced.join(", ")
+            ),
+        ));
+    }
     for (name, text) in &exported.files {
         write_file(&folder.join(name), text.as_bytes()).map_err(|message| {
             View.fail(
@@ -208,6 +225,25 @@ fn written_export(
     let folder = std::path::absolute(&folder).unwrap_or(folder);
     exported.folder = Some(folder.display().to_string());
     Ok(exported)
+}
+
+fn holds_export(path: &Path, name: &str, text: &str) -> bool {
+    let Ok(held) = std::fs::read(path) else {
+        return !path.exists();
+    };
+    let Ok(held) = String::from_utf8(held) else {
+        return false;
+    };
+    held == text
+        || (name == VIEW_FILE
+            && below_stamp(&held).is_some_and(|rest| below_stamp(text) == Some(rest)))
+}
+
+fn below_stamp(view: &str) -> Option<&str> {
+    let (first, rest) = view.split_once('\n')?;
+    let words = first.trim().strip_prefix("<!--")?.strip_suffix("-->")?;
+    let mut words = words.split_whitespace();
+    (words.next() == Some("attn-view")).then_some(rest)
 }
 
 fn write_file(path: &Path, contents: &[u8]) -> Result<(), String> {
