@@ -1,0 +1,14 @@
+{
+  "kind": "bug",
+  "state": "fail",
+  "title": "Repeating view export silently overwrites local edits",
+  "at": "2026-11-28T04:37:38.213Z",
+  "detail": "At 7d1fb578, repeating attn view export into its previous destination silently replaces local view edits. The CLI writes into an existing destination at cli/attn/src/commands/view/mod.rs:194 and :213, including the stale-edit recovery flow that tells agents to export again. The isolated real CLI/daemon test preserves a benign local edit, repeats export and observes data loss. A fresh reviewer independently confirmed the result. Refuse an overlapping destination before changing any files, tell the user where to export safely, and verify the existing edits remain readable.\n",
+  "severity": "p0",
+  "source": "review",
+  "location": {
+    "path": "cli/attn/src/commands/view/mod.rs",
+    "line": 194
+  },
+  "culprit": "165eb38f6b3b3df814ced967ca22cc3ae5cdb518"
+}
