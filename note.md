@@ -1,0 +1,1 @@
+Adds "finished mark" to the glossary under the attention supervisor tree. It names the supervisor's mark that an agent has nothing left to do, which plot s-4kr3bn child 5 (2c474bc65) added: the FINISHED chip, after which the user's settle closes the agent. Victor approved the line as written (ask a-k9v6ys).
