@@ -1,0 +1,3 @@
+A view's `:::question-file` now takes a file. Behind `views_enabled`: ↩ on the highlighted question, or `f` in a one-by-one item, opens the file dialog. The tile uploads the chosen file to the home, and the file stays a draft through restarts. Send gives the agent that opened the view one `attn agent attachment <id> --out <path>` line per file in the responses, the same line an ask's answer gives, and it works for agents on an outpost too.
+
+![The question as a view draws it](https://land-feed.caketroll.cloud/m/SolenesInc/attn/5dc1f2b4ef370bff3b6d5a13ead257f849db3d6340227d9298a5e71bcf02ed99.png)
