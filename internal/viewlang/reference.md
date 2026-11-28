@@ -10,7 +10,7 @@ This is language version 1. When attn keeps a view, it writes `<!-- attn-view 1 
 
 Below, Keys are the keys the user presses on a part, and Reports is what the part adds to the answers the user sends back to the agent that opened the view.
 
-When the user sends, attn writes the answers to `<view>.responses.json` beside the view and types one line into your conversation that sums them up and names the file. In the file, `path` names the view, `answers` holds the answers outside `::::each` and `::::one-by-one` by the question's name, and `rows` holds each item's answers by the item's `id`, or by its place from 1 when it has none. A choice is its label, a `question-multi` answer is a list of labels, and a written answer is its text. A `one-by-one` item also has a `verdict`: `kept`, `changed` when the user rewrote a `Value:` text, or `skipped`. Items the user never reached are left out. The user can send again, and the file then holds every answer so far.
+When the user sends, attn writes the answers to `<view>.responses.json` beside the view and types one line into your conversation that sums them up and names the file. In the file, `path` names the view, `answers` holds the answers outside `::::each` and `::::one-by-one` by the question's name, and `rows` holds each item's answers by the item's `id`, or by its place from 1 when it has none. A choice is its label, a `question-multi` answer is a list of labels, a written answer is its text, and a `question-file` answer is a list with one entry per file, each telling you to save the file with `attn agent attachment <id> --out <path>`. A `one-by-one` item also has a `verdict`: `kept`, `changed` when the user rewrote a `Value:` text, or `skipped`. Items the user never reached are left out. The user can send again, and the file then holds every answer so far.
 
 ## Parts
 
@@ -233,9 +233,9 @@ Arguments:
 
 - `<name>`: the name the answer is saved under. Required.
 
-Keys: ↩ picks a file.
+Keys: ↩ chooses a file, or f in a `one-by-one` item; ⌫ removes it.
 
-Reports: the file's path.
+Reports: one entry per file, which tells how to save it.
 
 ```markdown
 :::question-file screenshot
@@ -447,7 +447,7 @@ Arguments:
 
 - `<items>`: the field that holds the items, or a .json or .jsonl file in the view's folder. Required.
 
-Keys: ↩ keeps and goes on, s skips, ← and → step; e writes and digits pick in the item's questions.
+Keys: ↩ keeps and goes on, s skips, ← and → step; e writes, digits pick and f chooses a file in the item's questions.
 
 Reports: each item's answers, and whether the user kept, changed or skipped it.
 
