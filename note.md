@@ -1,0 +1,1 @@
+A view's text answer is now kept at the home once writing pauses, the same way an ask's draft is, instead of only when the field loses focus or Send runs. So an app that quits or crashes with the field still focused keeps what was written (main review bug 6810fc4).
