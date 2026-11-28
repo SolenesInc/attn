@@ -282,7 +282,7 @@ pub fn bind(
             if moved {
                 tx.invalidate_memos_by_prefix("");
             }
-            if cold::shows(&state.facts) {
+            if cold::shows(&state.facts) || state.facts.home_desktop().is_some() {
                 state.window.view = shell::View::Desktop;
             }
             if was && !is {

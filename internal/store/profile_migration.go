@@ -101,10 +101,11 @@ func finishPlacement(tx *sql.Tx, now string, view *ProfileMigrationView) error {
 	if err != nil {
 		return err
 	}
-	current, err := listDesktops(tx, profile.ID)
+	current, err := profileDesktops(tx, profile.ID)
 	if err != nil {
 		return err
 	}
+	current = ordinaryDesktops(current)
 	destinations, err := queryColumn[string](tx, `SELECT DISTINCT desktop_id FROM launch_desktops`)
 	if err != nil {
 		return err

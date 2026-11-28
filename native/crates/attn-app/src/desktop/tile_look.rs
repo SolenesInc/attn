@@ -34,6 +34,12 @@ const HEADER_FADE: f32 = 0.07;
 
 /// The app setting that keeps the chosen style.
 const STYLE_PREF: &str = "attn.workspace.selectionStyle";
+/// The app setting that gives ordinary desktops the softer look Home always has.
+const SOFT_PREF: &str = "attn.workspace.softTiles";
+/// The softer look sets its tiles this far apart and from the screen's edges, rounded as a
+/// card, over a backdrop this much nearer the shadow colour than their fill.
+const SOFT_GAP: f32 = 8.0;
+const SOFT_BACKDROP: f32 = 0.3;
 /// The rail down the active tile's left edge.
 const RAIL_PX: f32 = 3.0;
 
@@ -72,15 +78,51 @@ impl FocusStyle {
     }
 }
 
+/// Whether ordinary desktops have the softer look: rounded tiles apart on a darker backdrop.
+pub(crate) fn soft_chosen() -> bool {
+    crate::frame::pref_string(SOFT_PREF).as_deref() == Some("on")
+}
+
+pub(crate) fn choose_soft(on: bool) {
+    crate::frame::set_pref_string(SOFT_PREF, if on { "on" } else { "off" });
+}
+
 /// What the screen shows around the tiles.
 #[derive(Clone, Copy)]
 pub(super) struct Screen {
+    /// The softer look: rounded tiles apart on a darker backdrop, with no line under a header.
+    pub soft: bool,
     /// The style that tells the active tile apart, while more than one tile is on screen.
     pub marking: Option<FocusStyle>,
     pub zoomed: bool,
     pub focus: bool,
     /// The tile fills a window of its own, where it is the one the keyboard acts on.
     pub lone: bool,
+}
+
+impl Screen {
+    /// What shows between and around the tiles.
+    pub(super) fn backdrop(&self, t: &Tokens) -> Color {
+        if self.soft {
+            attn_ui::colors::mix_srgb(t.bg_tile, t.shadow, SOFT_BACKDROP)
+        } else {
+            t.bg_tile
+        }
+    }
+
+    /// Where a tile laid out at `rect` draws: inside it by half the gap in the softer look.
+    pub(super) fn place(&self, [x, y, w, h]: [f32; 4]) -> [f32; 4] {
+        if !self.soft {
+            return [x, y, w, h];
+        }
+        let inset = SOFT_GAP / 2.0;
+        [
+            x + inset,
+            y + inset,
+            (w - SOFT_GAP).max(0.0),
+            (h - SOFT_GAP).max(0.0),
+        ]
+    }
 }
 
 /// How one tile looks.
@@ -127,6 +169,12 @@ impl Look {
             1.0
         };
         let tile = tile.opacity(opacity).opacity_motion(fade());
+        let tile = if self.screen.soft {
+            let corner = attn_ui::system::Radius::Card.pt();
+            tile.fill(t.bg_tile).radius(corner).clip_rounded(corner)
+        } else {
+            tile
+        };
         let tile = if self.spotlit() {
             tile.paint_order(1)
                 .box_shadow(Shadow {
@@ -232,7 +280,11 @@ impl Look {
     /// edge, a document's or browser's on the elevated surface, both lighter on the spotlit
     /// tile, and closed off from the body by a line.
     pub(super) fn header(&self, header: El, t: &Tokens) -> El {
-        let header = header.border_sides([0.0, 0.0, 1.0, 0.0], t.border);
+        let header = if self.screen.soft {
+            header
+        } else {
+            header.border_sides([0.0, 0.0, 1.0, 0.0], t.border)
+        };
         let header = match self.header_fill(t) {
             Some(fill) => header.fill(fill),
             None if self.agent => {

@@ -56,6 +56,7 @@ type Store struct {
 	liveCosts              map[protocol.SessionID]*sessionCostEntry
 	profilesSeq            int64
 	emptyDesktop           func(emptiedAt time.Time)
+	homeListed             atomic.Bool
 	terminalBindings       func([]TerminalBinding)
 }
 

@@ -241,6 +241,9 @@ func loadDesktop(q queryer, id string) (profiles.Desktop, error) {
 	if err != nil {
 		return profiles.Desktop{}, err
 	}
+	if err := loadDesktopKind(q, &desktop); err != nil {
+		return profiles.Desktop{}, err
+	}
 	desktop.Panes, err = loadDesktopPanes(q, id)
 	return desktop, err
 }
@@ -274,13 +277,16 @@ func insertDesktop(tx *sql.Tx, now, profileID, name string, slot int) (profiles.
 	if err := profiles.ValidateShortcutSlot(slot); err != nil {
 		return profiles.Desktop{}, err
 	}
-	desktops, err := listDesktops(tx, profileID)
+	desktops, err := profileDesktops(tx, profileID)
 	if err != nil {
 		return profiles.Desktop{}, err
 	}
 	position := len(desktops)
 	if slot > 0 {
 		position = 0
+		if len(desktops) > 0 && desktops[0].Kind == profiles.DesktopKindHome {
+			position = 1
+		}
 		lowerSlot := 0
 		for i, desktop := range desktops {
 			if desktop.ShortcutSlot > lowerSlot && desktop.ShortcutSlot < slot {
@@ -385,7 +391,13 @@ func (s *Store) CreateProfile(name string) (profiles.Profile, profiles.Desktop, 
 		if desktop, err = insertDesktop(tx, now, profile.ID, "", profiles.FirstShortcutSlot); err != nil {
 			return err
 		}
+		if err := insertHomeDesktop(tx, now, profile.ID); err != nil {
+			return err
+		}
 		profile.CurrentDesktopID = desktop.ID
+		if s.homeListed.Load() {
+			profile.CurrentDesktopID = profiles.HomeDesktopID(profile.ID)
+		}
 		_, err = tx.Exec(`
 			INSERT INTO profiles (id, name, current_desktop_id, last_used_at, revision, created_at, deleted_at)
 			VALUES (?, ?, ?, '', 1, ?, '')`, profile.ID, profile.Name, profile.CurrentDesktopID, now)
@@ -500,9 +512,10 @@ func (s *Store) ProfileArrangementSeq(id string) (profiles.Profile, []profiles.D
 		if profile, err = loadProfile(tx, id); err != nil {
 			return err
 		}
-		if desktops, err = listDesktops(tx, id); err != nil {
+		if desktops, err = profileDesktops(tx, id); err != nil {
 			return err
 		}
+		desktops = s.listedDesktops(desktops)
 		return markEphemeralDesktops(tx, id, desktops)
 	})
 	return profile, desktops, seq, err
@@ -556,11 +569,11 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (p
 		if err := tx.QueryRow(`SELECT count(*) FROM automation_definitions WHERE profile_id = ? AND deleted_at = ''`, id).Scan(&automations); err != nil {
 			return err
 		}
-		desktops, err := listDesktops(tx, id)
+		desktops, err := profileDesktops(tx, id)
 		if err != nil {
 			return err
 		}
-		for _, desktop := range desktops {
+		for _, desktop := range ordinaryDesktops(desktops) {
 			tiles += len(layouttree.TileIDs(desktop.Tree))
 		}
 
@@ -717,6 +730,9 @@ func (s *Store) editDesktopRow(id string, edit func(tx *sql.Tx, desktop *profile
 
 func (s *Store) RenameDesktop(id, name string) (profiles.Desktop, error) {
 	return s.editDesktopRow(id, func(tx *sql.Tx, desktop *profiles.Desktop) error {
+		if err := refuseHomeDesktop(*desktop, "Home cannot be renamed"); err != nil {
+			return err
+		}
 		trimmed := strings.TrimSpace(name)
 		if desktop.Name == trimmed && !desktop.Ephemeral {
 			return nil
@@ -771,10 +787,11 @@ func (s *Store) SetDesktopOrder(profileID string, ids []string) ([]profiles.Desk
 		if _, err := loadLiveProfile(tx, profileID); err != nil {
 			return err
 		}
-		desktops, err := listDesktops(tx, profileID)
+		desktops, err := profileDesktops(tx, profileID)
 		if err != nil {
 			return err
 		}
+		desktops = s.listedDesktops(desktops)
 		if err := markEphemeralDesktops(tx, profileID, desktops); err != nil {
 			return err
 		}
@@ -815,14 +832,18 @@ func (s *Store) CloseDesktop(id string, expectedRevision int64) (profiles.Profil
 		if err := requireRevision("desktop", id, expectedRevision, desktop.Revision); err != nil {
 			return err
 		}
+		if err := refuseHomeDesktop(desktop, "Home cannot be closed; close its tiles instead"); err != nil {
+			return err
+		}
 		profile, err = loadLiveProfile(tx, desktop.ProfileID)
 		if err != nil {
 			return err
 		}
-		desktops, err := listDesktops(tx, profile.ID)
+		desktops, err := profileDesktops(tx, profile.ID)
 		if err != nil {
 			return err
 		}
+		desktops = s.listedDesktops(desktops)
 		if len(desktops) == 1 {
 			return profiles.Errorf(profiles.CodeLastDesktop, "Cannot close the only desktop in profile %s", profile.Name)
 		}
@@ -867,6 +888,11 @@ func (s *Store) SetCurrentDesktop(profileID, desktopID string) (profiles.Profile
 		}
 		if desktop.ProfileID != profileID {
 			return profiles.Errorf(profiles.CodeCrossProfile, "desktop %s belongs to profile %s, not %s", desktopID, desktop.ProfileID, profileID)
+		}
+		if !s.homeListed.Load() {
+			if err := refuseHomeDesktop(desktop, "Home is a desktop only while the experimental setting views_enabled is on"); err != nil {
+				return err
+			}
 		}
 		profile.CurrentDesktopID = desktopID
 		profile.LastUsedAt = now

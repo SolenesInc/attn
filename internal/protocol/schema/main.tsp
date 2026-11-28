@@ -39,6 +39,12 @@ enum LayoutPaneKind {
   agent,
 }
 
+// A profile has one desktop of kind home while views_enabled is on.
+enum DesktopKind {
+  desktop,
+  home,
+}
+
 enum LayoutPaneStatus {
   spawning,
   ready,
@@ -621,6 +627,7 @@ model Desktop {
   id: string;
   profile_id: string;
   name: string;
+  kind: DesktopKind;
   shortcut_slot?: int32;        // 1-9; absent for an unnumbered desktop
   ephemeral?: boolean;          // True for a single-owner own launch desktop that reaps once empty
   order_key: string;
@@ -3440,6 +3447,14 @@ model DesktopSetOrderMessage {
   request_id: string;
   profile_id: string;
   desktop_ids: string[];
+}
+
+// Puts the profile's Home desktop back at the top, holding attn above Sessions
+// and Pull requests beside them as Home starts, with its other tiles after them.
+model DesktopResetHomeMessage {
+  cmd: "desktop_reset_home";
+  request_id: string;
+  profile_id: string;
 }
 
 // Selection: last writer wins, no revision.

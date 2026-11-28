@@ -7,7 +7,8 @@ desktop flow sessions are grouped by state. Snoozed agents wait in their own
 group until they are due. Home also shows the open asks, the chief and the
 pull requests waiting on the user. The notifications popover holds what attn
 itself needs the user to know, such as a duty that failed for good. The app
-opens on home.
+opens on home. With the experimental setting `views_enabled` on, home is the
+Home desktop instead (`home-desktop`).
 
 ## Sub-features
 
@@ -20,6 +21,7 @@ opens on home.
 - `whats-new`: the intro that opens on a new release, and the home banner that replays it.
 - `toasts`: short-lived errors and undo offers in a corner of the window. The user clicks a toast's button to run its action.
 - `view-tiles`: with the experimental setting `views_enabled`, a markdown tile whose params are `{"view": "attn"}`, `{"view": "sessions"}` or `{"view": "pull-requests"}` shows that part of home on any desktop, drawn by home's code: the brand line with Settings and the what's-new banner, the Sessions card under "All settled", or the Pull Requests card under the rate-limit notice. Its controls keep their `home.*` keys inside `tile.<tile id>`. Its sidebar row reads `VIEW` and the tile's title is the view's. On a desktop that shows Sessions, `home.follow` takes the user to the next turn from there, as on home. A view tile does not pop out: its header has no pop-out button, and ⇧⌘O leaves it in place. Behind the same setting, a markdown file written in the view language opens as a view drawn part by part ([markdown.md](markdown.md) `view-document`).
+- `home-desktop`: with `views_enabled` on, each profile has one desktop of kind `home` (`<profile>/home`), at the top of the sidebar's desktops by default. It holds `tile-view-attn` above `tile-view-sessions`, with `tile-view-pull-requests` in the next column, and takes the place of the Home row and the old home screen. Going home is `desktop_set_current` to it, so every window and the next launch show it. It has no digit, no close and no rename, and stays when empty. It moves like any desktop, and `desktop_reset_home` puts it back at the top with its three views, keeping other tiles after them. Its tiles always take the softer look: rounded, on a darker backdrop, with no line under the header. Other desktops take it from the palette's `soft-tiles` (app pref `attn.workspace.softTiles`). With the setting off, the Home desktop is hidden and the work on it moves to the next desktop.
 
 ## How to get to it
 
@@ -27,6 +29,7 @@ opens on home.
 
 - ⌘⇧H (`session.goToDashboard`, `native/crates/attn-app/src/keymap.rs`).
 - Palette (`native/crates/attn-app/src/palette/commands.rs`): `home` ("Home"), `notifications` ("Show notifications" or "Hide notifications"), `whats-new` ("What's new"). With `views_enabled` on and a current desktop, `view-attn`, `view-sessions` and `view-pull-requests` ("Show attn in a tile", "Show Sessions in a tile", "Show Pull requests in a tile") dock the view as `tile-view-<name>` on the current desktop, or go to the tile that already shows it.
+- With `views_enabled` on, the same key, palette `home`, Home row and rail button go to the Home desktop. Its sidebar line is `sidebar.desktop.<profile>/home`, named "Open Home", and replaces `sidebar.home`. The palette adds `put-home-back` ("Put Home back to its default") and leaves out `close-desktop` on Home. `soft-tiles` toggles the softer look on other desktops.
 - Sidebar: the Home row `sidebar.home` above everything (`native/crates/attn-app/src/sidebar/mod.rs`), and `rail.home` on the collapsed rail (`native/crates/attn-app/src/sidebar/chips.rs`). The bell in the title bar, `titlebar.notifications`, named "Show Notifications", with the unread count as its value. The critical strip, `sidebar.critical`.
 - On home (`native/crates/attn-app/src/home/mod.rs`): press a session row `home.session.<session>` to open the agent. Press the snoozed group's header `home.group.snoozed.toggle` to expand the group, and `home.session.<session>.unsnooze` to end a snooze. The follow checkbox is `home.follow`. The intro banner has `home.intro-banner.replay` and `home.intro-banner.dismiss`. Home also hosts "New" (`home.new`, named "New session") ([agent-launch.md](agent-launch.md)), the settings gear `home.settings` ([settings.md](settings.md)) and the cards above.
 - The notifications panel, `notifications.panel` (`native/crates/attn-app/src/notifications/view.rs`): a press on a row's head expands the row and marks it read. Each row has action buttons, such as a retry, and the panel has "Mark all read", `notifications.mark-all`.
@@ -99,8 +102,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `native/crates/attn-app/tests/wire/home.rs`, `native/crates/attn-app/tests/wire/notifications.rs`, `native/crates/attn-app/tests/wire/whats_new.rs`, `native/crates/attn-app/tests/wire/view_tiles.rs`, `internal/daemon/notifications_wire_test.go`, `internal/daemon/view_tiles_wire_test.go`.
-- Scenario: `native-agent-queue` (All settled and wake).
+- Wire: `native/crates/attn-app/tests/wire/home_desktop.rs`, `internal/daemon/home_desktop_wire_test.go`, `native/crates/attn-app/tests/wire/home.rs`, `native/crates/attn-app/tests/wire/notifications.rs`, `native/crates/attn-app/tests/wire/whats_new.rs`, `native/crates/attn-app/tests/wire/view_tiles.rs`, `internal/daemon/notifications_wire_test.go`, `internal/daemon/view_tiles_wire_test.go`.
+- Scenario: `native-agent-queue` (All settled and wake), `native-home-desktop` (the Home key, a digit, moving Home, putting it back, and a restart onto Home).
+- Migration: `internal/store/home_desktop_migration_test.go`.
 - Kernel: `internal/store/notifications_test.go`, `internal/daemon/notifications_render_test.go`.
 
 ## Gotchas

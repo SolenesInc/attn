@@ -9,7 +9,7 @@ pub enum Radius {
 }
 
 impl Radius {
-    pub(crate) const fn pt(self) -> f32 {
+    pub const fn pt(self) -> f32 {
         match self {
             Radius::Tag => 4.0,
             Radius::Control => 6.0,

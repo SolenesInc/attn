@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-func desktopRows(t *testing.T, db *sql.DB) []string {
+func desktopRows(t *testing.T, db *sql.DB, where string) []string {
 	t.Helper()
-	rows, err := db.Query(`SELECT id || '|' || profile_id || '|' || tree_json || '|' || active_pane_id FROM desktops ORDER BY id`)
+	rows, err := db.Query(`SELECT id || '|' || profile_id || '|' || tree_json || '|' || active_pane_id FROM desktops WHERE ` + where + ` ORDER BY id`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestHistoricalProfileDatabasesPreserveDesktopsAndUsageOnUpgrade(t *testing.
 			}
 			desktops := []string(nil)
 			if start.schema >= 158 {
-				desktops = desktopRows(t, db)
+				desktops = desktopRows(t, db, "1")
 			}
 			if err := db.Close(); err != nil {
 				t.Fatal(err)
@@ -65,8 +65,8 @@ func TestHistoricalProfileDatabasesPreserveDesktopsAndUsageOnUpgrade(t *testing.
 				t.Fatalf("upgrade = %+v, want %d -> %d", upgrade, start.schema, LatestSchemaVersion())
 			}
 			if desktops != nil {
-				if got := desktopRows(t, s.db); !reflect.DeepEqual(got, desktops) {
-					t.Fatalf("desktops changed from %v to %v, want existing desktops preserved", desktops, got)
+				if got := desktopRows(t, s.db, "kind = 'desktop'"); !reflect.DeepEqual(got, desktops) {
+					t.Fatalf("desktops changed from %v to %v, want existing desktops preserved beside the new Home", desktops, got)
 				}
 			}
 			if _, err := s.db.Exec(`INSERT INTO kept_conversations (resume_id, agent, source_path, bytes, stored_bytes, copied_at) VALUES ('kept', 'codex', '/fixture', 1, 1, 'now')`); err != nil {

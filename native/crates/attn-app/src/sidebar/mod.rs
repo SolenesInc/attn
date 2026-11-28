@@ -86,7 +86,7 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
     use crate::Action;
     let queue = actions::queue_flow(state);
     match action {
-        Action::SessionGoToDashboard => state.window.go_home(),
+        Action::SessionGoToDashboard => crate::home::go(state, false, tx),
         Action::OpenAgent { session } => open_agent(state, session, tx),
         Action::SessionJumpToWaiting => actions::jump_to_waiting(state, tx),
         Action::SidebarAgentList
@@ -369,7 +369,12 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                 &facts.notifications,
                 &t,
             ))
-            .child(home_row(home, home_keys.clone(), &t))
+            .children(
+                facts
+                    .home_desktop()
+                    .is_none()
+                    .then(|| home_row(home, home_keys.clone(), &t)),
+            )
             .child(
                 ListRow::column()
                     .key("sidebar.scroll")
@@ -439,7 +444,7 @@ pub(crate) fn home_row(home: bool, keys: Option<String>, t: &Tokens) -> El {
     ListRow::column().child(
         nav_row("sidebar.home", &attn_ui::icon::HOME, "Home", keys, home, t)
             .a11y_value(if home { "current" } else { "" })
-            .on_press(|state: &mut State| state.window.go_home()),
+            .on_press_tx(|state: &mut State, tx: &mut Tx| crate::home::go(state, false, tx)),
     )
 }
 
@@ -892,6 +897,9 @@ fn line(
         .as_ref()
         .and_then(|d| d.desktop_mark(line.desktop()));
     let keys = match line {
+        Line::Desktop(desktop) if desktop.home => {
+            crate::palette::label_of(state, &Action::SessionGoToDashboard)
+        }
         Line::Desktop(desktop) => desktop
             .slot
             .and_then(Action::desktop_select)
@@ -998,6 +1006,7 @@ pub(super) fn line_height(line: &Line) -> f32 {
 fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &Tokens) -> El {
     let id = desktop.id.clone();
     let dragged = desktop.id.clone();
+    let home = desktop.home;
     let surface = if desktop.current {
         ListRow::well_surface(t)
     } else {
@@ -1006,12 +1015,26 @@ fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &T
     let mut head = GroupHead::new(key.clone(), format!("Open {}", desktop.title))
         .on(surface)
         .current(desktop.current)
-        .keys(keys.clone())
-        .controls([
+        .keys(keys.clone());
+    if !desktop.home {
+        head = head.controls([
             rename_desktop_button(&key, desktop),
             close_desktop_button(&key, desktop),
         ]);
-    if let Some(slot) = desktop.slot {
+    }
+    if desktop.home {
+        head = head
+            .mark(system::icon(
+                &attn_ui::icon::HOME,
+                IconSize::Regular,
+                if desktop.current {
+                    t.text_primary
+                } else {
+                    t.text_secondary
+                },
+            ))
+            .name(desktop.title.clone());
+    } else if let Some(slot) = desktop.slot {
         head = head.mark(system::number_chip(slot, desktop.current, desktop.empty, t));
         if desktop.named {
             head = head.name(desktop.title.clone());
@@ -1027,7 +1050,10 @@ fn desktop_row(key: String, desktop: &DesktopHeader, keys: Option<String>, t: &T
             (false, true) => "Empty desktop",
             (false, false) => "",
         })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &id, tx))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| match home {
+            true => crate::home::go(state, false, tx),
+            false => open_desktop(state, &id, tx),
+        })
         .on_drag(move |state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
             reorder::drag(state, &dragged, d, tx)
         });

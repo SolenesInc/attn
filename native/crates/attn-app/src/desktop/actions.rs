@@ -2,8 +2,9 @@ use attn_client::Desktop;
 use attn_client::Facts;
 use attn_protocol::{
     DesktopCloseTileMessage, DesktopCreateMessage, DesktopMoveLeafMessage,
-    DesktopRemoveLeafMessage, DesktopSetCurrentMessage, DesktopSetOrderMessage,
-    DesktopShowLeafMessage, ProfileActionResultMessage, SessionPlacement, SpawnSessionMessage,
+    DesktopRemoveLeafMessage, DesktopResetHomeMessage, DesktopSetCurrentMessage,
+    DesktopSetOrderMessage, DesktopShowLeafMessage, ProfileActionResultMessage, SessionPlacement,
+    SpawnSessionMessage,
 };
 use rune::Tx;
 
@@ -38,6 +39,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         ClearDraggedWidths { desktop } => super::shelf::clear_dragged_widths(state, desktop, tx),
         MoveWithDelegates { desktop } => move_with_delegates(state, desktop, tx),
         SortDesktops { profile } => sort(state, profile, tx),
+        PutHomeBack { profile } => put_home_back(state, profile, tx),
         CloseDesktop { desktop } => super::close::request(state, desktop, tx),
         SetDesktopOrder { profile, desktops } => {
             set_order(state, profile, desktops.clone(), |_, _| {}, tx)
@@ -161,6 +163,20 @@ fn sort(state: &mut State, profile: &str, tx: &mut Tx) {
                 .window
                 .notify_offering("Desktops sorted".into(), "Undo", undo, tx)
         },
+        tx,
+    );
+}
+
+fn put_home_back(state: &mut State, profile: &str, tx: &mut Tx) {
+    let profile_id = profile.to_owned();
+    state.act(
+        |request_id| DesktopResetHomeMessage {
+            request_id,
+            profile_id,
+            ..DesktopResetHomeMessage::new()
+        },
+        Refused::Bare,
+        |_, _, _| {},
         tx,
     );
 }

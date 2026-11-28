@@ -299,6 +299,7 @@ const (
 	CmdDesktopRename        = "desktop_rename"
 	CmdDesktopReorder       = "desktop_reorder"
 	CmdDesktopSetOrder      = "desktop_set_order"
+	CmdDesktopResetHome     = "desktop_reset_home"
 	CmdDesktopSetCurrent    = "desktop_set_current"
 	CmdDesktopSetActivePane = "desktop_set_active_pane"
 	CmdDesktopShowSession   = "desktop_show_session"

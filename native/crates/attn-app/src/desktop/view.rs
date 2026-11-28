@@ -83,6 +83,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
     let keep = header_keys(state).keep;
     let sublines = desktop.map_or_else(Vec::new, |d| sublines(d, facts, desk, keep.as_deref()));
     let focus_style = super::FocusStyle::chosen();
+    let soft_tiles = super::tile_look::soft_chosen();
     let reads = (
         (
             version(&facts.desktops),
@@ -102,7 +103,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             desk.peeks.unsent(),
             sublines.clone(),
         ),
-        (*t, scale.to_bits(), focus_style),
+        (*t, scale.to_bits(), focus_style, soft_tiles),
     );
     let settles = desktop.map_or_else(Vec::new, |d| settles(d, facts));
     let keys = header_keys(state);
@@ -556,6 +557,7 @@ pub(super) fn lone(
         mark_anchor: state.window.desk.header_pop.mark_anchor(),
         hints: state.window.hints.shown(),
         screen: super::tile_look::Screen {
+            soft: false,
             marking: None,
             zoomed: false,
             focus: false,
@@ -667,6 +669,7 @@ fn screen(
                     mark_anchor: desk.header_pop.mark_anchor(),
                     hints,
                     screen: super::tile_look::Screen {
+                        soft: desktop.is_home() || super::tile_look::soft_chosen(),
                         marking: (rendered.leaves().len() > 1).then_some(focus_style),
                         zoomed: view == super::layout::View::Zoomed,
                         focus: matches!(view, super::layout::View::Focused(_)),
@@ -832,7 +835,7 @@ fn laid_out(
         } else {
             tile
         };
-        Some(pinned(tile, *rect))
+        Some(pinned(tile, cx.screen.place(*rect)))
     });
     let dividers = placed
         .splits
@@ -843,7 +846,7 @@ fn laid_out(
     let row = el()
         .w_full()
         .h_full()
-        .fill(cx.t.bg_tile)
+        .fill(cx.screen.backdrop(cx.t))
         .children(tiles)
         .children(dividers)
         .child(shown.marker());

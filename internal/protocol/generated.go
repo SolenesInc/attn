@@ -4436,6 +4436,9 @@ type Desktop struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// Kind corresponds to the JSON schema field "kind".
+	Kind DesktopKind `json:"kind"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
@@ -4548,6 +4551,11 @@ type DesktopDockTileMessage struct {
 	// TileShare corresponds to the JSON schema field "tile_share".
 	TileShare *float64 `json:"tile_share,omitempty,omitzero"`
 }
+
+type DesktopKind string
+
+const DesktopKindDesktop DesktopKind = "desktop"
+const DesktopKindHome DesktopKind = "home"
 
 type DesktopMoveLeafMessage struct {
 	// Activate corresponds to the JSON schema field "activate".
@@ -4670,6 +4678,17 @@ type DesktopReorderMessage struct {
 
 	// PreviousDesktopID corresponds to the JSON schema field "previous_desktop_id".
 	PreviousDesktopID *string `json:"previous_desktop_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type DesktopResetHomeMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`

@@ -365,6 +365,6 @@ func (s *Store) CountDesktops() (int, error) {
 		return 0, nil
 	}
 	var count int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM desktops WHERE profile_id IN (SELECT id FROM profiles WHERE deleted_at = '')`).Scan(&count)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM desktops WHERE kind = 'desktop' AND profile_id IN (SELECT id FROM profiles WHERE deleted_at = '')`).Scan(&count)
 	return count, err
 }

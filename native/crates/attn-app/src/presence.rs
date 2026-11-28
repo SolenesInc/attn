@@ -5,7 +5,6 @@ use attn_client::{Connection, Sight};
 use rune::Tx;
 
 use crate::State;
-use crate::shell::View;
 
 /// Says what the main window shows, once the daemon has greeted it; the link reports it when it
 /// changed or is news to this connection.
@@ -15,7 +14,7 @@ pub(crate) fn follow(state: &State) {
     }
     state.daemon.see(Sight {
         visible: !state.hidden,
-        home: state.window.view == View::Home,
+        home: crate::home::shown(state),
     });
 }
 

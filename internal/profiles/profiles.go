@@ -44,6 +44,7 @@ type Desktop struct {
 	ID           string
 	ProfileID    string
 	Name         string
+	Kind         DesktopKind
 	ShortcutSlot int
 	Ephemeral    bool
 	OrderKey     string

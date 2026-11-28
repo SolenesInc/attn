@@ -73,12 +73,16 @@ macro_rules! actions {
             SetSetting { key: String, value: String },
             /// Mark the active tile among several in this style from now on.
             SetTileFocus { style: crate::desktop::FocusStyle },
+            /// Give ordinary desktops the softer look Home has, or take it away.
+            SetSoftTiles { on: bool },
             /// Forget every column width dragged on a desktop.
             ClearDraggedWidths { desktop: String },
             /// Show one of attn's views in a tile on the current desktop.
             ShowView { view: crate::home::BuiltInView },
             /// Order a profile's desktops by number, then by name.
             SortDesktops { profile: String },
+            /// Put a profile's Home desktop back as it starts: at the top, holding attn's views.
+            PutHomeBack { profile: String },
             /// Put a profile's desktops in this order, as Undo after a sort does.
             SetDesktopOrder { profile: String, desktops: Vec<String> },
             /// Close a desktop, asking first when it holds tiles.
@@ -150,9 +154,11 @@ macro_rules! actions {
                     Action::ReopenSession { .. } => "session.reopen",
                     Action::SetSetting { .. } => "setting.set",
                     Action::SetTileFocus { .. } => "tileFocus.set",
+                    Action::SetSoftTiles { .. } => "softTiles.set",
                     Action::ClearDraggedWidths { .. } => "shelf.clearDraggedWidths",
                     Action::ShowView { .. } => "view.show",
                     Action::SortDesktops { .. } => "desktop.sort",
+                    Action::PutHomeBack { .. } => "desktop.putHomeBack",
                     Action::SetDesktopOrder { .. } => "desktop.setOrder",
                     Action::CloseDesktop { .. } => "desktop.close",
                     Action::ShowAsks { .. } => "asks.show",
@@ -201,9 +207,11 @@ macro_rules! actions {
                     Action::ReopenSession { .. } => "Reopen an agent the supervisor closed",
                     Action::SetSetting { .. } => "Change a setting",
                     Action::SetTileFocus { .. } => "Change the tile focus style",
+                    Action::SetSoftTiles { .. } => "Change the look of desktop tiles",
                     Action::ClearDraggedWidths { .. } => "Clear dragged widths",
                     Action::ShowView { .. } => "Show a view",
                     Action::SortDesktops { .. } => "Sort desktops",
+                    Action::PutHomeBack { .. } => "Put Home back to its default",
                     Action::SetDesktopOrder { .. } => "Restore an order of desktops",
                     Action::CloseDesktop { .. } => "Close desktop",
                     Action::ShowAsks { .. } => "Open asks",

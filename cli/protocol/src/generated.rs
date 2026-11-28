@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "7cf6c9980182";
+pub const PROTOCOL_VERSION: &str = "cf31e8d41b92";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -3780,6 +3780,7 @@ pub struct Desktop {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ephemeral: Option<bool>,
     pub id: String,
+    pub kind: DesktopKind,
     pub name: String,
     pub order_key: String,
     #[serde(deserialize_with = "null_as_default")]
@@ -3888,6 +3889,7 @@ impl DesktopDockTileMessage {
         }
     }
 }
+pub type DesktopKind = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DesktopMoveLeafMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -4001,6 +4003,22 @@ impl DesktopReorderMessage {
     pub fn new() -> Self {
         Self {
             cmd: "desktop_reorder".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DesktopResetHomeMessage {
+    pub cmd: String,
+    pub profile_id: String,
+    pub request_id: String,
+}
+
+impl DesktopResetHomeMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "desktop_reset_home".to_string(),
             ..Self::default()
         }
     }

@@ -126,6 +126,12 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-native-desktop-order.mjs'],
   },
   {
+    id: 'native-home-desktop',
+    runnerId: 'NATIVE-HOME-DESKTOP',
+    label: 'With views on, Home is a desktop at the top of the native sidebar: the Home key shows it, a digit leaves it, it moves and the palette puts it back, and a restart opens on it',
+    command: ['node', 'scripts/real-app-harness/scenario-native-home-desktop.mjs'],
+  },
+  {
     id: 'native-browser',
     runnerId: 'NATIVE-BROWSER',
     label: 'An agent drives a browser tile in the native app: open, wait, type, click, a dialog, history, captures, cookies, and the close key',

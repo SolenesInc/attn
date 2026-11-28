@@ -106,6 +106,9 @@ fn visible_user_chips<'a>(
             let Some(desktop) = desktop_by_id.get(c.desktop.as_str()) else {
                 return true;
             };
+            if desktop.is_home() {
+                return false;
+            }
             if super::model::is_automation_desktop(desktop, &by_id) {
                 return false;
             }
@@ -416,12 +419,12 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
         facts.sessions.iter().map(|s| (s.id.as_str(), s)).collect();
     let chips = visible_user_chips(state, wanting_on(state));
     let automations_chip = rail_automations_chip(state, &by_id, t);
-    let home = state.window.view == View::Home;
+    let home = crate::home::shown(state);
     let home_button =
         system::icon_button("rail.home", "Home", &attn_ui::icon::HOME, IconSize::Regular)
             .selected(home)
             .ink(if home { t.text_primary } else { t.text_dimmed })
-            .on_press(|state: &mut State| state.window.go_home())
+            .on_press_tx(|state: &mut State, tx: &mut Tx| crate::home::go(state, false, tx))
             .build(t);
     Rail::column()
         .key("rail")

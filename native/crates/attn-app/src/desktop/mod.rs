@@ -65,6 +65,7 @@ pub(crate) use shelf::{
     width_label,
 };
 pub use tile_look::FocusStyle;
+pub(crate) use tile_look::{choose_soft as choose_soft_tiles, soft_chosen as soft_tiles};
 pub(crate) use view::{Room, area, session_of_leaf};
 pub use windows::{
     Deliver, Opened, Opener, Placement, Setup, TileWindow, on_close as tile_window_closed,

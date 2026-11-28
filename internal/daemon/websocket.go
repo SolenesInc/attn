@@ -820,6 +820,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopRename(client, msg.(*protocol.DesktopRenameMessage))
 	case protocol.CmdDesktopSetOrder:
 		d.handleDesktopSetOrder(client, msg.(*protocol.DesktopSetOrderMessage))
+	case protocol.CmdDesktopResetHome:
+		d.handleDesktopResetHome(client, msg.(*protocol.DesktopResetHomeMessage))
 	case protocol.CmdDesktopReorder:
 		d.handleDesktopReorder(client, msg.(*protocol.DesktopReorderMessage))
 	case protocol.CmdDesktopSetCurrent:

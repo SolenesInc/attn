@@ -210,6 +210,29 @@ pub(crate) fn show_tile(state: &mut State, view: BuiltInView, tx: &mut Tx) {
     );
 }
 
+/// Goes Home: to the Home desktop while the daemon lists one, else to the home screen. Following
+/// opens the next turn once one opens.
+pub(crate) fn go(state: &mut State, following: bool, tx: &mut Tx) {
+    let Some(home) = state.facts.home_desktop().map(|d| d.id.clone()) else {
+        if following {
+            state.window.go_home_following();
+        } else {
+            state.window.go_home();
+        }
+        return;
+    };
+    crate::dispatch::dispatch(state, Action::GoToDesktop { desktop: home }, tx);
+    state.window.leave_for_home(following);
+}
+
+/// Whether the window shows Home: the home screen, or the Home desktop.
+pub(crate) fn shown(state: &State) -> bool {
+    match state.window.view {
+        crate::shell::View::Home => true,
+        crate::shell::View::Desktop => state.facts.current_desktop().is_some_and(|d| d.is_home()),
+    }
+}
+
 /// Whether `desktop` shows the Sessions view, whose "All settled" offers to follow the next
 /// turn from there as from Home.
 pub(crate) fn shows_sessions(desktop: Option<&attn_client::Desktop>) -> bool {

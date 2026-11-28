@@ -34,6 +34,22 @@ Drag a tile onto a dashed pill to move it there, or click the pill to open that
 desktop. Collapsing the sidebar leaves a thin rail with Home, your desktop chips,
 and a single ⚡ chip while automation runs are open on their own desktops.
 
+### The Home desktop
+
+With **Views** on in **Settings → Experimental**, Home is a desktop. It sits at
+the top of your desktops and holds attn's brand line above Sessions, with Pull
+requests in the next column. Cmd+Shift+H (Ctrl+Alt+H on Linux), the Home line in
+the sidebar and "Home" in the command palette take you there. Home has no digit,
+so Cmd+1 still opens Desktop 1. You can't close or rename Home, and it stays when
+it is empty. Drag it in the sidebar like any desktop, and put tiles on it. "Put
+Home back to its default" in the command palette moves it to the top again with
+its three views, and keeps the other tiles you put on it after them. Attn opens
+on the desktop you were on, so Home when you left it there.
+
+Home's tiles are rounded and set apart on a darker backdrop. "Softer tiles on
+desktops" in the command palette gives your other desktops the same look, and
+"Plain tiles on desktops" takes it away again.
+
 ## Tiles
 
 Tiles are the boxes on a desktop. Agents, shells, seeds, markdown files, the

@@ -99,6 +99,9 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == setting.OutpostsEnabled.Key {
 		d.configureOutposts()
 	}
+	if key == setting.ViewsEnabled.Key {
+		d.homeDesktopsListingChanged()
+	}
 	if harness, ok := isAgentExecutableSettingKey(key); ok {
 		d.invalidateHarnessModels(harness)
 		d.ensureAvailableAgentSkills()

@@ -85,6 +85,7 @@ func (d *Daemon) protocolDesktop(desktop profiles.Desktop) (protocol.Desktop, er
 		ID:           desktop.ID,
 		ProfileID:    desktop.ProfileID,
 		Name:         desktop.Name,
+		Kind:         protocol.DesktopKind(desktop.Kind),
 		OrderKey:     desktop.OrderKey,
 		TreeJson:     treeJSON,
 		ActivePaneID: desktop.ActivePaneID,

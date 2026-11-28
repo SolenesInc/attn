@@ -255,10 +255,11 @@ func (s *Store) LaunchDesktopChoices(kind, id string) (LaunchDesktopItem, []prof
 		if err != nil {
 			return err
 		}
-		desktops, err = listDesktops(tx, item.ProfileID)
+		desktops, err = profileDesktops(tx, item.ProfileID)
 		if err != nil {
 			return err
 		}
+		desktops = s.listedDesktops(desktops)
 		return markEphemeralDesktops(tx, item.ProfileID, desktops)
 	})
 	return item, desktops, err
@@ -565,7 +566,11 @@ func removableDesktopCondition(tx *sql.Tx) (string, error) {
 	if !hasEphemeral {
 		return removableUnnamedDesktop, nil
 	}
-	return removableDesktop, nil
+	hasKind, err := columnExists(tx, "desktops", "kind")
+	if err != nil || !hasKind {
+		return removableDesktop, err
+	}
+	return removableDesktop + ` AND kind = 'desktop'`, nil
 }
 
 // stampEmptyDesktops records when each removable desktop (unnamed and untied, or an ephemeral own

@@ -176,6 +176,7 @@ mod wire {
     mod garden;
     mod harness_logos;
     mod home;
+    mod home_desktop;
     mod home_pull_requests;
     mod keys;
     mod launcher;

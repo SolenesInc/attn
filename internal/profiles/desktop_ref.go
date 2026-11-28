@@ -10,6 +10,9 @@ import (
 // DesktopLabel is the name a desktop shows; an unnamed one reads "Desktop N"
 // like the native app's desktop_title (native/crates/attn-app/src/sidebar/model.rs).
 func DesktopLabel(desktop Desktop, desktops []Desktop) string {
+	if desktop.Kind == DesktopKindHome {
+		return HomeDesktopLabel
+	}
 	if name := strings.TrimSpace(desktop.Name); name != "" {
 		return name
 	}
@@ -22,7 +25,7 @@ func desktopNumber(desktop Desktop, desktops []Desktop) int {
 	}
 	extra := 0
 	for _, entry := range orderedDesktops(desktops) {
-		if entry.ShortcutSlot != 0 {
+		if entry.ShortcutSlot != 0 || entry.Kind == DesktopKindHome {
 			continue
 		}
 		extra++

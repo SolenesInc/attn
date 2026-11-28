@@ -369,16 +369,19 @@ impl Window {
     pub(crate) fn go_home(&mut self) {
         self.close_overview();
         self.view = View::Home;
-        self.desk.header_pop = Default::default();
-        self.follow_next_turn = false;
-        self.desk.awaited = None;
+        self.leave_for_home(false);
     }
 
     /// Home after the last turn closed, ready to open the next one that opens.
     pub(crate) fn go_home_following(&mut self) {
         self.view = View::Home;
+        self.leave_for_home(true);
+    }
+
+    /// Lets go of what the window showed, for Home; following waits there for the next turn.
+    pub(crate) fn leave_for_home(&mut self, following: bool) {
         self.desk.header_pop = Default::default();
-        self.follow_next_turn = true;
+        self.follow_next_turn = following;
         self.desk.awaited = None;
     }
 

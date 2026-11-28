@@ -628,6 +628,7 @@ func (d *Daemon) Start() error {
 	d.resumeHomeMoveAtStart()
 	d.emptyDesktops.grace = emptyDesktopGraceFromEnv()
 	d.store.OnEmptyDesktop(d.desktopEmptied)
+	d.listHomeDesktops()
 	d.removeLegacyStateFile()
 	d.ensurePluginSupervisor()
 	if err := d.startEventBus(); err != nil {
@@ -688,6 +689,7 @@ func (d *Daemon) Start() error {
 	d.ensureCrewCollections()
 	d.importCrewHomes()
 	d.ensureChiefs()
+	d.settleHiddenHomeDesktops()
 	d.removeEmptyDesktops()
 	d.setRecovering(true)
 	defer func() {

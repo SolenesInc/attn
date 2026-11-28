@@ -193,6 +193,8 @@ pub struct DesktopHeader {
     pub empty: bool,
     /// The desktop has a name of its own; the heading shows only its number otherwise.
     pub named: bool,
+    /// The profile's Home desktop, which keeps its place and its name.
+    pub home: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -469,6 +471,7 @@ pub fn sorted_desktop_ids(desktops: &[Desktop]) -> Vec<String> {
     let slot = |d: &Desktop| d.shortcut_slot.filter(|s| *s > 0);
     let mut sorted = ordered_desktops(desktops);
     sorted.sort_by(|a, b| match (slot(a), slot(b)) {
+        _ if a.is_home() || b.is_home() => b.is_home().cmp(&a.is_home()),
         (Some(a), Some(b)) => a.cmp(&b),
         (Some(_), None) => std::cmp::Ordering::Less,
         (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -514,7 +517,7 @@ pub fn desktop_number(desktop: &Desktop, desktops: &[Desktop]) -> i64 {
     }
     let extra = ordered_desktops(desktops)
         .into_iter()
-        .filter(|d| d.shortcut_slot.unwrap_or(0) <= 0)
+        .filter(|d| d.shortcut_slot.unwrap_or(0) <= 0 && !d.is_home())
         .position(|d| d.id == desktop.id)
         .unwrap_or(0);
     SHORTCUT_SLOTS + extra as i64 + 1
@@ -522,7 +525,9 @@ pub fn desktop_number(desktop: &Desktop, desktops: &[Desktop]) -> i64 {
 
 pub fn desktop_title(desktop: &Desktop, desktops: &[Desktop]) -> String {
     let name = desktop.name.trim();
-    if name.is_empty() {
+    if desktop.is_home() {
+        "Home".to_owned()
+    } else if name.is_empty() {
         format!("Desktop {}", desktop_number(desktop, desktops))
     } else {
         name.to_owned()
@@ -770,6 +775,7 @@ pub fn desktop_lines(
             current: shown,
             empty: children.is_empty(),
             named: !desktop.name.trim().is_empty(),
+            home: desktop.is_home(),
         }));
         lines.extend(children);
     }

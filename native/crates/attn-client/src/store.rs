@@ -27,6 +27,11 @@ impl Desktop {
     pub fn leaves(&self) -> Vec<&Leaf> {
         self.tree().map(Node::leaves).unwrap_or_default()
     }
+
+    /// Whether this is its profile's Home desktop, which the daemon lists only while views are on.
+    pub fn is_home(&self) -> bool {
+        self.sent.kind == "home"
+    }
 }
 
 impl From<attn_protocol::Desktop> for Desktop {
@@ -284,6 +289,13 @@ pub struct TileKey {
 }
 
 impl Facts {
+    /// The selected profile's Home desktop, while the daemon lists it.
+    pub fn home_desktop(&self) -> Option<&Desktop> {
+        self.desktops
+            .iter()
+            .find(|d| d.profile_id == self.profiles.selected && d.is_home())
+    }
+
     /// The desktop the selected profile shows.
     pub fn current_desktop(&self) -> Option<&Desktop> {
         let profile = self

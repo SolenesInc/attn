@@ -7139,7 +7139,7 @@ fn minutes_ago(minutes: i64) -> String {
 /// Home at its fullest: an ask, an agent whose machine is unreachable, a fresh and a stale
 /// activity line, the Chief, the snoozed group open with Unsnooze, and pull requests with every
 /// mark, one repository folded away.
-fn home_full(dark: bool) {
+fn home_full_state(dark: bool) -> InitialStateMessage {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     state.crew = Some(crew());
     let sessions = state.sessions.get_or_insert_default();
@@ -7230,6 +7230,11 @@ fn home_full(dark: bool) {
             )
         },
     ]);
+    state
+}
+
+fn home_full(dark: bool) {
+    let state = home_full_state(dark);
     let mut world = World::start_sized(scripted().state(state), window());
     press(&mut world, Action::SessionGoToDashboard);
     world.gesture(|app| app.click(Target::key("home.group.snoozed.toggle")));
@@ -7262,6 +7267,71 @@ fn home_full(dark: bool) {
 
 /// Home on the first launch of a release whose tour the user already met: the notice that
 /// offers it again, over the crew's Home.
+fn home_desktop(dark: bool) {
+    let mut state = home_full_state(dark);
+    let view = |name: &str| {
+        json!({
+            "type": "tile",
+            "tile_id": format!("tile-view-{name}"),
+            "tile_kind": "markdown",
+            "tile_params": json!({ "view": name }).to_string(),
+        })
+    };
+    let tree = json!({
+        "type": "split", "split_id": "home-row", "direction": "vertical", "ratio": 0.5,
+        "ratio_mode": "automatic",
+        "children": [
+            {
+                "type": "split", "split_id": "home-first-column", "direction": "horizontal",
+                "ratio": 0.25, "children": [view("attn"), view("sessions")],
+            },
+            view("pull-requests"),
+        ],
+    });
+    let home = format!("{PROFILE}/home");
+    state.desktops.get_or_insert_default().push(Desktop {
+        kind: "home".into(),
+        name: String::new(),
+        ..desktop(&home, "0", tree, vec![])
+    });
+    state.profiles = Some(vec![Profile {
+        current_desktop_id: home,
+        ..profile()
+    }]);
+    state
+        .settings
+        .get_or_insert_default()
+        .insert("views_enabled".into(), "true".into());
+    let mut prefs = rune::prefs::Prefs::memory();
+    prefs
+        .set(
+            attn_app::whats_new::SEEN_PREF,
+            &attn_app::whats_new::RELEASE.to_owned(),
+        )
+        .expect("memory prefs keep every value");
+    let mut world = World::start_sized_with_prefs(scripted().state(state), window(), prefs);
+    world.gesture(|app| app.move_to((1.0, 1.0)));
+    snap(&mut world, "home-desktop", dark);
+}
+
+fn desktop_soft(dark: bool) {
+    let state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
+    let mut prefs = rune::prefs::Prefs::memory();
+    prefs
+        .set("attn.workspace.softTiles", &"on".to_owned())
+        .expect("memory prefs keep every value");
+    prefs
+        .set(
+            attn_app::whats_new::SEEN_PREF,
+            &attn_app::whats_new::RELEASE.to_owned(),
+        )
+        .expect("memory prefs keep every value");
+    let mut world = World::start_sized_with_prefs(scripted().state(state), window(), prefs);
+    world.open_desktop();
+    world.gesture(|app| app.move_to((1.0, 1.0)));
+    snap(&mut world, "desktop-soft", dark);
+}
+
 fn home_whats_new(dark: bool) {
     let mut state = initial(dark, document_tile("m", "/repo/plan.md"), vec![]);
     state.crew = Some(crew());
@@ -9907,6 +9977,8 @@ fn shoot(out: PathBuf, scheme: Option<String>, only: Vec<String>) -> bool {
         scene("home_pull_requests", || home_pull_requests(dark));
         scene("home_full", || home_full(dark));
         scene("home_whats_new", || home_whats_new(dark));
+        scene("home_desktop", || home_desktop(dark));
+        scene("desktop_soft", || desktop_soft(dark));
         scene("palette_chief", || palette_chief(dark));
         scene("manage_crew", || {
             manage_crew(dark, "chief", "launch", "crew-launch")

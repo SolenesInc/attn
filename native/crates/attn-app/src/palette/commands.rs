@@ -196,7 +196,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .filter(|d| &d.profile_id == profile)
         .cloned()
         .collect();
-    if let Some(current) = facts.current_desktop() {
+    if let Some(current) = facts.current_desktop().filter(|d| !d.is_home()) {
         commands.push(Command::new(
             "close-desktop",
             "Close desktop",
@@ -223,6 +223,19 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 },
             )
             .describe("Numbered desktops first, then names A–Z"),
+        );
+    }
+    if facts.home_desktop().is_some() {
+        commands.push(
+            Command::new(
+                "put-home-back",
+                "Put Home back to its default",
+                &["desktop", "home", "order", "default", "reset", "views"],
+                Action::PutHomeBack {
+                    profile: profile.clone(),
+                },
+            )
+            .describe("At the top, with attn, Sessions and Pull requests where they start"),
         );
     }
     for desktop in model::ordered_desktops(&desktops) {
@@ -632,6 +645,22 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             format!("Use {name} to mark the selected tile")
         })
     }));
+    let soft = crate::desktop::soft_tiles();
+    commands.push(
+        Command::new(
+            "soft-tiles",
+            if soft {
+                "Plain tiles on desktops"
+            } else {
+                "Softer tiles on desktops"
+            },
+            &[
+                "tile", "look", "soft", "rounded", "backdrop", "style", "desktop",
+            ],
+            Action::SetSoftTiles { on: !soft },
+        )
+        .describe("Rounded tiles set apart on a darker backdrop"),
+    );
     for feature in FEATURES {
         let on = setting::on(settings, feature.key);
         let keywords: Vec<&str> = ["experimental", "feature"]

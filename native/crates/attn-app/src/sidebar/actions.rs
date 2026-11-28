@@ -234,7 +234,7 @@ pub(crate) fn settle_key(state: &mut State, tx: &mut Tx) {
     }
     match bands.head().map(|head| head.id.clone()) {
         Some(head) => open_agent(state, &head, tx),
-        None => state.window.go_home_following(),
+        None => crate::home::go(state, true, tx),
     }
 }
 
@@ -367,7 +367,7 @@ pub(crate) fn advance(state: &mut State, tx: &mut Tx) {
     match to {
         Some(Some(id)) if tx.focused().is_none() => open_agent(state, &id, tx),
         Some(Some(id)) => show_agent(state, &id, tx),
-        Some(None) => state.window.go_home_following(),
+        Some(None) => crate::home::go(state, true, tx),
         None => {}
     }
 }
