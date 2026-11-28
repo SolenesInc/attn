@@ -194,11 +194,12 @@ func (d *Daemon) heldView(document tileDocument, profileID string) *protocol.Vie
 	delivery := &d.desktopTiles
 	delivery.mu.Lock()
 	var view *protocol.ViewDocument
+	var kept keptViewKey
 	if held := delivery.documents[document]; held != nil {
-		view = held.view
+		view, kept = held.view, held.kept
 	}
 	delivery.mu.Unlock()
-	if filled, _, shaped := d.withDataSets(view, profileID); shaped {
+	if filled, _, shaped := d.withDataSets(view, kept, profileID); shaped {
 		return filled
 	}
 	return view

@@ -618,6 +618,9 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 	requireStdout(t, home.Attn("view", "export", "sessions", "--to", home.Path("sessions")))
 	writeView(t, home.Path("sessions"), strings.Replace(fileText(t, home.Path("sessions", "view.md")), "## Your turn", "## Yours at the new home", 1), map[string]string{})
 	requireStdout(t, home.Attn("view", "edit", "sessions", "--from", home.Path("sessions")), "as version 2")
+	writeView(t, home.Path("todo"), "# To do\n\n:::data store=\"items\"\ntext: text\ndone: yes-no\n:::\n\n:::list items\ntitle: {text}\n:::\n", map[string]string{})
+	requireStdout(t, home.Attn("view", "keep", home.Path("todo"), "--name", "todo"), "kept todo as version 1")
+	requireStdout(t, home.Attn("view", "data", "add", "todo", "items", "--item", `{"text": "moves with the home"}`), "added ", " to todo/items")
 
 	move := homeMoveJSON(t, home, "move", "outpost", "--via", "oldhome")
 	if move.Step != "committed" || move.Error != nil {
@@ -668,6 +671,9 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 		if !strings.HasPrefix(read.Path, outpost.Dir) || !strings.Contains(read.Text, "## Yours at the new home") || protocol.Deref(read.Version) != 2 {
 			t.Fatalf("sessions read at the new home: %+v", read)
 		}
+	})
+	t.Run("a kept view's store keeps its items", func(t *testing.T) {
+		requireStdout(t, outpost.Attn("view", "data", "list", "todo", "items"), `"text":"moves with the home"`, `"done":false`)
 	})
 	t.Run("a home with more files than one ssh packet can name moves them all", func(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(outpost.Dir, "plugins", "many", fmt.Sprintf("module-%04d.js", manyPluginFiles-1))); err != nil {

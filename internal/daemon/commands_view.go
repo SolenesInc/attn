@@ -388,8 +388,12 @@ func (d *Daemon) runViewDelete(ctx context.Context, c command.Caller, a command.
 	if err := d.store.DeleteView(view, d.machineFor(view.MachineID).ID()); err != nil {
 		return nil, err
 	}
+	stores, err := d.deleteViewStores(view)
+	if err != nil {
+		return nil, err
+	}
 	d.removeKeptViewFolder(ctx, view)
-	return protocol.ViewDeleteResult{View: view.Name, Closed: closed}, nil
+	return protocol.ViewDeleteResult{View: view.Name, Closed: closed, Stores: stores}, nil
 }
 
 // viewShownOn is each tile of the profile's desktops that names the view.
@@ -633,6 +637,7 @@ func (d *Daemon) runViewRead(ctx context.Context, c command.Caller, a command.Vi
 	if answer.View == nil {
 		return nil, fmt.Errorf("%s is not a view: it opens no part of the view language", document.path)
 	}
+	answer.View = d.withUnkeptStoreProblem(answer.View, document)
 	result.Path, result.Text = document.path, answer.Content
 	result.Language, result.Problems, result.Sources, result.Values, result.Commands = answer.View.Language, answer.View.Problems, answer.View.Sources, answer.View.Values, answer.View.Commands
 	return result, nil

@@ -7,7 +7,7 @@ groups:
       rows:
         - {need: "Keep, change, duplicate, hide or show a view", tools: [view_export, view_edit, view_show, view_hide]}
     doc: |
-      A view is a folder with a view file and the files that view file names; attn draws it in a tile. A kept view is one attn stores in your profile under a name, with every version. attn's own views, `sessions`, `pull-requests` and `attn`, are views too, and an edit keeps an override of one. Only attn writes a kept view: export a copy with `view_export`, edit the copy, and save it with `view_edit`. With the experimental setting views_enabled on.
+      A view is a folder with a view file and the files that view file names; attn draws it in a tile. A kept view is one attn stores in your profile under a name, with every version. attn's own views, `sessions`, `pull-requests` and `attn`, are views too, and an edit keeps an override of one. Only attn writes a kept view: export a copy with `view_export`, edit the copy, and save it with `view_edit`. A kept view with `:::data store=` also keeps items, which the user changes in its tile and you change with the `view_data_` commands. With the experimental setting views_enabled on.
     flags:
       - {name: session, placeholder: "<id>", doc: "the session asking (defaults to the current session)"}
     sections:
@@ -17,6 +17,13 @@ groups:
         commands: [view keep, view edit, view restore, view fork, view delete]
       - title: Placing views
         commands: [view show, view hide]
+      - title: A view's items
+        commands: [view data list, view data add, view data set, view data remove]
+
+  - name: view data
+    summary: read and change the items a kept view's store holds
+    doc: |
+      A kept view with `:::data store="<set>"` keeps items in that store. The user adds, changes and removes them in the view's tile; these commands do the same, and every tile that shows the store follows at once. Each move has its own --help.
 
 commands:
   - name: view list
@@ -145,7 +152,7 @@ commands:
     grant: full
     effect: act
     doc: |
-      Removes a kept view for good, with every version and what the user started and answered in it, and closes every tile that shows it. attn's own views cannot be deleted; hide them with `view_hide`.
+      Removes a kept view for good, with every version, its store's items and what the user started and answered in it, and closes every tile that shows it. The result lists each store it deleted and how many items it held; take the items out first with `view_data_list` if you need them. attn's own views cannot be deleted; hide them with `view_hide`.
     args:
       - {name: view, type: name, required: true, cli: pos}
     result: ViewDeleteResult
@@ -183,3 +190,72 @@ commands:
     receipt: [view, desktop_id, removed]
     errors:
       - {code: not_found, fix: "Name a view that view_list lists, and a desktop of your profile."}
+
+  - name: view data list
+    summary: read the items a kept view's store holds
+    runs: home
+    grant: full
+    effect: read
+    doc: |
+      Lists the items of the store `set` that the kept view `view` declares with `:::data store=`, oldest first. Each item is its `id` and the fields the view's newest version declares; a field an edit removed is kept but not listed.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+      - {name: set, type: name, required: true, cli: pos, placeholder: "<set>", doc: "the store's name, as the view's :::data store= names it"}
+    result: ViewDataListResult
+    errors:
+      - {code: not_found, fix: "Name a view that view_list lists, and a store its view file declares."}
+      - {code: built_in, fix: "attn's own views keep no store."}
+
+  - name: view data add
+    summary: add an item to a kept view's store
+    runs: home
+    grant: full
+    effect: act
+    doc: |
+      Adds `item` to the store `set` of the kept view `view`, and every tile that shows the store shows it at once. `item` holds fields the view declares, each of its type: text, a number, or true or false for yes-no; a field left out takes its type's empty value. attn gives the item its `id`.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+      - {name: set, type: name, required: true, cli: pos, placeholder: "<set>", doc: "the store's name, as the view's :::data store= names it"}
+      - {name: item, type: view_item, required: true, cli: "--item", doc: "the item's fields, a JSON object such as {\"text\": \"review oven #91\"}"}
+    result: ViewDataAddResult
+    receipt: [view, set, item]
+    errors:
+      - {code: not_found, fix: "Name a view that view_list lists, and a store its view file declares."}
+      - {code: built_in, fix: "attn's own views keep no store."}
+      - {code: bad_item, fix: "Give only fields the store declares, each of its type; view_read shows the view file."}
+
+  - name: view data set
+    summary: change fields of an item in a kept view's store
+    runs: home
+    grant: full
+    effect: act
+    doc: |
+      Sets the fields `item` holds on the item `id` of the store `set` of the kept view `view`, and leaves its other fields as they are. Each field is one the view declares, of its type.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+      - {name: set, type: name, required: true, cli: pos, placeholder: "<set>", doc: "the store's name, as the view's :::data store= names it"}
+      - {name: id, type: name, required: true, cli: pos, placeholder: "<id>", doc: "the item's id, as view_data_list lists it"}
+      - {name: item, type: view_item, required: true, cli: "--item", doc: "the fields to set, a JSON object such as {\"done\": true}"}
+    result: ViewDataSetResult
+    receipt: [view, set, item]
+    errors:
+      - {code: not_found, fix: "Name a view, a store and an item that view_data_list lists."}
+      - {code: built_in, fix: "attn's own views keep no store."}
+      - {code: bad_item, fix: "Give only fields the store declares, each of its type; view_read shows the view file."}
+
+  - name: view data remove
+    summary: remove an item from a kept view's store
+    runs: home
+    grant: full
+    effect: act
+    doc: |
+      Removes the item `id` from the store `set` of the kept view `view`.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+      - {name: set, type: name, required: true, cli: pos, placeholder: "<set>", doc: "the store's name, as the view's :::data store= names it"}
+      - {name: id, type: name, required: true, cli: pos, placeholder: "<id>", doc: "the item's id, as view_data_list lists it"}
+    result: ViewDataRemoveResult
+    receipt: [view, set, id]
+    errors:
+      - {code: not_found, fix: "Name a view, a store and an item that view_data_list lists."}
+      - {code: built_in, fix: "attn's own views keep no store."}

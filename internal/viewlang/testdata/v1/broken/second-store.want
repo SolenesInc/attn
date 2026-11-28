@@ -1,0 +1,5 @@
+line 5: the view already has a store of its own, and a view keeps one
+fix: Keep one store, or show another kept view's store as "view/items".
+
+data on line 1
+data on line 5 shows the problem of line 5

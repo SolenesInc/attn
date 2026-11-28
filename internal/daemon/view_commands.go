@@ -48,7 +48,7 @@ func (d *Daemon) runView(profileID string, msg *protocol.ViewRunMessage) error {
 	if view == nil {
 		return fmt.Errorf("%s is not shown as a view", tile.document.path)
 	}
-	run, err := viewCommandOf(view, msg)
+	run, err := viewCommandOf(view, msg, d.heldKeptView(tile.document))
 	if err != nil {
 		return err
 	}
@@ -71,9 +71,13 @@ func (d *Daemon) runView(profileID string, msg *protocol.ViewRunMessage) error {
 // the document of the view.
 type viewCommandRun func(ctx context.Context, d *Daemon, document tileDocument) error
 
-// viewCommandOf is the run of the command msg names: one the view defines,
-// with its arguments filled from the row the control is in.
-func viewCommandOf(view *protocol.ViewDocument, msg *protocol.ViewRunMessage) (viewCommandRun, error) {
+// viewCommandOf is the run of the command msg names: a store's, one of
+// attn's, or one the view defines, with its arguments filled from the row the
+// control is in.
+func viewCommandOf(view *protocol.ViewDocument, msg *protocol.ViewRunMessage, kept keptViewKey) (viewCommandRun, error) {
+	if isViewStoreCommand(msg.Command) {
+		return viewStoreRun(view, msg, kept)
+	}
 	attn, isAttns := catalog.FindCommand(msg.Command)
 	if isAttns && attn.Runs != catalog.RunsAtHome {
 		return nil, fmt.Errorf("the app runs %s", attn.Name)

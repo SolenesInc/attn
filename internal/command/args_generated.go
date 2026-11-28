@@ -15,6 +15,7 @@ const (
 	CodeAsUserWithSteer             = "as_user_with_steer"
 	CodeBadBookmark                 = "bad_bookmark"
 	CodeBadCapture                  = "bad_capture"
+	CodeBadItem                     = "bad_item"
 	CodeBadMode                     = "bad_mode"
 	CodeBadName                     = "bad_name"
 	CodeBadUntil                    = "bad_until"
@@ -292,6 +293,10 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"view delete":             {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "built_in": "Take it off Home with view_hide instead."}},
 		"view show":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists, and a desktop of your profile."}},
 		"view hide":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists, and a desktop of your profile."}},
+		"view data list":          {needsSession: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists, and a store its view file declares.", "built_in": "attn's own views keep no store."}},
+		"view data add":           {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists, and a store its view file declares.", "built_in": "attn's own views keep no store.", "bad_item": "Give only fields the store declares, each of its type; view_read shows the view file."}},
+		"view data set":           {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view, a store and an item that view_data_list lists.", "built_in": "attn's own views keep no store.", "bad_item": "Give only fields the store declares, each of its type; view_read shows the view file."}},
+		"view data remove":        {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view, a store and an item that view_data_list lists.", "built_in": "attn's own views keep no store."}},
 	}
 })
 
@@ -1263,4 +1268,28 @@ type ViewShowArgs struct {
 type ViewHideArgs struct {
 	View    string `json:"view,omitempty"`
 	Desktop string `json:"desktop,omitempty"`
+}
+
+type ViewDataListArgs struct {
+	View string `json:"view,omitempty"`
+	Set  string `json:"set,omitempty"`
+}
+
+type ViewDataAddArgs struct {
+	View string          `json:"view,omitempty"`
+	Set  string          `json:"set,omitempty"`
+	Item json.RawMessage `json:"item,omitempty"`
+}
+
+type ViewDataSetArgs struct {
+	View string          `json:"view,omitempty"`
+	Set  string          `json:"set,omitempty"`
+	ID   string          `json:"id,omitempty"`
+	Item json.RawMessage `json:"item,omitempty"`
+}
+
+type ViewDataRemoveArgs struct {
+	View string `json:"view,omitempty"`
+	Set  string `json:"set,omitempty"`
+	ID   string `json:"id,omitempty"`
 }

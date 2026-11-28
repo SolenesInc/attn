@@ -154,15 +154,27 @@ pub fn run_group(run: &mut Run<'_>, family: &dyn Family, args: &[String]) -> Res
         crate::commands::print_stdout(family.group_help());
         return Ok(());
     }
-    let verb = first.and_then(|word| {
-        family
-            .commands()
-            .iter()
-            .find(|cmd| !cmd.name.is_empty() && cmd.name == word)
+    let named = |name: &str| {
+        (family.commands().iter()).find(|cmd| !cmd.name.is_empty() && cmd.name == name)
+    };
+    let verb = first.and_then(named).map(|cmd| (cmd, 1)).or_else(|| {
+        let move_of = args.get(..2)?.join(" ");
+        named(&move_of).map(|cmd| (cmd, 2))
     });
+    let subgroup = first.filter(|word| {
+        (family.commands().iter()).any(|cmd| {
+            cmd.name
+                .split_once(' ')
+                .is_some_and(|(group, _)| group == *word)
+        })
+    });
+    if let (None, Some(word)) = (verb, subgroup) {
+        crate::commands::print_stdout(family.help(word));
+        return Ok(());
+    }
     let bare = family.commands().iter().find(|cmd| cmd.name.is_empty());
     let (cmd, words) = match (verb, bare, first) {
-        (Some(cmd), _, _) => (cmd, &args[1..]),
+        (Some((cmd, taken)), _, _) => (cmd, &args[taken..]),
         (None, Some(cmd), _) => (cmd, args),
         (None, None, None) => {
             crate::commands::print_stdout(family.group_help());
@@ -622,6 +634,11 @@ fn flag_values(
                     FlagValue::Bool(true) => Json::from(true),
                     FlagValue::Int(number) => Json::from(*number),
                     FlagValue::Repeated(list) => Json::from(list.clone()),
+                    other if matches!(arg.value, Value::Json) => {
+                        serde_json::from_str(&other.to_string()).map_err(|error| {
+                            ParseStop::Usage(format!("--{name} is not JSON: {error}"))
+                        })?
+                    }
                     other => Json::from(other.to_string()),
                 };
                 values.insert(arg.name.to_string(), value);

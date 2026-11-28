@@ -190,7 +190,7 @@ func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.Se
 	case opened.Review != nil:
 		found.problems = opened.Review.Problems
 	case opened.View != nil:
-		found.problems = openProblems(opened.View)
+		found.problems = openProblems(d.withUnkeptStoreProblem(opened.View, document))
 		found.commands = opened.View.Commands
 	}
 	location, err := d.currentAgent(callerSessionID)

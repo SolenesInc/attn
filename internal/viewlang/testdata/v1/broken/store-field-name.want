@@ -1,0 +1,6 @@
+line 3: "id" cannot be a store's field
+fix: Name the field with lowercase letters, digits and _, other than "id", "created_at", "updated_at".
+line 4: "due-date" cannot be a store's field
+fix: Name the field with lowercase letters, digits and _, other than "id", "created_at", "updated_at".
+
+data on line 1 shows the problem of line 3

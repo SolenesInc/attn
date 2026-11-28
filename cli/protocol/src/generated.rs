@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "f853f67fdc33";
+pub const PROTOCOL_VERSION: &str = "f54a3565a185";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -14007,9 +14007,36 @@ impl ViewCommandRunMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewDataAddResult {
+    pub item: serde_json::Value,
+    pub set: String,
+    pub view: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewDataListResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub items: Vec<serde_json::Value>,
+    pub set: String,
+    pub view: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewDataRemoveResult {
+    pub id: String,
+    pub set: String,
+    pub view: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewDataSetResult {
+    pub item: serde_json::Value,
+    pub set: String,
+    pub view: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewDeleteResult {
     #[serde(deserialize_with = "null_as_default")]
     pub closed: Vec<ViewShownOn>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub stores: Vec<ViewStoreRemoved>,
     pub view: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -14415,6 +14442,8 @@ pub struct ViewRunCommand {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewRunMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Vec<String>>,
     pub cmd: String,
     pub command: String,
     pub desktop_id: String,
@@ -14551,6 +14580,11 @@ pub type ViewStep = String;
 pub struct ViewStoreField {
     pub name: String,
     pub r#type: ViewStoreType,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewStoreRemoved {
+    pub items: i64,
+    pub set: String,
 }
 pub type ViewStoreType = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

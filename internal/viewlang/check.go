@@ -1041,7 +1041,14 @@ func (c *checker) storeBody(b document.Block, args map[string]string) ([]out, *s
 		}
 		return nil, unknown
 	}
-	shared := strings.Contains(store, "/")
+	owner, set, shared := strings.Cut(store, "/")
+	if !shared {
+		owner, set = "", store
+	}
+	if !namePattern().MatchString(set) || shared && !namePattern().MatchString(owner) {
+		c.report(b.Line, "Name the store with lowercase letters, digits and dashes, such as \"items\", or another kept view's store as \"view/items\".", "%q is not a store's name", store)
+		return nil, unknown
+	}
 	if shared && len(lines) > 0 {
 		c.report(lines[0].line, "Remove the lines; the view that owns the store declares them.", "%q is another view's store, so this view lists no fields", store)
 		return nil, unknown
@@ -1053,6 +1060,10 @@ func (c *checker) storeBody(b document.Block, args map[string]string) ([]out, *s
 		c.report(b.Line, "List each field as \"name: type\", such as \"text: text\".", "the store %q lists no fields", store)
 		return nil, unknown
 	}
+	if c.hasStore {
+		c.report(b.Line, "Keep one store, or show another kept view's store as \"view/items\".", "the view already has a store of its own, and a view keeps one")
+		return nil, unknown
+	}
 	types := names(catalog.StoreTypes, func(n catalog.Named) string { return n.Name })
 	item := object(store)
 	fields := []out{}
@@ -1061,6 +1072,10 @@ func (c *checker) storeBody(b document.Block, args map[string]string) ([]out, *s
 		name, kind = strings.TrimSpace(name), strings.TrimSpace(kind)
 		if !ok || !segmentPattern().MatchString(name) {
 			c.report(l.line, "Write it as \"name: type\".", "%q is not a field", l.text)
+			continue
+		}
+		if !storeFieldPattern().MatchString(name) || slices.Contains(reservedStoreFields, name) {
+			c.report(l.line, "Name the field with lowercase letters, digits and _, other than "+quoted(reservedStoreFields)+".", "%q cannot be a store's field", name)
 			continue
 		}
 		if !slices.Contains(types, kind) {
@@ -1076,6 +1091,7 @@ func (c *checker) storeBody(b document.Block, args map[string]string) ([]out, *s
 		fields = append(fields, out{"name": name, "type": kind})
 	}
 	c.hasStore = true
+	item.fields["id"] = &shape{known: true, kind: "text"}
 	name := args["as"]
 	if name == "" {
 		name = store

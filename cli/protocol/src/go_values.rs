@@ -91,6 +91,7 @@ pub const ENTRY_KINDS: &[&str] = &["note", "handoff", "attach", "detach", "check
 pub const CHECK_VERBS: &[&str] = &["add", "edit", "remove", "restore", "report", "confirm", "reject", "uncheck", "reopen"];
 pub const BED_VERBS: &[&str] = &["ls", "add", "set", "rm", "assign"];
 pub const GIT_REPOSITORY_ENV: &[&str] = &["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM"];
+pub const VIEW_STORE_COMMANDS: &[&str] = &["add", "set", "toggle", "remove"];
 
 pub struct Setting {
     pub key: &'static str,

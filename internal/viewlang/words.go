@@ -52,10 +52,13 @@ func splitToken(word string) token {
 	return token{value: word}
 }
 
+var reservedStoreFields = []string{"id", "created_at", "updated_at"}
+
 var (
-	namePattern     = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[a-z][a-z0-9-]*$`) })
-	segmentPattern  = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`) })
-	templatePattern = sync.OnceValue(func() *regexp.Regexp {
+	namePattern       = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[a-z][a-z0-9-]*$`) })
+	segmentPattern    = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`) })
+	storeFieldPattern = sync.OnceValue(func() *regexp.Regexp { return regexp.MustCompile(`^[a-z][a-z0-9_]*$`) })
+	templatePattern   = sync.OnceValue(func() *regexp.Regexp {
 		return regexp.MustCompile(`\{([A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)*)(?:\|([a-z][a-z-]*))?\}`)
 	})
 )

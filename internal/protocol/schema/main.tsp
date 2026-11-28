@@ -4090,6 +4090,9 @@ model ViewRunMessage {
   desktop_id: string;
   tile_id: string;
   command: string;
+  // The command's arguments as the control names them, which tell two
+  // controls of one command apart.
+  args?: string[];
   part: int32;
   rows?: string[];
   text?: string;
@@ -4376,6 +4379,14 @@ model ViewDeleteResult {
   view: string;
   // The tiles that showed it, now closed.
   closed: ViewShownOn[];
+  // Its stores, deleted with it.
+  stores: ViewStoreRemoved[];
+}
+
+model ViewStoreRemoved {
+  set: string;
+  // How many items it held.
+  items: int32;
 }
 
 model ViewShowResult {
@@ -4391,6 +4402,32 @@ model ViewHideResult {
   desktop_id: string;
   // The tiles taken off the desktop.
   removed: string[];
+}
+
+// A kept view's store: each item is its id and the fields the view's newest
+// version declares, oldest first.
+model ViewDataListResult {
+  view: string;
+  set: string;
+  items: unknown[];
+}
+
+model ViewDataAddResult {
+  view: string;
+  set: string;
+  item: unknown;
+}
+
+model ViewDataSetResult {
+  view: string;
+  set: string;
+  item: unknown;
+}
+
+model ViewDataRemoveResult {
+  view: string;
+  set: string;
+  id: string;
 }
 
 // A review document resolved on the machine that holds its files. Line

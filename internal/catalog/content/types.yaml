@@ -208,6 +208,10 @@ types:
     json: {type: object}
     doc: "The occurrence's structured input, as JSON; empty by default."
     placeholder: "<file>"
+  view_item:
+    json: {type: object}
+    doc: "An item's fields, as a JSON object."
+    placeholder: "<json>"
   setting_key:
     json: {type: string, minLength: 1}
     doc: "A setting's key, as settings list prints it."

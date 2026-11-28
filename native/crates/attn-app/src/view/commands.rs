@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use attn_client::TileKey;
+use attn_protocol::go_values::VIEW_STORE_COMMANDS;
 use attn_protocol::{
     ViewCommand, ViewCommandCall, ViewDocument, ViewOwnCommand, ViewPart, ViewRunMessage,
     ViewRunResultMessage,
@@ -170,21 +171,42 @@ impl<'a> Commands<'a> {
         (self.view.commands.iter()).any(|c| c.line == own.written && c.state == "started")
     }
 
+    /// Why `command` cannot run here now, or nothing when it can. A store's command runs once
+    /// the view's own store holds its items; a view's own command once the user started it.
+    fn unavailable(&self, command: &str) -> Option<String> {
+        if VIEW_STORE_COMMANDS.contains(&command) {
+            let store =
+                (self.view.sources.iter()).find(|s| s.kind == "store" && !s.id.contains('/'));
+            return match store {
+                Some(s) if s.state == "ok" => None,
+                Some(s) => Some(
+                    s.notice
+                        .clone()
+                        .unwrap_or_else(|| format!("{command} waits for the view's store")),
+                ),
+                None => Some(format!(
+                    "{command} changes a store of the view's own, and it has none"
+                )),
+            };
+        }
+        match self.own(command) {
+            None => Some(format!("{command} is not available yet")),
+            Some(own) if !self.started(own) => Some(format!(
+                "{command} runs once you start the view's commands: press r"
+            )),
+            Some(_) => None,
+        }
+    }
+
     /// Whether `call` can run here now.
     pub(crate) fn runs(&self, call: &ViewCommandCall) -> bool {
-        self.own(&call.command).is_some_and(|own| self.started(own))
+        self.unavailable(&call.command).is_none()
     }
 
     /// How the control for `call` stands here.
     pub(crate) fn phase(&self, call: &ViewCommandCall) -> Phase<'a> {
-        let Some(own) = self.own(&call.command) else {
-            return Phase::Unavailable(format!("{} is not available yet", call.command));
-        };
-        if !self.started(own) {
-            return Phase::Unavailable(format!(
-                "{} runs once you start the view's commands: press r",
-                call.command
-            ));
+        if let Some(why) = self.unavailable(&call.command) {
+            return Phase::Unavailable(why);
         }
         let rows = (!self.rows.is_empty()).then_some(&self.rows);
         let last = (self.ran.iter())
@@ -229,6 +251,7 @@ impl<'a> Commands<'a> {
             desktop_id: self.place.desktop.clone(),
             tile_id: self.place.tile.clone(),
             command: call.command.clone(),
+            args: Some(call.args.clone()),
             part: self.part,
             rows: (!self.rows.is_empty()).then(|| self.rows.clone()),
             ..ViewRunMessage::new()

@@ -42,6 +42,8 @@ type heldTileDocument struct {
 	annotations int
 	// The profiles whose windows show it, whose started commands its machine runs.
 	profiles []string
+	// The kept view it is the view file of, if any.
+	kept keptViewKey
 }
 
 type deliveredTileFile struct {
@@ -234,10 +236,10 @@ func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument][]stri
 			continue
 		}
 		profileID := client.selectedProfile()
-		for _, name := range viewDataSets(held.view) {
-			wanted[dataSetKey{profileID: profileID, name: name}] = true
+		for _, key := range viewSourceKeys(held.view, held.kept, profileID) {
+			wanted[key] = true
 		}
-		view, revision, shaped := d.withDataSets(held.view, profileID)
+		view, revision, shaped := d.withDataSets(held.view, held.kept, profileID)
 		if !shaped {
 			continue
 		}
@@ -267,6 +269,11 @@ func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument][]stri
 func (d *Daemon) holdTileDocumentLocked(document tileDocument) *heldTileDocument {
 	delivery := &d.desktopTiles
 	held := &heldTileDocument{}
+	if kept, err := d.keptViewOf(document); err != nil {
+		d.logf("tile %s: which kept view it is: %v", document.path, err)
+	} else {
+		held.kept = kept
+	}
 	delivery.documents[document] = held
 	delivery.signalHostLocked(document.host)
 	if _, watched := delivery.watching[document.host]; !watched && document.host != "" {
@@ -296,7 +303,7 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 	delivery.watching[host] = watcher
 	for document, held := range delivery.documents {
 		if document.host == host {
-			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, view: held.view, answers: held.answers, commands: held.commands, err: held.err, annotations: held.annotations, profiles: held.profiles}
+			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, view: held.view, answers: held.answers, commands: held.commands, err: held.err, annotations: held.annotations, profiles: held.profiles, kept: held.kept}
 		}
 	}
 	delivery.mu.Unlock()

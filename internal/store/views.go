@@ -151,6 +151,20 @@ func (s *Store) KeptView(profileID, name string) (KeptView, bool, error) {
 	return view, err == nil, err
 }
 
+// KeptViewAt is the kept view whose machine holds its newest placed version
+// in folder.
+func (s *Store) KeptViewAt(machineID, folder string) (KeptView, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	view := KeptView{MachineID: machineID, Folder: folder}
+	err := s.db.QueryRow(`SELECT profile_id, name, version, folder_version FROM views WHERE machine_id = ? AND folder = ? AND folder != ''`, machineID, folder).
+		Scan(&view.ProfileID, &view.Name, &view.Version, &view.FolderVersion)
+	if errors.Is(err, sql.ErrNoRows) {
+		return view, false, nil
+	}
+	return view, err == nil, err
+}
+
 // KeptViews is every view the profile keeps, by name.
 func (s *Store) KeptViews(profileID string) ([]KeptView, error) {
 	s.mu.RLock()

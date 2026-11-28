@@ -39,6 +39,7 @@ func (d *Daemon) commandLayer() *command.Layer {
 			d.terminalCommands(),
 			d.journalCommands(),
 			d.keptViewCommands(),
+			d.viewStoreCommands(),
 			d.crewCommands(),
 			d.prCommands(),
 			d.automationCommands(),

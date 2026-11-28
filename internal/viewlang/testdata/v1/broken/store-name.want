@@ -1,0 +1,4 @@
+line 1: "To Do" is not a store's name
+fix: Name the store with lowercase letters, digits and dashes, such as "items", or another kept view's store as "view/items".
+
+data on line 1 shows the problem of line 1

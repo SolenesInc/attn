@@ -17,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/sessionref"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/shortid"
+	viewcatalog "github.com/victorarias/attn/internal/viewlang/catalog"
 	"github.com/victorarias/attn/internal/whatsnew"
 )
 
@@ -121,6 +122,10 @@ func writeConstants(out *strings.Builder) {
 	for i, verb := range garden.CheckVerbs {
 		checkVerbs[i] = string(verb)
 	}
+	storeCommands := make([]string, len(viewcatalog.StoreCommands))
+	for i, command := range viewcatalog.StoreCommands {
+		storeCommands[i] = command.Name
+	}
 	for _, c := range []named[[]string]{
 		{"LINKABLE_KINDS", garden.LinkableKinds},
 		{"ROUTING_OVERRIDE_ENV", config.RoutingOverrideEnv()},
@@ -128,6 +133,7 @@ func writeConstants(out *strings.Builder) {
 		{"CHECK_VERBS", checkVerbs},
 		{"BED_VERBS", garden.BedVerbs},
 		{"GIT_REPOSITORY_ENV", attngit.RepositoryEnv},
+		{"VIEW_STORE_COMMANDS", storeCommands},
 	} {
 		items := make([]string, len(c.value))
 		for i, item := range c.value {

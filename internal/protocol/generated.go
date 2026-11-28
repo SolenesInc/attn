@@ -15866,9 +15866,56 @@ type ViewCommandRunMessage struct {
 	Path string `json:"path"`
 }
 
+type ViewDataAddResult struct {
+	// Item corresponds to the JSON schema field "item".
+	Item interface{} `json:"item"`
+
+	// Set corresponds to the JSON schema field "set".
+	Set string `json:"set"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
+type ViewDataListResult struct {
+	// Items corresponds to the JSON schema field "items".
+	Items []interface{} `json:"items"`
+
+	// Set corresponds to the JSON schema field "set".
+	Set string `json:"set"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
+type ViewDataRemoveResult struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Set corresponds to the JSON schema field "set".
+	Set string `json:"set"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
+type ViewDataSetResult struct {
+	// Item corresponds to the JSON schema field "item".
+	Item interface{} `json:"item"`
+
+	// Set corresponds to the JSON schema field "set".
+	Set string `json:"set"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
 type ViewDeleteResult struct {
 	// Closed corresponds to the JSON schema field "closed".
 	Closed []ViewShownOn `json:"closed"`
+
+	// Stores corresponds to the JSON schema field "stores".
+	Stores []ViewStoreRemoved `json:"stores"`
 
 	// View corresponds to the JSON schema field "view".
 	View string `json:"view"`
@@ -16413,6 +16460,9 @@ type ViewRunCommand struct {
 }
 
 type ViewRunMessage struct {
+	// Args corresponds to the JSON schema field "args".
+	Args []string `json:"args,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
@@ -16594,6 +16644,14 @@ type ViewStoreField struct {
 
 	// Type corresponds to the JSON schema field "type".
 	Type ViewStoreType `json:"type"`
+}
+
+type ViewStoreRemoved struct {
+	// Items corresponds to the JSON schema field "items".
+	Items int `json:"items"`
+
+	// Set corresponds to the JSON schema field "set".
+	Set string `json:"set"`
 }
 
 type ViewStoreType string

@@ -6,6 +6,7 @@ use crate::client::Reply;
 use crate::command::{self, Command, Family, Parsed};
 use crate::paths::os_error_text;
 use attn_protocol::{
+    ViewDataAddResult, ViewDataListResult, ViewDataRemoveResult, ViewDataSetResult,
     ViewDeleteResult, ViewEditResult, ViewExportResult, ViewForkResult, ViewHideResult,
     ViewKeepResult, ViewListResult, ViewReadResult, ViewRestoreResult, ViewShowResult,
 };
@@ -110,10 +111,54 @@ impl Family for View {
             }
             "delete" => {
                 let deleted: ViewDeleteResult = command::decode(run, self, cmd, &result)?;
-                format!(
+                let mut out = format!(
                     "deleted {} and closed {} tile(s)\n",
                     deleted.view,
                     deleted.closed.len()
+                );
+                for store in &deleted.stores {
+                    let _ = writeln!(
+                        out,
+                        "deleted its store {} ({} item(s))",
+                        store.set, store.items
+                    );
+                }
+                out
+            }
+            "data list" => {
+                let listed: ViewDataListResult = command::decode(run, self, cmd, &result)?;
+                let mut out = String::new();
+                for item in &listed.items {
+                    let encoded =
+                        attn::go::json::encode(item).expect("a decoded value always encodes");
+                    out.push_str(&String::from_utf8_lossy(&encoded));
+                    out.push('\n');
+                }
+                out
+            }
+            "data add" => {
+                let added: ViewDataAddResult = command::decode(run, self, cmd, &result)?;
+                format!(
+                    "added {} to {}/{}\n",
+                    item_id(&added.item),
+                    added.view,
+                    added.set
+                )
+            }
+            "data set" => {
+                let set: ViewDataSetResult = command::decode(run, self, cmd, &result)?;
+                format!(
+                    "changed {} in {}/{}\n",
+                    item_id(&set.item),
+                    set.view,
+                    set.set
+                )
+            }
+            "data remove" => {
+                let removed: ViewDataRemoveResult = command::decode(run, self, cmd, &result)?;
+                format!(
+                    "removed {} from {}/{}\n",
+                    removed.id, removed.view, removed.set
                 )
             }
             "show" => {
@@ -169,6 +214,12 @@ fn list(listed: &ViewListResult) -> String {
         }
     }
     out
+}
+
+fn item_id(item: &serde_json::Value) -> &str {
+    item.get("id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
 }
 
 fn read(view: &ViewReadResult) -> String {

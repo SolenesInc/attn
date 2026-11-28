@@ -109,4 +109,48 @@ pub const COMMANDS: &[Command] = &[
             Arg { name: "desktop", cli: Cli::Flag("desktop"), value: Value::Text, source: Source::Given, required: false, list: false },
         ],
     },
+    Command {
+        name: "data list",
+        result: true,
+        runs_without_daemon: false,
+        usage: &[],
+        args: &[
+            Arg { name: "view", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "set", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+        ],
+    },
+    Command {
+        name: "data add",
+        result: true,
+        runs_without_daemon: false,
+        usage: &[],
+        args: &[
+            Arg { name: "view", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "set", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "item", cli: Cli::Flag("item"), value: Value::Json, source: Source::Given, required: true, list: false },
+        ],
+    },
+    Command {
+        name: "data set",
+        result: true,
+        runs_without_daemon: false,
+        usage: &[],
+        args: &[
+            Arg { name: "view", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "set", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "item", cli: Cli::Flag("item"), value: Value::Json, source: Source::Given, required: true, list: false },
+        ],
+    },
+    Command {
+        name: "data remove",
+        result: true,
+        runs_without_daemon: false,
+        usage: &[],
+        args: &[
+            Arg { name: "view", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "set", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+            Arg { name: "id", cli: Cli::Pos, value: Value::Text, source: Source::Given, required: true, list: false },
+        ],
+    },
 ];

@@ -175,4 +175,8 @@ var CommandRuns = map[string]Locator{
 	"view delete":             LocatorHome,
 	"view show":               LocatorHome,
 	"view hide":               LocatorHome,
+	"view data list":          LocatorHome,
+	"view data add":           LocatorHome,
+	"view data set":           LocatorHome,
+	"view data remove":        LocatorHome,
 }

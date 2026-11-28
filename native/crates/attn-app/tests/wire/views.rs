@@ -1288,3 +1288,95 @@ fn a_letter_for_a_command_the_user_has_not_started_says_why_and_runs_nothing() {
         shown(&world)
     );
 }
+
+const TODO: &str = include_str!("../../../../../internal/viewlang/testdata/v1/views/todo.json");
+
+fn todo_view(store: &str, notice: Option<&str>) -> ViewDocument {
+    ViewDocument {
+        language: 1,
+        parts: parts_of(TODO),
+        sources: vec![ViewSource {
+            id: "items".into(),
+            kind: "store".into(),
+            data: true,
+            r#as: Some("items".into()),
+            state: store.into(),
+            notice: notice.map(Into::into),
+        }],
+        values: vec![ViewValues {
+            source: "items".into(),
+            values: json!([
+                {"id": "a1", "text": "buy milk", "done": false},
+                {"id": "b2", "text": "call the plumber", "done": true},
+            ]),
+        }],
+        ..ViewDocument::default()
+    }
+}
+
+fn store_runs(world: &World) -> Vec<Value> {
+    (world.daemon.sent_of("view_run").iter())
+        .map(|r| json!([r["command"], r["args"], r["part"], r["rows"], r["text"]]))
+        .collect()
+}
+
+#[test]
+fn a_kept_to_do_list_is_used_by_keys_alone_and_runs_its_store_commands_without_starting_anything() {
+    let mut world = start();
+    world.daemon.on(
+        "view_run",
+        |r| json!({"event": "view_run_result", "request_id": r["request_id"], "success": true}),
+    );
+    show(&mut world, todo_view("ok", None));
+    assert!(
+        says(&world, "buy milk") && says(&world, "call the plumber"),
+        "{:#?}",
+        shown(&world)
+    );
+
+    typed(&mut world, "j");
+    let first = highlighted(&world).expect("j highlights the first item");
+    press(&mut world, Key::Enter);
+    let remove = control(&world, &format!("{first}.remove"))
+        .shortcut
+        .expect("remove shows its letter");
+    typed(&mut world, &remove.to_lowercase());
+    assert_eq!(
+        store_runs(&world),
+        vec![
+            json!(["toggle", ["done"], 12, ["a1"], null]),
+            json!(["remove", [], 12, ["a1"], null]),
+        ],
+        "Enter checks the item off and the control's letter removes it, with no start key"
+    );
+
+    click(&mut world, Target::key("tile.m.view.2.text"));
+    typed(&mut world, "review oven #91");
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        store_runs(&world).last(),
+        Some(&json!(["add", ["text"], 8, null, "review oven #91"]))
+    );
+}
+
+#[test]
+fn a_store_command_of_a_view_not_kept_says_to_keep_it_and_sends_nothing() {
+    let mut world = start();
+    show(
+        &mut world,
+        todo_view(
+            "failed",
+            Some(
+                "only a kept view has a store: keep the view with view_keep, then show it with view_show",
+            ),
+        ),
+    );
+    typed(&mut world, "j");
+    press(&mut world, Key::Enter);
+    assert!(world.daemon.sent_of("view_run").is_empty());
+    assert!(
+        says(&world, "only a kept view has a store"),
+        "{:#?}",
+        shown(&world)
+    );
+}
