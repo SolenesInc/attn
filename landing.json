@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "land": "0.13.0",
+  "base": "a9c79387764b4a99f0aad04fb8407e3fc0930312",
+  "head": "2c48b78bc8182fa871956283ed6aa66a6aa885e9",
+  "gate": {
+    "command": "scripts/land-gate.sh",
+    "seconds": 153.454,
+    "ranOn": "2c48b78bc8182fa871956283ed6aa66a6aa885e9"
+  },
+  "recordings": [
+    {
+      "sha256": "9038407a79fa4fba34e84beb6e8dd1fa03a50658d3b778a687e2913df51ecf0c",
+      "ext": "png",
+      "bytes": 46359
+    },
+    {
+      "sha256": "d481cb840f15f4e1fc2f2a88c8af1c7cf10ada597b7238b101ebfc0bf87d42f5",
+      "ext": "png",
+      "bytes": 57693
+    },
+    {
+      "sha256": "6bc38d09e297d25cbc0cf55b74962820e828181c3be0ca039b0abbecde7d88bb",
+      "ext": "mp4",
+      "bytes": 103201
+    }
+  ]
+}

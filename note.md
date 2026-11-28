@@ -1,0 +1,6 @@
+Views (behind `views_enabled`) can now show live data from `:::data run="…" every="…"`, and opening a view still runs nothing. A notice over the view names each command, how often it runs and the machine it runs on. The user starts the commands with `r`. The machine that holds the file then runs each one in the view's folder, without a shell, while a window shows the view. If the command line or a file it names changes, attn stops that command, fades its last values and says what changed until the user starts it again. A failed run keeps the last values and says why. Every source of a view (`file=` and `run=` together) shares one 4 MiB data limit, and `every=` reruns at most once a second.
+
+![A view waiting for the user to start its command](https://land-feed.caketroll.cloud/m/SolenesInc/attn/9038407a79fa4fba34e84beb6e8dd1fa03a50658d3b778a687e2913df51ecf0c.png)
+![A command whose script changed: stopped, values faded](https://land-feed.caketroll.cloud/m/SolenesInc/attn/d481cb840f15f4e1fc2f2a88c8af1c7cf10ada597b7238b101ebfc0bf87d42f5.png)
+
+[Waiting, started with r, script changed, started again](https://land-feed.caketroll.cloud/m/SolenesInc/attn/6bc38d09e297d25cbc0cf55b74962820e828181c3be0ca039b0abbecde7d88bb.mp4)
