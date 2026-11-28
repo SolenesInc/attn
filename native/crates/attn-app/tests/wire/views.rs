@@ -1361,6 +1361,14 @@ fn a_kept_to_do_list_is_used_by_keys_alone_and_runs_its_store_commands_without_s
     );
     typed(&mut world, "review oven #91");
     press(&mut world, Key::Enter);
+    assert!(
+        world
+            .screen()
+            .get(Target::key("tile.m.view.2.text"))
+            .is("focused"),
+        "the keyboard left the entry once the home took the item: {:?}",
+        focused(&world)
+    );
     assert_eq!(
         store_runs(&world).last(),
         Some(&json!(["add", ["text"], 8, null, "review oven #91"]))

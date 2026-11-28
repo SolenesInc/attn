@@ -327,13 +327,10 @@ fn send(
             };
             if refused.is_none()
                 && let Some((field, text)) = &sent
-                && state
-                    .views
-                    .entries
-                    .get(field)
-                    .is_some_and(|e| &e.text == text)
+                && let Some(edit) = state.views.entries.get_mut(field)
+                && &edit.text == text
             {
-                state.views.entries.remove(field);
+                edit.clear();
                 state.views.revision += 1;
             }
             state.views.refused(&tile, refused);
