@@ -63,6 +63,8 @@ const (
 	CmdViewAnswer                 = "view_answer"
 	CmdViewSend                   = "view_send"
 	CmdViewResponsesWrite         = "view_responses_write"
+	CmdViewFolderRead             = "view_folder_read"
+	CmdViewFolderWrite            = "view_folder_write"
 	CmdViewRun                    = "view_run"
 	CmdViewCommandRun             = "view_command_run"
 	CmdAskImage                   = "ask_image"

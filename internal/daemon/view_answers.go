@@ -34,7 +34,7 @@ func (d *Daemon) shownViewTile(profileID, desktopID, tileID string) (shownViewTi
 	if !found {
 		return shownViewTile{}, fmt.Errorf("no tile %s on desktop %s", tileID, desktopID)
 	}
-	document, err := d.markdownTileDocument(leaf.TileParams)
+	document, err := d.tileDocumentOf(profileID, leaf.TileParams)
 	if err != nil {
 		return shownViewTile{}, fmt.Errorf("tile %s shows no view file: %w", tileID, err)
 	}

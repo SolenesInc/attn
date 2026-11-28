@@ -120,7 +120,7 @@ func (d *Daemon) resolvedDesktopTileDock(desktopID string, dock desktopTileDock)
 	}
 	existing, docked := tileLeafByID(desktop.Tree, dock.tileID)
 	if !docked {
-		dock.params, err = d.validatedNewTileParams(dock.tileKind, dock.params)
+		dock.params, err = d.validatedNewTileParams(desktop.ProfileID, dock.tileKind, dock.params)
 		if err == nil && dock.tileKind == string(layouttree.TileKindSeed) {
 			err = d.requireSeedInProfile(dock.params, desktop.ProfileID, false)
 		}
@@ -170,11 +170,11 @@ func (d *Daemon) checkedTileSession(desktop profiles.Desktop, sessionID protocol
 	return nil
 }
 
-func (d *Daemon) validatedNewTileParams(kind, params string) (string, error) {
+func (d *Daemon) validatedNewTileParams(profileID, kind, params string) (string, error) {
 	switch layouttree.TileKind(kind) {
 	case layouttree.TileKindMarkdown:
 		if view, named := profiles.ViewNamed(params); named {
-			return d.storedViewTileParams(view)
+			return d.storedViewTileParams(profileID, view)
 		}
 		document, err := d.markdownTileDocument(params)
 		if err != nil {

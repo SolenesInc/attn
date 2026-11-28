@@ -68,6 +68,7 @@ pub const TOP_LEVEL: &[TopLevel] = &[
     TopLevel { name: "update", usage: "update status [--json]", summary: "how attn was installed and whether an update is available", hidden: false },
     TopLevel { name: "vent", usage: "vent [withdraw]", summary: "report what got in your way", hidden: false },
     TopLevel { name: "version", usage: "version [--json]", summary: "print version, channel and commit", hidden: false },
+    TopLevel { name: "view", usage: "view <command>", summary: "keep, change, duplicate, hide or show a view", hidden: false },
     TopLevel { name: "vision-check", usage: "vision-check <image> <question>", summary: "answer a question about an image (single LLM call)", hidden: false },
     TopLevel { name: "worktree", usage: "worktree <command>", summary: "every tracked worktree, the sweep and the keep pin", hidden: false },
 ];

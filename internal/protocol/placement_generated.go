@@ -203,6 +203,8 @@ var Placements = map[string][]Placement{
 	"update_request":                 {Placement{LocatorHome, ""}},
 	"update_status":                  {Placement{LocatorHome, ""}},
 	"view_command_run":               {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"view_folder_read":               {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"view_folder_write":              {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"view_responses_write":           {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"wake_turn":                      {Placement{LocatorHome, ""}},
 	"worktree_keep":                  {Placement{LocatorHere, ""}},
@@ -2449,6 +2451,42 @@ func (m ViewCommandRunMessage) Placement() Placement {
 }
 
 func (m ViewCommandRunMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
+	return ""
+}
+
+func (ViewFolderReadMessage) CommandName() string {
+	return "view_folder_read"
+}
+
+func (m ViewFolderReadMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m ViewFolderReadMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
+	return ""
+}
+
+func (ViewFolderWriteMessage) CommandName() string {
+	return "view_folder_write"
+}
+
+func (m ViewFolderWriteMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m ViewFolderWriteMessage) Locate() string {
 	if m.Host != nil {
 		return string(*m.Host)
 	}

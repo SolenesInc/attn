@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "8a702684c760";
+pub const PROTOCOL_VERSION: &str = "ce0102a6991f";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -14007,6 +14007,12 @@ impl ViewCommandRunMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewDeleteResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub closed: Vec<ViewShownOn>,
+    pub view: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewDocument {
     #[serde(deserialize_with = "null_as_default")]
     pub commands: Vec<ViewRunCommand>,
@@ -14021,18 +14027,118 @@ pub struct ViewDocument {
     pub values: Vec<ViewValues>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewEditResult {
+    pub previous_version: i64,
+    pub version: i64,
+    pub view: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewExportResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub files: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kept: Option<Vec<String>>,
+    pub version: i64,
+    pub view: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewFact {
     pub label: String,
     #[serde(deserialize_with = "null_as_default")]
     pub value: Vec<ViewTemplatePiece>,
 }
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewFolder {
+    pub bytes: i64,
+    #[serde(deserialize_with = "null_as_default")]
+    pub files: BTreeMap<String, String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub missing: Vec<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewFolderReadMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub path: String,
+}
+
+impl ViewFolderReadMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "view_folder_read".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewFolderWriteMessage {
+    pub cmd: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub files: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub profile_id: String,
+    pub view: String,
+}
+
+impl ViewFolderWriteMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "view_folder_write".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewFolderWritten {
+    pub folder: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewForkResult {
+    pub from: String,
+    pub version: i64,
+    pub view: String,
+}
 pub type ViewFormat = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewHideResult {
+    pub desktop_id: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub removed: Vec<String>,
+    pub view: String,
+}
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewItems {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewKeepResult {
+    pub version: i64,
+    pub view: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewListResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub views: Vec<ViewListing>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewListing {
+    pub built_in: bool,
+    pub name: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub shown: Vec<ViewShownOn>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub versions: Option<Vec<ViewVersionListing>>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewMedia {
@@ -14246,6 +14352,24 @@ pub struct ViewProblem {
     pub text: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewReadResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub commands: Vec<ViewRunCommand>,
+    pub language: i64,
+    pub path: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub problems: Vec<ViewProblem>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub sources: Vec<ViewSource>,
+    pub text: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub values: Vec<ViewValues>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewResponsesWriteMessage {
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -14266,6 +14390,12 @@ impl ViewResponsesWriteMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewResponsesWritten {
     pub path: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewRestoreResult {
+    pub restored_from: i64,
+    pub version: i64,
+    pub view: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewRunCommand {
@@ -14365,6 +14495,19 @@ pub struct ViewSent {
     pub told: bool,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewShowResult {
+    pub added: bool,
+    pub desktop_id: String,
+    pub tile_id: String,
+    pub view: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewShownOn {
+    pub desktop: String,
+    pub desktop_id: String,
+    pub tile_id: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ViewSource {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r#as: Option<String>,
@@ -14425,6 +14568,17 @@ pub struct ViewTemplatePiece {
 pub struct ViewValues {
     pub source: String,
     pub values: serde_json::Value,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ViewVersionListing {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restored_from: Option<i64>,
+    pub saved_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saved_by: Option<String>,
+    pub version: i64,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WakeTurnMessage {

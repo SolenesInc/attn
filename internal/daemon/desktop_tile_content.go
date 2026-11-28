@@ -90,7 +90,7 @@ func (d *Daemon) markdownTilesOnCurrentDesktop(profile profiles.Profile, desktop
 			if leaf.TileKind != string(layouttree.TileKindMarkdown) {
 				continue
 			}
-			if document, err := d.markdownTileDocument(leaf.TileParams); err == nil {
+			if document, err := d.tileDocumentOf(profile.ID, leaf.TileParams); err == nil {
 				tiles = append(tiles, desktopMarkdownTile{key: desktopTileKey{desktopID: desktop.ID, tileID: leaf.TileID}, document: document})
 			}
 		}
@@ -379,7 +379,7 @@ func (d *Daemon) startView(desktopID, tileID string) error {
 	if !found || tile.TileKind != string(layouttree.TileKindMarkdown) {
 		return fmt.Errorf("no markdown tile %s on desktop %s", tileID, desktopID)
 	}
-	document, err := d.markdownTileDocument(tile.TileParams)
+	document, err := d.tileDocumentOf(desktop.ProfileID, tile.TileParams)
 	if err != nil {
 		return err
 	}

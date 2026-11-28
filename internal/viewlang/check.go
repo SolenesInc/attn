@@ -114,10 +114,14 @@ func (c *checker) language(first string) (int, bool) {
 	}
 	words := strings.Fields(match[1])
 	n, err := 0, error(nil)
-	if len(words) == 1 {
+	if len(words) == 1 || len(words) == 2 {
 		n, err = strconv.Atoi(words[0])
 	}
-	if len(words) != 1 || err != nil || n < 1 {
+	if _, stamped := parseStamp(words); len(words) == 2 && !stamped {
+		c.report(1, "Keep the line as the export wrote it, or remove its second word.", "the language line's second word names no version of a view, as %q does", "sessions@2")
+		return catalog.Language, true
+	}
+	if len(words) < 1 || len(words) > 2 || err != nil || n < 1 {
 		c.report(1, fmt.Sprintf("Write it as \"<!-- attn-view %d -->\", or remove the line.", catalog.Language), "the language line names no version")
 		return catalog.Language, true
 	}

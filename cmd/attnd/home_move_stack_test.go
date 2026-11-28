@@ -594,6 +594,16 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	requireStdout(t, home.Attn("settings", "set", "views_enabled", "true"), "true")
+	writeView(t, home.Path("made"), needsMe, map[string]string{"rows.json": `[{"name": "first"}]`})
+	requireStdout(t, home.Attn("view", "keep", home.Path("made"), "--name", "needs-me"), "kept needs-me as version 1")
+	requireStdout(t, home.Attn("view", "export", "needs-me", "--to", home.Path("exported")))
+	edited := strings.Replace(fileText(t, home.Path("exported", "view.md")), "# Needs me", "# Moved with the home", 1)
+	writeView(t, home.Path("exported"), edited, map[string]string{})
+	requireStdout(t, home.Attn("view", "edit", "needs-me", "--from", home.Path("exported")), "as version 2")
+	var keptBefore protocol.ViewReadResult
+	home.Attn("view", "read", "needs-me", "--json").JSON(t, &keptBefore)
+
 	move := homeMoveJSON(t, home, "move", "outpost", "--via", "oldhome")
 	if move.Step != "committed" || move.Error != nil {
 		t.Fatalf("move: %s", describeMove(move))
@@ -622,6 +632,16 @@ func TestHomeMoveTakesTheWholeHomeAlong(t *testing.T) {
 		}
 		if most := cloud.MostOpen(); most != 1 {
 			t.Fatalf("the Cloud Relay saw %d home sockets at once:\n%s", most, cloud.Connections())
+		}
+	})
+	t.Run("a kept view keeps its versions and the machine it was kept on", func(t *testing.T) {
+		if listing := viewListing(t, outpost, "needs-me"); len(listing.Versions) != 2 || protocol.Deref(listing.Version) != 2 {
+			t.Fatalf("needs-me at the new home: %+v", listing)
+		}
+		var read protocol.ViewReadResult
+		outpost.Attn("view", "read", "needs-me", "--json").JSON(t, &read)
+		if read.Path != keptBefore.Path || !strings.HasPrefix(read.Path, home.Dir) || read.Text != keptBefore.Text || !strings.Contains(read.Text, "# Moved with the home") || len(read.Values) != 1 {
+			t.Fatalf("needs-me read at the new home: %+v; before the move: %+v", read, keptBefore)
 		}
 	})
 	t.Run("a home with more files than one ssh packet can name moves them all", func(t *testing.T) {

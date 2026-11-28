@@ -2,6 +2,7 @@ package profiles
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/victorarias/attn/internal/layouttree"
 )
@@ -48,8 +49,8 @@ func ViewNamed(params string) (string, bool) {
 
 // ViewTile reports whether a tile shows one of attn's views.
 func ViewTile(tile layouttree.TileLeaf) bool {
-	_, named := ViewNamed(tile.TileParams)
-	return tile.TileKind == string(layouttree.TileKindMarkdown) && named
+	view, named := ViewNamed(tile.TileParams)
+	return tile.TileKind == string(layouttree.TileKindMarkdown) && named && slices.Contains(BuiltInViews, view)
 }
 
 // ResetHomeTree is tree with its views back where HomeTree places them, and its other tiles in columns after them.

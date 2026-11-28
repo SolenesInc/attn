@@ -60,6 +60,7 @@ var catalogFamilies = map[string]bool{
 	"update":             false,
 	"vent":               true,
 	"version":            false,
+	"view":               true,
 	"vision-check":       false,
 	"worktree":           false,
 }

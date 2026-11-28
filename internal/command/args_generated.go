@@ -16,10 +16,12 @@ const (
 	CodeBadBookmark                 = "bad_bookmark"
 	CodeBadCapture                  = "bad_capture"
 	CodeBadMode                     = "bad_mode"
+	CodeBadName                     = "bad_name"
 	CodeBadUntil                    = "bad_until"
 	CodeBadWindow                   = "bad_window"
 	CodeBedAndClear                 = "bed_and_clear"
 	CodeBedWithPlot                 = "bed_with_plot"
+	CodeBuiltIn                     = "built_in"
 	CodeClearWithPR                 = "clear_with_pr"
 	CodeClearWithReason             = "clear_with_reason"
 	CodeClearWithReminder           = "clear_with_reminder"
@@ -36,8 +38,10 @@ const (
 	CodeDetachNeedsTo               = "detach_needs_to"
 	CodeEmptyWords                  = "empty_words"
 	CodeEvidenceNameTaken           = "evidence_name_taken"
+	CodeExists                      = "exists"
 	CodeFallbackWithTarget          = "fallback_with_target"
 	CodeGrowingSeedsHeld            = "growing_seeds_held"
+	CodeHasProblems                 = "has_problems"
 	CodeIDMismatch                  = "id_mismatch"
 	CodeInAndAt                     = "in_and_at"
 	CodeInvalidBody                 = "invalid_body"
@@ -71,12 +75,14 @@ const (
 	CodeNotAPRURL                   = "not_a_pr_url"
 	CodeNotATable                   = "not_a_table"
 	CodeNotExported                 = "not_exported"
+	CodeNotFound                    = "not_found"
 	CodeNotOnScreen                 = "not_on_screen"
 	CodeNotStamped                  = "not_stamped"
 	CodeNoteAndClear                = "note_and_clear"
 	CodeNothingToChange             = "nothing_to_change"
 	CodeNothingToSet                = "nothing_to_set"
 	CodeOtherSeed                   = "other_seed"
+	CodeOtherView                   = "other_view"
 	CodePlotAndStale                = "plot_and_stale"
 	CodePRWithoutWhenMerged         = "pr_without_when_merged"
 	CodeReferenceNeedsPath          = "reference_needs_path"
@@ -87,12 +93,14 @@ const (
 	CodeSessionNotFound             = "session_not_found"
 	CodeSessionOrCrewMemberNotFound = "session_or_crew_member_not_found"
 	CodeSinceAndSection             = "since_and_section"
+	CodeStaleExport                 = "stale_export"
 	CodeStandbyWithScope            = "standby_with_scope"
 	CodeSteerAndInterrupt           = "steer_and_interrupt"
 	CodeStepNeedsText               = "step_needs_text"
 	CodeStepTooLong                 = "step_too_long"
 	CodeTextAndClear                = "text_and_clear"
 	CodeTimeout                     = "timeout"
+	CodeTooLarge                    = "too_large"
 	CodeTooManySteps                = "too_many_steps"
 	CodeTranscriptUnavailable       = "transcript_unavailable"
 	CodeTransferNeedsLocalPath      = "transfer_needs_local_path"
@@ -273,6 +281,16 @@ var specs = sync.OnceValue(func() map[string]spec {
 		"turn settle":             {needsSession: true, anyone: false, sessionFlag: false, runsWithoutDaemon: false},
 		"vent":                    {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
 		"vent withdraw":           {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false},
+		"view list":               {needsSession: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists."}},
+		"view read":               {needsSession: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"no_target": "Pass {view} or {path}.", "not_found": "Name a view that view_list lists.", "built_in": "attn's own views are not view files yet; read a kept view or a view file."}},
+		"view export":             {needsSession: false, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "built_in": "attn's own views cannot be exported yet; fork is not available for them either. Keep a view of your own with view_keep."}},
+		"view keep":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"bad_name": "Name it with lowercase letters, digits and dashes, starting with a letter.", "built_in": "Give the view a name other than attn, sessions or pull-requests.", "exists": "Pick another {name}, or save a change to the kept view with view_export and view_edit.", "has_problems": "Correct each line, then call view_keep again. Nothing was kept.", "other_view": "Save an export with view_edit, or remove its first line to keep it as a new view.", "too_large": "Keep large files out of the view's folder, or name them from a source's rows."}},
+		"view edit":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "built_in": "attn's own views cannot be edited yet.", "not_stamped": "Export the view with view_export, edit that copy and keep its first line.", "other_view": "Save the folder as the view its first line names, or export {view} and reapply your change.", "stale_export": "Export again and reapply your change. Nothing was saved.", "has_problems": "Correct each line, then call view_edit again. Nothing was saved.", "too_large": "Keep large files out of the view's folder, or name them from a source's rows."}},
+		"view restore":            {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view and one of its versions that view_list lists.", "built_in": "attn's own views cannot be edited yet.", "stale_export": "The view changed while restoring; call view_restore again."}},
+		"view fork":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "built_in": "attn's own views cannot be forked yet.", "bad_name": "Name it with lowercase letters, digits and dashes, starting with a letter.", "exists": "Pick another {name}."}},
+		"view delete":             {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists.", "built_in": "Take it off Home with view_hide instead."}},
+		"view show":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists, and a desktop of your profile."}},
+		"view hide":               {needsSession: true, anyone: false, sessionFlag: true, runsWithoutDaemon: false, fixes: map[string]string{"not_found": "Name a view that view_list lists, and a desktop of your profile."}},
 	}
 })
 
@@ -1193,4 +1211,54 @@ type VentArgs struct {
 
 type VentWithdrawArgs struct {
 	Vent string `json:"vent,omitempty"`
+}
+
+type ViewListArgs struct {
+	View string `json:"view,omitempty"`
+}
+
+type ViewReadArgs struct {
+	View string `json:"view,omitempty"`
+	Path string `json:"path,omitempty"`
+}
+
+type ViewExportArgs struct {
+	View string `json:"view,omitempty"`
+	To   string `json:"to,omitempty"`
+}
+
+type ViewKeepArgs struct {
+	Path string `json:"path,omitempty"`
+	Name string `json:"name,omitempty"`
+	Note string `json:"note,omitempty"`
+}
+
+type ViewEditArgs struct {
+	View string `json:"view,omitempty"`
+	From string `json:"from,omitempty"`
+	Note string `json:"note,omitempty"`
+}
+
+type ViewRestoreArgs struct {
+	View    string `json:"view,omitempty"`
+	Version *int64 `json:"version,omitempty"`
+}
+
+type ViewForkArgs struct {
+	View string `json:"view,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
+type ViewDeleteArgs struct {
+	View string `json:"view,omitempty"`
+}
+
+type ViewShowArgs struct {
+	View    string `json:"view,omitempty"`
+	Desktop string `json:"desktop,omitempty"`
+}
+
+type ViewHideArgs struct {
+	View    string `json:"view,omitempty"`
+	Desktop string `json:"desktop,omitempty"`
 }

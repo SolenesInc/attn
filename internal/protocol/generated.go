@@ -15866,6 +15866,14 @@ type ViewCommandRunMessage struct {
 	Path string `json:"path"`
 }
 
+type ViewDeleteResult struct {
+	// Closed corresponds to the JSON schema field "closed".
+	Closed []ViewShownOn `json:"closed"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
 type ViewDocument struct {
 	// Commands corresponds to the JSON schema field "commands".
 	Commands []ViewRunCommand `json:"commands"`
@@ -15886,6 +15894,34 @@ type ViewDocument struct {
 	Values []ViewValues `json:"values"`
 }
 
+type ViewEditResult struct {
+	// PreviousVersion corresponds to the JSON schema field "previous_version".
+	PreviousVersion int `json:"previous_version"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version int `json:"version"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
+type ViewExportResult struct {
+	// Files corresponds to the JSON schema field "files".
+	Files RecordString `json:"files"`
+
+	// Folder corresponds to the JSON schema field "folder".
+	Folder *string `json:"folder,omitempty,omitzero"`
+
+	// Kept corresponds to the JSON schema field "kept".
+	Kept []string `json:"kept,omitempty,omitzero"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version int `json:"version"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
 type ViewFact struct {
 	// Label corresponds to the JSON schema field "label".
 	Label string `json:"label"`
@@ -15894,10 +15930,76 @@ type ViewFact struct {
 	Value []ViewTemplatePiece `json:"value"`
 }
 
+type ViewFolder struct {
+	// Bytes corresponds to the JSON schema field "bytes".
+	Bytes int `json:"bytes"`
+
+	// Files corresponds to the JSON schema field "files".
+	Files RecordString `json:"files"`
+
+	// Missing corresponds to the JSON schema field "missing".
+	Missing []string `json:"missing"`
+}
+
+type ViewFolderReadMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+}
+
+type ViewFolderWriteMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Files corresponds to the JSON schema field "files".
+	Files RecordString `json:"files"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
+type ViewFolderWritten struct {
+	// Folder corresponds to the JSON schema field "folder".
+	Folder string `json:"folder"`
+}
+
+type ViewForkResult struct {
+	// From corresponds to the JSON schema field "from".
+	From string `json:"from"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version int `json:"version"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
 type ViewFormat string
 
 const ViewFormatAgo ViewFormat = "ago"
 const ViewFormatDuration ViewFormat = "duration"
+
+type ViewHideResult struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// Removed corresponds to the JSON schema field "removed".
+	Removed []string `json:"removed"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
 
 type ViewItems struct {
 	// Field corresponds to the JSON schema field "field".
@@ -15905,6 +16007,36 @@ type ViewItems struct {
 
 	// File corresponds to the JSON schema field "file".
 	File *string `json:"file,omitempty,omitzero"`
+}
+
+type ViewKeepResult struct {
+	// Version corresponds to the JSON schema field "version".
+	Version int `json:"version"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
+type ViewListResult struct {
+	// Views corresponds to the JSON schema field "views".
+	Views []ViewListing `json:"views"`
+}
+
+type ViewListing struct {
+	// BuiltIn corresponds to the JSON schema field "built_in".
+	BuiltIn bool `json:"built_in"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Shown corresponds to the JSON schema field "shown".
+	Shown []ViewShownOn `json:"shown"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version *int `json:"version,omitempty,omitzero"`
+
+	// Versions corresponds to the JSON schema field "versions".
+	Versions []ViewVersionListing `json:"versions,omitempty,omitzero"`
 }
 
 type ViewMedia struct {
@@ -16198,6 +16330,35 @@ type ViewProblem struct {
 	Text string `json:"text"`
 }
 
+type ViewReadResult struct {
+	// Commands corresponds to the JSON schema field "commands".
+	Commands []ViewRunCommand `json:"commands"`
+
+	// Language corresponds to the JSON schema field "language".
+	Language int `json:"language"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Problems corresponds to the JSON schema field "problems".
+	Problems []ViewProblem `json:"problems"`
+
+	// Sources corresponds to the JSON schema field "sources".
+	Sources []ViewSource `json:"sources"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+
+	// Values corresponds to the JSON schema field "values".
+	Values []ViewValues `json:"values"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version *int `json:"version,omitempty,omitzero"`
+
+	// View corresponds to the JSON schema field "view".
+	View *string `json:"view,omitempty,omitzero"`
+}
+
 type ViewResponsesWriteMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -16215,6 +16376,17 @@ type ViewResponsesWriteMessage struct {
 type ViewResponsesWritten struct {
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+}
+
+type ViewRestoreResult struct {
+	// RestoredFrom corresponds to the JSON schema field "restored_from".
+	RestoredFrom int `json:"restored_from"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version int `json:"version"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
 }
 
 type ViewRunCommand struct {
@@ -16325,6 +16497,31 @@ type ViewSent struct {
 	Told bool `json:"told"`
 }
 
+type ViewShowResult struct {
+	// Added corresponds to the JSON schema field "added".
+	Added bool `json:"added"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
+type ViewShownOn struct {
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop string `json:"desktop"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+}
+
 type ViewSource struct {
 	// As corresponds to the JSON schema field "as".
 	As *string `json:"as,omitempty,omitzero"`
@@ -16427,6 +16624,23 @@ type ViewValues struct {
 
 	// Values corresponds to the JSON schema field "values".
 	Values interface{} `json:"values"`
+}
+
+type ViewVersionListing struct {
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+
+	// RestoredFrom corresponds to the JSON schema field "restored_from".
+	RestoredFrom *int `json:"restored_from,omitempty,omitzero"`
+
+	// SavedAt corresponds to the JSON schema field "saved_at".
+	SavedAt string `json:"saved_at"`
+
+	// SavedBy corresponds to the JSON schema field "saved_by".
+	SavedBy *string `json:"saved_by,omitempty,omitzero"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version int `json:"version"`
 }
 
 type WakeTurnMessage struct {

@@ -10,12 +10,14 @@ import (
 	"github.com/victorarias/attn/internal/viewlang"
 )
 
-func (d *Daemon) storedViewTileParams(view string) (string, error) {
+func (d *Daemon) storedViewTileParams(profileID, view string) (string, error) {
 	if !d.on(setting.ViewsEnabled) {
 		return "", profiles.Errorf(profiles.CodeInvalid, "a tile shows the view %q only while the experimental setting views_enabled is on", view)
 	}
 	if !slices.Contains(profiles.BuiltInViews, view) {
-		return "", profiles.Errorf(profiles.CodeInvalid, "tile_params name the view %q; attn's views are attn, sessions and pull-requests", view)
+		if _, kept, err := d.store.KeptView(profileID, view); err != nil || !kept {
+			return "", profiles.Errorf(profiles.CodeInvalid, "tile_params name the view %q; attn's views are attn, sessions and pull-requests, and this profile keeps no view %q", view, view)
+		}
 	}
 	return profiles.ViewParams(view), nil
 }

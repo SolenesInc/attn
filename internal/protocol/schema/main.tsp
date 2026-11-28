@@ -4255,6 +4255,141 @@ model ViewResponsesWritten {
   path: string;
 }
 
+// The home reads the folder of a view an agent keeps or edits, on the
+// agent's machine: the view file and the files it names inside the folder.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model ViewFolderReadMessage {
+  cmd: "view_folder_read";
+  host?: string;
+  // The view file, or the folder that holds view.md.
+  path: string;
+}
+
+model ViewFolder {
+  // Each file by its path inside the folder, as base64; the view file is view.md.
+  files: Record<string>;
+  // The files the view file names that the folder lacks.
+  missing: string[];
+  // The size of the view file and the files it names; past the limit a view
+  // keeps, the files are left out.
+  bytes: safeint;
+}
+
+// The home gives the machine a kept view runs on the files of its newest
+// version, in place of the ones before. No files removes the view's folder.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model ViewFolderWriteMessage {
+  cmd: "view_folder_write";
+  host?: string;
+  profile_id: string;
+  view: string;
+  // Each file by its path inside the folder, as base64.
+  files: Record<string>;
+}
+
+model ViewFolderWritten {
+  folder: string;
+}
+
+model ViewKeepResult {
+  view: string;
+  version: int32;
+}
+
+model ViewListResult {
+  views: ViewListing[];
+}
+
+model ViewListing {
+  name: string;
+  built_in: boolean;
+  // The newest version; absent for a built-in view that was never edited.
+  version?: int32;
+  // The desktops that show it.
+  shown: ViewShownOn[];
+  // Every version, oldest first, when the list asks for one view.
+  versions?: ViewVersionListing[];
+}
+
+model ViewShownOn {
+  desktop_id: string;
+  desktop: string;
+  tile_id: string;
+}
+
+model ViewVersionListing {
+  version: int32;
+  note?: string;
+  restored_from?: int32;
+  saved_at: string;
+  saved_by?: string;
+}
+
+model ViewReadResult {
+  // The kept view read, when it was named.
+  view?: string;
+  version?: int32;
+  // Where the view file is, on the machine that holds it.
+  path: string;
+  text: string;
+  language: int32;
+  problems: ViewProblem[];
+  sources: ViewSource[];
+  values: ViewValues[];
+  commands: ViewRunCommand[];
+}
+
+model ViewExportResult {
+  view: string;
+  version: int32;
+  // The text of each file by its path inside the view's folder; view.md
+  // carries the stamp an edit needs on its first line.
+  files: Record<string>;
+  // The files that are not text, which an edit keeps unless the folder replaces them.
+  kept?: string[];
+  // The folder the CLI wrote the files to.
+  folder?: string;
+}
+
+model ViewEditResult {
+  view: string;
+  version: int32;
+  previous_version: int32;
+}
+
+model ViewRestoreResult {
+  view: string;
+  version: int32;
+  restored_from: int32;
+}
+
+model ViewForkResult {
+  view: string;
+  from: string;
+  version: int32;
+}
+
+model ViewDeleteResult {
+  view: string;
+  // The tiles that showed it, now closed.
+  closed: ViewShownOn[];
+}
+
+model ViewShowResult {
+  view: string;
+  desktop_id: string;
+  tile_id: string;
+  // False when the desktop already showed the view.
+  added: boolean;
+}
+
+model ViewHideResult {
+  view: string;
+  desktop_id: string;
+  // The tiles taken off the desktop.
+  removed: string[];
+}
+
 // A review document resolved on the machine that holds its files. Line
 // numbers in the document are at head; rows show the file now with the change
 // from base.

@@ -15,9 +15,11 @@ import (
 
 	"github.com/victorarias/attn/internal/command"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/views"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -46,6 +48,18 @@ func (d *Daemon) markdownTileDocument(params string) (tileDocument, error) {
 		return tileDocument{}, fmt.Errorf("markdown tile_params %s are neither a path nor {\"host\", \"path\"}", params)
 	}
 	return tileDocument{host: d.machineFor(located.Host).Outpost(), path: located.Path}, nil
+}
+
+// tileDocumentOf is where the markdown tile with params on a desktop of the
+// profile reads its document: its file, or the folder of the kept view it names.
+func (d *Daemon) tileDocumentOf(profileID, params string) (tileDocument, error) {
+	if view, named := profiles.ViewNamed(params); named {
+		if views.BuiltIn(view) {
+			return tileDocument{}, fmt.Errorf("the app draws attn's view %s", view)
+		}
+		return d.keptViewDocument(profileID, view)
+	}
+	return d.markdownTileDocument(params)
 }
 
 func (d *Daemon) storedTileParams(document tileDocument) string {

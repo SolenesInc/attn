@@ -56,6 +56,8 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdViewAnswer:                 decodeInto[ViewAnswerMessage],
 	CmdViewSend:                   decodeInto[ViewSendMessage],
 	CmdViewResponsesWrite:         decodeInto[ViewResponsesWriteMessage],
+	CmdViewFolderRead:             decodeInto[ViewFolderReadMessage],
+	CmdViewFolderWrite:            decodeInto[ViewFolderWriteMessage],
 	CmdViewRun:                    decodeInto[ViewRunMessage],
 	CmdViewCommandRun:             decodeInto[ViewCommandRunMessage],
 	CmdAskImage:                   decodeInto[AskImageMessage],

@@ -1,0 +1,187 @@
+# The view family. Write each doc for both surfaces, as seed.yaml says.
+groups:
+  - name: view
+    usage: "<command>"
+    summary: "keep, change, duplicate, hide or show a view"
+    map:
+      rows:
+        - {need: "Keep, change, duplicate, hide or show a view", tools: [view_export, view_edit, view_show, view_hide]}
+    doc: |
+      A view is a folder with a view file and the files that view file names; attn draws it in a tile. A kept view is one attn stores in your profile under a name, with every version. Only attn writes a kept view: export a copy with `view_export`, edit the copy, and save it with `view_edit`. With the experimental setting views_enabled on.
+    flags:
+      - {name: session, placeholder: "<id>", doc: "the session asking (defaults to the current session)"}
+    sections:
+      - title: Reading views
+        commands: [view list, view read, view export]
+      - title: Keeping and changing views
+        commands: [view keep, view edit, view restore, view fork, view delete]
+      - title: Placing views
+        commands: [view show, view hide]
+
+commands:
+  - name: view list
+    summary: list the views of this profile and where each is shown
+    runs: home
+    grant: full
+    effect: read
+    doc: |
+      Lists attn's own views and the views this profile keeps, each with its newest version and the desktops that show it. With `view`, lists that view alone, with every version: its number, what changed, the version it restored, and when it was saved.
+    args:
+      - {name: view, type: name, cli: pos, doc: "one view, listed with every version"}
+    result: ViewListResult
+    errors:
+      - {code: not_found, fix: "Name a view that view_list lists."}
+
+  - name: view read
+    summary: read a view as the daemon sees it now
+    runs: home
+    grant: full
+    effect: read
+    doc: |
+      Reads a kept view by its name, or a view file by its `path`, as the daemon checks it now: the view file's text, its problems, its sources with the values they hold now and when they were read, and its commands with whether the user started them. It runs nothing.
+    args:
+      - {name: view, type: name, cli: pos, one_of: target, doc: "a kept view"}
+      - {name: path, type: path, cli: "--path", one_of: target, placeholder: "<file.md>", doc: "a view file"}
+    result: ViewReadResult
+    errors:
+      - {code: no_target, usage: true, fix: "Pass {view} or {path}."}
+      - {code: not_found, fix: "Name a view that view_list lists."}
+      - {code: built_in, fix: "attn's own views are not view files yet; read a kept view or a view file."}
+
+  - name: view export
+    summary: give a copy of a kept view to edit
+    runs: home
+    grant: full
+    effect: read
+    doc: |
+      Gives the newest version of a kept view to edit, in the current language. The tool answers with the text of each file and writes nothing; the CLI writes the files to the folder `to`, ./<view> by default. The view file's first line is the export's stamp: keep it, edit the copy, try it with `open`, then save it with `view_edit`. Files that are not text, such as a clip, are listed in `kept` by name; an edit keeps each one its folder does not replace.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+      - {name: to, type: path, cli: "--to", cli_only: true, placeholder: "<dir>", doc: "the folder to write, ./<view> by default"}
+    result: ViewExportResult
+    errors:
+      - {code: not_found, fix: "Name a view that view_list lists."}
+      - {code: built_in, fix: "attn's own views cannot be exported yet; fork is not available for them either. Keep a view of your own with view_keep."}
+
+  - name: view keep
+    summary: keep a view you made under a name
+    runs: home
+    grant: full
+    effect: act
+    doc: |
+      Keeps the view at `path` (its view file, or the folder that holds view.md) in this profile as `name`, version 1. attn keeps the view file and the files it names inside its folder: its file= sources, the files its commands run and the pictures and clips it shows by name, up to 4 MiB together. Files only a source's rows name are not kept. Its commands run on the machine you keep it from. A view with problems is refused, with each problem and its line.
+    args:
+      - {name: path, type: path, required: true, cli: pos, placeholder: "<view.md|dir>", doc: "the view file, or the folder that holds view.md"}
+      - {name: name, type: name, required: true, cli: "--name", placeholder: "<name>", doc: "the kept view's name: lowercase letters, digits and dashes"}
+      - {name: note, type: text, cli: "-m", placeholder: '"<what it is>"', doc: "what the first version is, saved with it"}
+    result: ViewKeepResult
+    receipt: [view, version]
+    errors:
+      - {code: bad_name, fix: "Name it with lowercase letters, digits and dashes, starting with a letter."}
+      - {code: built_in, fix: "Give the view a name other than attn, sessions or pull-requests."}
+      - {code: exists, fix: "Pick another {name}, or save a change to the kept view with view_export and view_edit."}
+      - {code: has_problems, fix: "Correct each line, then call view_keep again. Nothing was kept."}
+      - {code: other_view, fix: "Save an export with view_edit, or remove its first line to keep it as a new view."}
+      - {code: too_large, fix: "Keep large files out of the view's folder, or name them from a source's rows."}
+
+  - name: view edit
+    summary: save an edited export as the view's next version
+    runs: home
+    grant: full
+    effect: act
+    doc: |
+      Saves the folder `from`, which holds an export of the view with its first-line stamp, as the view's next version, with `note` saying what changed. attn refuses an export of an older version, because the view changed since: export again and reapply your change. It refuses a view with problems, with each problem and its line. Nothing is saved when it refuses.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+      - {name: from, type: path, required: true, cli: "--from", placeholder: "<dir>", doc: "the folder that holds the edited export, or its view file"}
+      - {name: note, type: text, cli: "-m", placeholder: '"<what changed>"', doc: "what changed, saved with the version"}
+    result: ViewEditResult
+    receipt: [view, version, previous_version]
+    errors:
+      - {code: not_found, fix: "Name a view that view_list lists."}
+      - {code: built_in, fix: "attn's own views cannot be edited yet."}
+      - {code: not_stamped, fix: "Export the view with view_export, edit that copy and keep its first line."}
+      - {code: other_view, fix: "Save the folder as the view its first line names, or export {view} and reapply your change."}
+      - {code: stale_export, fix: "Export again and reapply your change. Nothing was saved."}
+      - {code: has_problems, fix: "Correct each line, then call view_edit again. Nothing was saved."}
+      - {code: too_large, fix: "Keep large files out of the view's folder, or name them from a source's rows."}
+
+  - name: view restore
+    summary: save an earlier version as the view's next version
+    runs: home
+    grant: full
+    effect: act
+    doc: |
+      Saves `version` of a kept view, the one before the newest by default, as its newest version. A restore is a version like any other, so it can be undone, and an export taken before it is stale.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+      - {name: version, type: version, cli: pos, doc: "the version to restore; view_list with the view's name lists them"}
+    result: ViewRestoreResult
+    receipt: [view, version, restored_from]
+    errors:
+      - {code: not_found, fix: "Name a view and one of its versions that view_list lists."}
+      - {code: built_in, fix: "attn's own views cannot be edited yet."}
+      - {code: stale_export, fix: "The view changed while restoring; call view_restore again."}
+
+  - name: view fork
+    summary: duplicate a kept view under another name
+    runs: home
+    grant: full
+    effect: act
+    doc: |
+      Keeps a copy of the newest version of a kept view as a second view named `name`, version 1, with its own versions. The original is untouched, and its commands run on the same machine.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+      - {name: name, type: name, required: true, cli: "--name", placeholder: "<name>", doc: "the new view's name"}
+    result: ViewForkResult
+    receipt: [view, from, version]
+    errors:
+      - {code: not_found, fix: "Name a view that view_list lists."}
+      - {code: built_in, fix: "attn's own views cannot be forked yet."}
+      - {code: bad_name, fix: "Name it with lowercase letters, digits and dashes, starting with a letter."}
+      - {code: exists, fix: "Pick another {name}."}
+
+  - name: view delete
+    summary: remove a kept view and close its tiles
+    runs: home
+    grant: full
+    effect: act
+    doc: |
+      Removes a kept view for good, with every version and what the user started and answered in it, and closes every tile that shows it. attn's own views cannot be deleted; hide them with `view_hide`.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+    result: ViewDeleteResult
+    receipt: [view, closed]
+    errors:
+      - {code: not_found, fix: "Name a view that view_list lists."}
+      - {code: built_in, fix: "Take it off Home with view_hide instead."}
+
+  - name: view show
+    summary: put a view on Home or another desktop
+    runs: home
+    grant: full
+    effect: act
+    doc: |
+      Puts a kept view, or one of attn's own, on the Home desktop, or on `desktop`, at the end of its row. A desktop that already shows the view keeps it where it is.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+      - {name: desktop, type: desktop, cli: "--desktop", doc: "the desktop: its shortcut digit, its name or its id (Home by default)"}
+    result: ViewShowResult
+    receipt: [view, desktop_id, tile_id, added]
+    errors:
+      - {code: not_found, fix: "Name a view that view_list lists, and a desktop of your profile."}
+
+  - name: view hide
+    summary: take a view off Home or another desktop
+    runs: home
+    grant: full
+    effect: act
+    doc: |
+      Takes every tile that shows the view off the Home desktop, or off `desktop`. The view stays; `view_show` puts it back.
+    args:
+      - {name: view, type: name, required: true, cli: pos}
+      - {name: desktop, type: desktop, cli: "--desktop", doc: "the desktop: its shortcut digit, its name or its id (Home by default)"}
+    result: ViewHideResult
+    receipt: [view, desktop_id, removed]
+    errors:
+      - {code: not_found, fix: "Name a view that view_list lists, and a desktop of your profile."}

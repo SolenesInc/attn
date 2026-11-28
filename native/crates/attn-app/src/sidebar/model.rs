@@ -328,7 +328,12 @@ fn basename(path: &str) -> String {
 fn path_in(params: &str) -> String {
     serde_json::from_str::<Value>(params)
         .ok()
-        .and_then(|v| v.get("path").and_then(Value::as_str).map(str::to_owned))
+        .and_then(|v| {
+            v.get("path")
+                .or_else(|| v.get("view"))
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
         .unwrap_or_else(|| params.to_owned())
 }
 
@@ -353,7 +358,8 @@ fn document_title(markdown: &str) -> Option<String> {
             && ['-', '*', '_']
                 .iter()
                 .any(|&m| squeezed.chars().all(|c| c == m));
-        if raw.is_empty() || is_rule {
+        let is_comment = raw.starts_with("<!--") && raw.ends_with("-->");
+        if raw.is_empty() || is_rule || is_comment {
             return None;
         }
         let title = plain_inline(heading_text(raw));

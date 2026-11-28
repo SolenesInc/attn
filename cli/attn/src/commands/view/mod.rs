@@ -1,0 +1,218 @@
+mod help_generated;
+mod table_generated;
+
+use super::{Run, Stop, print_json, print_stdout};
+use crate::client::Reply;
+use crate::command::{self, Command, Family, Parsed};
+use crate::paths::os_error_text;
+use attn_protocol::{
+    ViewDeleteResult, ViewEditResult, ViewExportResult, ViewForkResult, ViewHideResult,
+    ViewKeepResult, ViewListResult, ViewReadResult, ViewRestoreResult, ViewShowResult,
+};
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
+
+struct View;
+
+pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
+    command::run_group(run, &View, args)
+}
+
+impl Family for View {
+    fn group(&self) -> &'static str {
+        "view"
+    }
+
+    fn flags(&self) -> &'static [&'static str] {
+        table_generated::FLAGS
+    }
+
+    fn commands(&self) -> &'static [Command] {
+        table_generated::COMMANDS
+    }
+
+    fn group_help(&self) -> &'static str {
+        help_generated::GROUP_HELP
+    }
+
+    fn help(&self, verb: &str) -> &'static str {
+        help_generated::help(verb)
+    }
+
+    fn usage(&self, verb: &str) -> &'static str {
+        help_generated::usage(verb)
+    }
+
+    fn present_json(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        if cmd.name != "export" {
+            return command::print_result(run, self, cmd, &command::result(reply));
+        }
+        let exported = written_export(run, cmd, parsed, reply)?;
+        let encoded = attn::go::json::encode(&exported).expect("a plain struct always encodes");
+        print_json(&encoded);
+        Ok(())
+    }
+
+    fn present(
+        &self,
+        run: &mut Run<'_>,
+        cmd: &Command,
+        parsed: &Parsed,
+        reply: &Reply,
+    ) -> Result<(), Stop> {
+        let result = command::result(reply);
+        let out = match cmd.name {
+            "list" => list(&command::decode(run, self, cmd, &result)?),
+            "read" => read(&command::decode(run, self, cmd, &result)?),
+            "export" => {
+                let exported = written_export(run, cmd, parsed, reply)?;
+                let folder = exported.folder.unwrap_or_default();
+                format!(
+                    "wrote version {} of {} to {folder}; edit it, keep the first line of view.md, then: attn view edit {} --from {folder}\n",
+                    exported.version, exported.view, exported.view
+                )
+            }
+            "keep" => {
+                let kept: ViewKeepResult = command::decode(run, self, cmd, &result)?;
+                format!("kept {} as version {}\n", kept.view, kept.version)
+            }
+            "edit" => {
+                let edited: ViewEditResult = command::decode(run, self, cmd, &result)?;
+                format!(
+                    "saved {} as version {} (was {})\n",
+                    edited.view, edited.version, edited.previous_version
+                )
+            }
+            "restore" => {
+                let restored: ViewRestoreResult = command::decode(run, self, cmd, &result)?;
+                format!(
+                    "saved {} as version {}, restored from version {}\n",
+                    restored.view, restored.version, restored.restored_from
+                )
+            }
+            "fork" => {
+                let forked: ViewForkResult = command::decode(run, self, cmd, &result)?;
+                format!(
+                    "kept {} as version {}, a copy of {}\n",
+                    forked.view, forked.version, forked.from
+                )
+            }
+            "delete" => {
+                let deleted: ViewDeleteResult = command::decode(run, self, cmd, &result)?;
+                format!(
+                    "deleted {} and closed {} tile(s)\n",
+                    deleted.view,
+                    deleted.closed.len()
+                )
+            }
+            "show" => {
+                let shown: ViewShowResult = command::decode(run, self, cmd, &result)?;
+                if shown.added {
+                    format!("put {} on desktop {}\n", shown.view, shown.desktop_id)
+                } else {
+                    format!(
+                        "{} is already on desktop {}\n",
+                        shown.view, shown.desktop_id
+                    )
+                }
+            }
+            "hide" => {
+                let hidden: ViewHideResult = command::decode(run, self, cmd, &result)?;
+                format!(
+                    "took {} off desktop {} ({} tile(s))\n",
+                    hidden.view,
+                    hidden.desktop_id,
+                    hidden.removed.len()
+                )
+            }
+            _ => return command::print_result(run, self, cmd, &result),
+        };
+        print_stdout(&out);
+        Ok(())
+    }
+}
+
+fn list(listed: &ViewListResult) -> String {
+    let mut out = String::new();
+    for view in &listed.views {
+        let version = view
+            .version
+            .map_or_else(|| "attn's own".to_string(), |v| format!("version {v}"));
+        let shown: Vec<&str> = view.shown.iter().map(|s| s.desktop.as_str()).collect();
+        let shown = if shown.is_empty() {
+            "not shown".to_string()
+        } else {
+            format!("on {}", shown.join(", "))
+        };
+        let _ = writeln!(out, "{}  {version}  {shown}", view.name);
+        for v in view.versions.iter().flatten() {
+            let mut line = format!("  {}  {}", v.version, v.saved_at);
+            if let Some(from) = v.restored_from {
+                let _ = write!(line, "  restored from {from}");
+            }
+            if let Some(note) = v.note.as_deref().filter(|n| !n.is_empty()) {
+                let _ = write!(line, "  {note}");
+            }
+            out.push_str(&line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+fn read(view: &ViewReadResult) -> String {
+    let mut out = view.text.clone();
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    for problem in &view.problems {
+        let _ = writeln!(
+            out,
+            "problem: line {}: {} {}",
+            problem.line, problem.text, problem.fix
+        );
+    }
+    for command in &view.commands {
+        let _ = writeln!(out, "command: {} ({:?})", command.line, command.state);
+    }
+    out
+}
+
+fn written_export(
+    run: &mut Run<'_>,
+    cmd: &Command,
+    parsed: &Parsed,
+    reply: &Reply,
+) -> Result<ViewExportResult, Stop> {
+    let mut exported: ViewExportResult = command::decode(run, &View, cmd, &command::result(reply))?;
+    let to = parsed.text("to").trim().to_string();
+    let folder = PathBuf::from(if to.is_empty() {
+        exported.view.clone()
+    } else {
+        to
+    });
+    for (name, text) in &exported.files {
+        write_file(&folder.join(name), text.as_bytes()).map_err(|message| {
+            View.fail(
+                "export",
+                &format!("writing {}: {message}", folder.join(name).display()),
+            )
+        })?;
+    }
+    let folder = std::path::absolute(&folder).unwrap_or(folder);
+    exported.folder = Some(folder.display().to_string());
+    Ok(exported)
+}
+
+fn write_file(path: &Path, contents: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| os_error_text(&error))?;
+    }
+    std::fs::write(path, contents).map_err(|error| os_error_text(&error))
+}

@@ -371,3 +371,46 @@ fn the_palette_offers_no_view_while_views_are_off() {
         "views off, yet the palette offers {titles:?}"
     );
 }
+
+#[test]
+fn a_kept_views_tile_is_named_by_the_view_then_by_its_heading() {
+    let mut kept = tile("tile-view-needs-me", "markdown");
+    kept["tile_params"] = serde_json::json!({ "view": "needs-me" }).to_string().into();
+    let mut world = start(state(
+        row([pane("p0"), kept]),
+        vec![session("busy", "working")],
+        &VIEWS_AND_QUEUE,
+    ));
+    let name = |world: &World| {
+        world
+            .screen()
+            .get(Target::key("tile.tile-view-needs-me"))
+            .name
+            .clone()
+    };
+    assert_eq!(
+        name(&world).as_deref(),
+        Some("needs-me"),
+        "the tile's name before its view arrives"
+    );
+
+    world.daemon.emit(attn_protocol::DesktopTileContentMessage {
+        desktop_id: DESKTOP.into(),
+        tile_id: "tile-view-needs-me".into(),
+        tile_kind: "markdown".into(),
+        path: "/data/views/work/needs-me/view.md".into(),
+        content: "<!-- attn-view 1 -->\n# Needs me\n".into(),
+        view: Some(attn_protocol::ViewDocument {
+            language: 1,
+            ..attn_protocol::ViewDocument::default()
+        }),
+        ..attn_protocol::DesktopTileContentMessage::new()
+    });
+    world.settle();
+    assert_eq!(
+        name(&world).as_deref(),
+        Some("Needs me"),
+        "the tile's name once its view arrives"
+    );
+    assert!(world.runtime_is_at_rest());
+}

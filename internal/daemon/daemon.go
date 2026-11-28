@@ -288,13 +288,14 @@ type Daemon struct {
 
 	openTileMu sync.Mutex
 
-	desktopTiles   desktopTileDelivery
-	tileDocuments  tileDocumentWatch
-	viewRuns       viewRuns
-	dataSets       dataSets
-	codeNav        *codenav.Manager
-	codeNavOutside codeNavOutside
-	codeNavSetups  codeNavSetups
+	desktopTiles    desktopTileDelivery
+	keptViewFolders keptViewFolders
+	tileDocuments   tileDocumentWatch
+	viewRuns        viewRuns
+	dataSets        dataSets
+	codeNav         *codenav.Manager
+	codeNavOutside  codeNavOutside
+	codeNavSetups   codeNavSetups
 
 	browserControl         appRequests[browserControlResult]
 	calloutRequests        appRequests[calloutReply]
