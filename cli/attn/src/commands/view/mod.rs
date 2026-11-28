@@ -125,42 +125,7 @@ impl Family for View {
                 }
                 out
             }
-            "data list" => {
-                let listed: ViewDataListResult = command::decode(run, self, cmd, &result)?;
-                let mut out = String::new();
-                for item in &listed.items {
-                    let encoded =
-                        attn::go::json::encode(item).expect("a decoded value always encodes");
-                    out.push_str(&String::from_utf8_lossy(&encoded));
-                    out.push('\n');
-                }
-                out
-            }
-            "data add" => {
-                let added: ViewDataAddResult = command::decode(run, self, cmd, &result)?;
-                format!(
-                    "added {} to {}/{}\n",
-                    item_id(&added.item),
-                    added.view,
-                    added.set
-                )
-            }
-            "data set" => {
-                let set: ViewDataSetResult = command::decode(run, self, cmd, &result)?;
-                format!(
-                    "changed {} in {}/{}\n",
-                    item_id(&set.item),
-                    set.view,
-                    set.set
-                )
-            }
-            "data remove" => {
-                let removed: ViewDataRemoveResult = command::decode(run, self, cmd, &result)?;
-                format!(
-                    "removed {} from {}/{}\n",
-                    removed.id, removed.view, removed.set
-                )
-            }
+            name if name.starts_with("data ") => items(run, self, cmd, &result)?,
             "show" => {
                 let shown: ViewShowResult = command::decode(run, self, cmd, &result)?;
                 if shown.added {
@@ -305,4 +270,46 @@ fn write_file(path: &Path, contents: &[u8]) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|error| os_error_text(&error))?;
     }
     std::fs::write(path, contents).map_err(|error| os_error_text(&error))
+}
+
+/// What a command on a kept view's items prints.
+fn items(run: &mut Run<'_>, view: &View, cmd: &Command, result: &Reply) -> Result<String, Stop> {
+    Ok(match cmd.name {
+        "data list" => {
+            let listed: ViewDataListResult = command::decode(run, view, cmd, result)?;
+            let mut out = String::new();
+            for item in &listed.items {
+                let encoded = attn::go::json::encode(item).expect("a decoded value always encodes");
+                out.push_str(&String::from_utf8_lossy(&encoded));
+                out.push('\n');
+            }
+            out
+        }
+        "data add" => {
+            let added: ViewDataAddResult = command::decode(run, view, cmd, result)?;
+            format!(
+                "added {} to {}/{}\n",
+                item_id(&added.item),
+                added.view,
+                added.set
+            )
+        }
+        "data set" => {
+            let set: ViewDataSetResult = command::decode(run, view, cmd, result)?;
+            format!(
+                "changed {} in {}/{}\n",
+                item_id(&set.item),
+                set.view,
+                set.set
+            )
+        }
+        "data remove" => {
+            let removed: ViewDataRemoveResult = command::decode(run, view, cmd, result)?;
+            format!(
+                "removed {} from {}/{}\n",
+                removed.id, removed.view, removed.set
+            )
+        }
+        _ => unreachable!("{} is not a command on a view's items", cmd.name),
+    })
 }
