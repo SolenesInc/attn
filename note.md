@@ -1,0 +1,1 @@
+PTY upgrade CI is green again. The upgrade tests start from `releases/latest`, which became v0.16.0 today. That release no longer has the shared-host setting or dedicated workers. Tests that start from the latest release no longer turn the host on. The worker-terminal test and the stored-off-settings test now start from v0.15.0, the last release that can produce those states.
