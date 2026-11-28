@@ -24,12 +24,32 @@ func HomeDesktopID(profileID string) string {
 // what's-new banner take.
 const homeAttnShare = 0.25
 
-// ViewTile reports whether a tile shows one of attn's views: a markdown tile whose params name the view.
-func ViewTile(tile layouttree.TileLeaf) bool {
-	var named struct {
-		View string `json:"view"`
+// BuiltInViews are the views of attn a tile can show.
+var BuiltInViews = []string{"attn", "sessions", "pull-requests"}
+
+type namedView struct {
+	View string `json:"view"`
+}
+
+// ViewParams are the params of a markdown tile that shows view.
+func ViewParams(view string) string {
+	encoded, _ := json.Marshal(namedView{View: view})
+	return string(encoded)
+}
+
+// ViewNamed is the view that a markdown tile's params name, if they name one.
+func ViewNamed(params string) (string, bool) {
+	var named namedView
+	if json.Unmarshal([]byte(params), &named) != nil || named.View == "" {
+		return "", false
 	}
-	return tile.TileKind == string(layouttree.TileKindMarkdown) && json.Unmarshal([]byte(tile.TileParams), &named) == nil && named.View != ""
+	return named.View, true
+}
+
+// ViewTile reports whether a tile shows one of attn's views.
+func ViewTile(tile layouttree.TileLeaf) bool {
+	_, named := ViewNamed(tile.TileParams)
+	return tile.TileKind == string(layouttree.TileKindMarkdown) && named
 }
 
 // ResetHomeTree is tree with its views back where HomeTree places them, and its other tiles in columns after them.
@@ -45,7 +65,7 @@ func ResetHomeTree(tree layouttree.Node, newSplitID func() string) layouttree.No
 // HomeTree is what Home holds by default: the attn view stacked above Sessions, and Pull requests in the next column.
 func HomeTree() layouttree.Node {
 	view := func(name string) layouttree.Node {
-		return layouttree.Node{Type: "tile", TileID: "tile-view-" + name, TileKind: string(layouttree.TileKindMarkdown), TileParams: `{"view":"` + name + `"}`}
+		return layouttree.Node{Type: "tile", TileID: "tile-view-" + name, TileKind: string(layouttree.TileKindMarkdown), TileParams: ViewParams(name)}
 	}
 	return layouttree.Node{
 		Type: "split", SplitID: "home-row", Direction: layouttree.DirectionVertical, Ratio: 0.5, RatioMode: layouttree.RatioModeAutomatic,

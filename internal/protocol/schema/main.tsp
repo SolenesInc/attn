@@ -39,7 +39,7 @@ enum LayoutPaneKind {
   agent,
 }
 
-// A profile has one desktop of kind home while views_enabled is on.
+// Every profile has one desktop of kind home; the daemon lists it only while views_enabled is on.
 enum DesktopKind {
   desktop,
   home,

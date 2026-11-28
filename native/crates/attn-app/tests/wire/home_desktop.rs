@@ -6,7 +6,7 @@ use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 use std::time::Duration;
 
-const HOME: &str = "work/home";
+pub(super) const HOME: &str = "work/home";
 
 fn view(name: &str) -> Value {
     let mut tile = tile(&format!("tile-view-{name}"), "markdown");
@@ -38,7 +38,7 @@ fn desktops() -> Vec<Desktop> {
     ]
 }
 
-fn start(current: &str, queue: bool) -> World {
+pub(super) fn start(current: &str, queue: bool) -> World {
     let daemon = super::palette::daemon(
         InitialStateMessage {
             selected_profile_id: Some("work".into()),
@@ -96,7 +96,8 @@ fn has(world: &World, key: &str) -> bool {
 }
 
 #[test]
-fn the_app_opens_on_home_and_lists_it_with_the_desktops_in_place_of_the_home_row() {
+fn the_app_opens_on_home_and_lists_it_with_the_desktops_in_place_of_the_desktop_sidebars_home_row()
+{
     for queue in [false, true] {
         let world = start(HOME, queue);
         for name in ["attn", "sessions", "pull-requests"] {
@@ -105,9 +106,10 @@ fn the_app_opens_on_home_and_lists_it_with_the_desktops_in_place_of_the_home_row
                 "queue={queue}: Home's {name} tile is not drawn"
             );
         }
-        assert!(
-            !has(&world, "sidebar.home"),
-            "queue={queue}: the Home row shows beside the Home desktop"
+        assert_eq!(
+            has(&world, "sidebar.home"),
+            queue,
+            "queue={queue}: only the queue sidebar, which lists no desktops, keeps its Home row"
         );
     }
     let world = start(HOME, false);
@@ -128,6 +130,14 @@ fn the_home_key_shows_the_home_desktop_and_the_first_digit_desktop_1() {
         shown_desktops(&world),
         vec![HOME.to_owned(), "one".to_owned()]
     );
+}
+
+#[test]
+fn the_queue_sidebars_home_row_shows_the_home_desktop() {
+    let mut world = start("one", true);
+    world.gesture(|app| app.click(Target::key("sidebar.home")));
+    world.settle();
+    assert_eq!(shown_desktops(&world), vec![HOME.to_owned()]);
 }
 
 #[test]

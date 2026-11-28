@@ -46,9 +46,13 @@ Home back to its default" in the command palette moves it to the top again with
 its three views, and keeps the other tiles you put on it after them. Attn opens
 on the desktop you were on, so Home when you left it there.
 
-Home's tiles are rounded and set apart on a darker backdrop. "Softer tiles on
-desktops" in the command palette gives your other desktops the same look, and
-"Plain tiles on desktops" takes it away again.
+Turn Views off and Home leaves your desktops. Tiles you put on Home move to the
+desktop you are on, or to your first desktop if you were on Home. Turn Views on
+again and Home comes back with its three views.
+
+Home's tiles are rounded and set apart on a darker backdrop. While Views is on,
+"Softer tiles on desktops" in the command palette gives your other desktops the
+same look, and "Plain tiles on desktops" takes it away again.
 
 ## Tiles
 

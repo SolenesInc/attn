@@ -547,6 +547,19 @@ fn the_anchors_follow_the_sidebar_shape() {
 }
 
 #[test]
+fn home_points_at_the_home_desktop_while_home_is_one() {
+    let mut world = super::home_desktop::start(super::home_desktop::HOME, false);
+    world.daemon.on("callout_result", |_| ());
+    let answer = anchors(&mut world, "home-desktop", "work");
+    assert!(
+        answer["on_screen"]
+            .as_array()
+            .is_some_and(|shown| shown.contains(&json!("home"))),
+        "{answer}"
+    );
+}
+
+#[test]
 fn settings_on_hidden_home_is_missing_and_a_desktop_step_goes_to_the_desktop() {
     let mut world = start(two_desktops());
     world.open_desktop();

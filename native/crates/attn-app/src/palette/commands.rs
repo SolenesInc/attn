@@ -645,22 +645,24 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             format!("Use {name} to mark the selected tile")
         })
     }));
-    let soft = crate::desktop::soft_tiles();
-    commands.push(
-        Command::new(
-            "soft-tiles",
-            if soft {
-                "Plain tiles on desktops"
-            } else {
-                "Softer tiles on desktops"
-            },
-            &[
-                "tile", "look", "soft", "rounded", "backdrop", "style", "desktop",
-            ],
-            Action::SetSoftTiles { on: !soft },
-        )
-        .describe("Rounded tiles set apart on a darker backdrop"),
-    );
+    if setting::on(&facts.settings, "views_enabled") {
+        let soft = crate::desktop::soft_tiles();
+        commands.push(
+            Command::new(
+                "soft-tiles",
+                if soft {
+                    "Plain tiles on desktops"
+                } else {
+                    "Softer tiles on desktops"
+                },
+                &[
+                    "tile", "look", "soft", "rounded", "backdrop", "style", "desktop",
+                ],
+                Action::SetSoftTiles { on: !soft },
+            )
+            .describe("Rounded tiles set apart on a darker backdrop"),
+        );
+    }
     for feature in FEATURES {
         let on = setting::on(settings, feature.key);
         let keywords: Vec<&str> = ["experimental", "feature"]

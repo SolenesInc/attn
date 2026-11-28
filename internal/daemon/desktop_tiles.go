@@ -173,7 +173,7 @@ func (d *Daemon) checkedTileSession(desktop profiles.Desktop, sessionID protocol
 func (d *Daemon) validatedNewTileParams(kind, params string) (string, error) {
 	switch layouttree.TileKind(kind) {
 	case layouttree.TileKindMarkdown:
-		if view, named := viewNamedByTileParams(params); named {
+		if view, named := profiles.ViewNamed(params); named {
 			return d.storedViewTileParams(view)
 		}
 		document, err := d.markdownTileDocument(params)

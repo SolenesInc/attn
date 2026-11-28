@@ -112,6 +112,11 @@ pub fn raised(e: rune::El, radius: Radius, t: &Tokens) -> rune::El {
     door::raised(e, radius, t)
 }
 
+/// `e` with `radius` corners that also clip what it holds, such as a tile's contents.
+pub fn rounded(e: rune::El, radius: Radius) -> rune::El {
+    door::clip_corner(door::corner(e, radius), radius)
+}
+
 /// `e` centred over the window with the scale's `S8` round it, no larger than the window leaves
 /// it, its scrolling part shrinking: a popover that fits beside its anchor on neither side.
 pub fn over_window(e: rune::El) -> rune::El {

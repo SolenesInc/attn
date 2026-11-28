@@ -409,11 +409,14 @@ func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID p
 				return err
 			}
 			desktop, _, err = loadOrCreateNumberedDesktop(tx, now, profile.ID, last)
-			if profiles.IsNotFound(err) || err == nil && desktop.ProfileID != profile.ID {
+			if profiles.IsNotFound(err) || err == nil && (desktop.ProfileID != profile.ID || s.unlistedHome(desktop)) {
 				desktop, err = launchItemDesktop(tx, &s.writes.documents, now, profile, kind, id)
 			}
 		} else {
 			desktop, err = launchItemDesktop(tx, &s.writes.documents, now, profile, kind, id)
+		}
+		if err == nil && s.unlistedHome(desktop) {
+			desktop, err = loadLaunchDesktop(tx, profile, "")
 		}
 		if err != nil {
 			return err

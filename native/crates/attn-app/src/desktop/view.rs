@@ -669,7 +669,9 @@ fn screen(
                     mark_anchor: desk.header_pop.mark_anchor(),
                     hints,
                     screen: super::tile_look::Screen {
-                        soft: desktop.is_home() || super::tile_look::soft_chosen(),
+                        soft: desktop.is_home()
+                            || crate::setting::on(&facts.settings, "views_enabled")
+                                && super::tile_look::soft_chosen(),
                         marking: (rendered.leaves().len() > 1).then_some(focus_style),
                         zoomed: view == super::layout::View::Zoomed,
                         focus: matches!(view, super::layout::View::Focused(_)),

@@ -510,13 +510,11 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                 &facts.notifications,
                 &t,
             ))
-            .children(facts.home_desktop().is_none().then(|| {
-                home_row(
-                    window.view == crate::shell::View::Home,
-                    keys_of(state, &Action::SessionGoToDashboard),
-                    &t,
-                )
-            }))
+            .child(home_row(
+                crate::home::shown(state),
+                keys_of(state, &Action::SessionGoToDashboard),
+                &t,
+            ))
             .child(
                 ListRow::column()
                     .key("sidebar.scroll")

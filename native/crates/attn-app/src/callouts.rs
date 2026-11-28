@@ -57,7 +57,18 @@ impl Callout {
 }
 
 /// The element keys a fixed anchor may show as, in the order the window prefers them.
-fn fixed_keys(anchor: &str) -> &'static [&'static str] {
+fn fixed_keys(state: &State, anchor: &str) -> Vec<String> {
+    let home = state
+        .facts
+        .home_desktop()
+        .map(|home| format!("sidebar.desktop.{}", home.id));
+    home.filter(|_| anchor == "home")
+        .into_iter()
+        .chain(static_keys(anchor).iter().map(|k| (*k).to_owned()))
+        .collect()
+}
+
+fn static_keys(anchor: &str) -> &'static [&'static str] {
     match anchor {
         "sidebar" => &["sidebar", "rail", "queue-bar"],
         "home" => &["sidebar.home", "rail.home"],
@@ -103,7 +114,7 @@ fn step_keys(state: &State, step: &CalloutStep) -> Vec<String> {
             "sidebar.desktop.{}",
             step.desktop_id.clone().unwrap_or_default()
         )],
-        fixed => fixed_keys(fixed).iter().map(|k| (*k).to_owned()).collect(),
+        fixed => fixed_keys(state, fixed),
     }
 }
 
@@ -153,11 +164,15 @@ fn showing(state: &State, profile: &str) -> bool {
 }
 
 /// Reads which fixed anchors the last frame showed, then runs `then` with them.
-fn on_screen(tx: &mut Tx, then: impl FnOnce(&mut State, Vec<String>, &mut Tx) + 'static) {
+fn on_screen(
+    state: &State,
+    tx: &mut Tx,
+    then: impl FnOnce(&mut State, Vec<String>, &mut Tx) + 'static,
+) {
     let keys: Vec<(usize, String)> = FIXED
         .iter()
         .enumerate()
-        .flat_map(|(i, anchor)| fixed_keys(anchor).iter().map(move |k| (i, (*k).to_owned())))
+        .flat_map(|(i, anchor)| fixed_keys(state, anchor).into_iter().map(move |k| (i, k)))
         .collect();
     let (owners, keys): (Vec<usize>, Vec<String>) = keys.into_iter().unzip();
     tx.find_elements(keys, move |state: &mut State, found, tx| {
@@ -180,7 +195,7 @@ fn answer_anchors(state: &mut State, request: CalloutAnchorsRequestMessage, tx: 
         send(state, result(request.request_id, vec![], vec![]));
         return;
     }
-    on_screen(tx, move |state, anchors, _| {
+    on_screen(state, tx, move |state, anchors, _| {
         send(state, result(request.request_id, anchors, vec![]));
     });
 }
@@ -196,7 +211,7 @@ fn answer_show(state: &mut State, request: CalloutShowRequestMessage, tx: &mut T
         send(state, result(request.request_id, vec![], anchors));
         return;
     }
-    on_screen(tx, move |state, shown, tx| {
+    on_screen(state, tx, move |state, shown, tx| {
         let request_id = request.request_id.clone();
         let missing: Vec<String> = anchors
             .into_iter()

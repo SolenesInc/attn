@@ -889,10 +889,8 @@ func (s *Store) SetCurrentDesktop(profileID, desktopID string) (profiles.Profile
 		if desktop.ProfileID != profileID {
 			return profiles.Errorf(profiles.CodeCrossProfile, "desktop %s belongs to profile %s, not %s", desktopID, desktop.ProfileID, profileID)
 		}
-		if !s.homeListed.Load() {
-			if err := refuseHomeDesktop(desktop, "Home is a desktop only while the experimental setting views_enabled is on"); err != nil {
-				return err
-			}
+		if s.unlistedHome(desktop) {
+			return profiles.Errorf(profiles.CodeInvalid, "%s", homeUnlisted)
 		}
 		profile.CurrentDesktopID = desktopID
 		profile.LastUsedAt = now
@@ -961,6 +959,9 @@ func (s *Store) ShowLeaf(desktopID, leafID string) (profiles.Profile, profiles.D
 		var err error
 		if desktop, err = loadDesktop(tx, desktopID); err != nil {
 			return err
+		}
+		if s.unlistedHome(desktop) {
+			return profiles.Errorf(profiles.CodeInvalid, "%s", homeUnlisted)
 		}
 		if profile, err = loadLiveProfile(tx, desktop.ProfileID); err != nil {
 			return err
@@ -1376,6 +1377,9 @@ func (s *Store) LaunchDesktop(profileID, desktopID string) (profiles.Desktop, er
 			return err
 		}
 		desktop, err = loadLaunchDesktop(tx, profile, desktopID)
+		if err == nil && s.unlistedHome(desktop) {
+			desktop, err = loadLaunchDesktop(tx, profile, "")
+		}
 		return err
 	})
 	return desktop, err
@@ -1394,6 +1398,10 @@ func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.
 			return err
 		}
 		current, err := loadLaunchDesktop(tx, profile, request.DesktopID)
+		if err == nil && s.unlistedHome(current) {
+			request.AnchorPaneID, request.Focus = "", false
+			current, err = loadLaunchDesktop(tx, profile, "")
+		}
 		if request.DesktopID != "" && profiles.IsNotFound(err) {
 			request.AnchorPaneID, request.Focus = "", false
 			current, _, err = loadOrCreateNumberedDesktop(tx, now, profile.ID, request.DesktopID)

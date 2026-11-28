@@ -170,8 +170,7 @@ impl Look {
         };
         let tile = tile.opacity(opacity).opacity_motion(fade());
         let tile = if self.screen.soft {
-            let corner = attn_ui::system::Radius::Card.pt();
-            tile.fill(t.bg_tile).radius(corner).clip_rounded(corner)
+            attn_ui::system::rounded(tile.fill(t.bg_tile), attn_ui::system::Radius::Card)
         } else {
             tile
         };

@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -158,6 +160,39 @@ func TestWorkStartedOnHomeLandsThereAndMovesOffWhenViewsTurnOff(t *testing.T) {
 	}
 	if view.profile.CurrentDesktopID != landed.ID {
 		t.Fatalf("turning views on made %s current, want %s kept", view.profile.CurrentDesktopID, landed.ID)
+	}
+}
+
+func TestNothingReopensOnHomeOrShowsItWhileViewsAreOff(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	profile := app.SelectedProfile()
+	setSetting(t, app, "views_enabled", "true")
+	home := homeOf(t, orderedDesktops(viewProfile(t, w, profile)))
+	switchDesktop(app, profile, home.ID)
+	session := w.Spawn(app, fakeagent.Codex, w.Path("on-home"))
+	agent := w.Launched(session)
+	app.TypeLine(session, "hello")
+	agent.Prompted()
+	agent.Reply("Ready. <!-- attn:state=idle -->")
+	if landed, _ := viewProfile(t, w, profile).paneOf(t, session); landed.ID != home.ID {
+		t.Fatalf("an agent started while Home is current landed on %s, want Home", landed.ID)
+	}
+	closeSession(t, cli, session, "done")
+	awaitClosed(app, session)
+
+	setSetting(t, app, "views_enabled", "false")
+	if shown := requestShowLeaf(app, home.ID, "tile-view-attn"); shown.Success {
+		t.Fatal("with views off, showing a tile on Home succeeded")
+	}
+	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session)}); err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(session)
+	view := viewProfile(t, w, profile)
+	landed, _ := view.paneOf(t, session)
+	if landed.ID == home.ID || !slices.ContainsFunc(orderedDesktops(view), func(d protocol.Desktop) bool { return d.ID == landed.ID }) {
+		t.Fatalf("with views off, the agent last on Home reopened on %s, want a listed desktop", landed.ID)
 	}
 }
 

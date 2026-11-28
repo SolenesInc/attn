@@ -115,6 +115,13 @@ func (s *Store) HomeDesktop(profileID string) (profiles.Desktop, error) {
 	return desktop, err
 }
 
+const homeUnlisted = "Home is a desktop only while the experimental setting views_enabled is on"
+
+// unlistedHome reports whether desktop is a Home that no list holds now: nothing lands on it or shows it.
+func (s *Store) unlistedHome(desktop profiles.Desktop) bool {
+	return desktop.Kind == profiles.DesktopKindHome && !s.homeListed.Load()
+}
+
 func refuseHomeDesktop(desktop profiles.Desktop, refusal string) error {
 	if desktop.Kind == profiles.DesktopKindHome {
 		return profiles.Errorf(profiles.CodeInvalid, "%s", refusal)
@@ -128,8 +135,8 @@ func (s *Store) ResetHomeDesktop(profileID string) ([]profiles.Desktop, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !s.homeListed.Load() {
-		return nil, refuseHomeDesktop(home, "Home is a desktop only while the experimental setting views_enabled is on")
+	if s.unlistedHome(home) {
+		return nil, profiles.Errorf(profiles.CodeInvalid, "%s", homeUnlisted)
 	}
 	if _, err := s.EditDesktopArrangement(home.ID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 		desktop.Tree = profiles.ResetHomeTree(desktop.Tree, newSplitID)
