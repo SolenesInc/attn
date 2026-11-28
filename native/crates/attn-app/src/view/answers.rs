@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use attn_client::TileKey;
+use attn_client::{Connection, TileKey};
 use attn_protocol::{
     Attachment, AttachmentDiscardMessage, ViewAnswer, ViewAnswerMessage, ViewAnswerResultMessage,
     ViewAnswers, ViewSendMessage, ViewSendResultMessage, ViewSent,
@@ -14,6 +14,7 @@ use rune::{FileDialogOptions, TextEdit, Tx};
 
 use super::Tiles;
 use crate::State;
+use crate::asks::PAUSE;
 use crate::asks::attach::{self, Uploaded};
 
 pub(crate) const KEPT: &str = "kept";
@@ -25,10 +26,14 @@ pub(crate) struct Writing {
     edits: HashMap<String, HashMap<(String, String), Written>>,
 }
 
-/// Text being written into a question, and the `Value:` text the view gave the question.
+/// Text being written into a question, and the `Value:` text the view gave the question; the
+/// text last given to the home, and the text waiting for writing to pause before it is given.
 struct Written {
+    place: TileKey,
     edit: TextEdit,
     value: Option<String>,
+    given: String,
+    pending: Option<(String, f64)>,
 }
 
 impl Writing {
@@ -42,18 +47,29 @@ impl Writing {
 
     fn edit(
         &mut self,
-        tile: &str,
+        place: &TileKey,
         (row, part): (&str, &str),
         starting: &str,
         value: Option<String>,
     ) -> &mut TextEdit {
-        let written = (self.edits.entry(tile.to_owned()).or_default())
+        let written = (self.edits.entry(place.tile.clone()).or_default())
             .entry((row.to_owned(), part.to_owned()))
             .or_insert_with(|| Written {
+                place: place.clone(),
                 edit: TextEdit::new(starting),
                 value,
+                given: starting.to_owned(),
+                pending: None,
             });
         &mut written.edit
+    }
+
+    fn given(&mut self, tile: &str, row: &str, part: &str) {
+        let at = (row.to_owned(), part.to_owned());
+        if let Some(written) = self.edits.get_mut(tile).and_then(|e| e.get_mut(&at)) {
+            written.given = written.edit.text.clone();
+            written.pending = None;
+        }
     }
 
     /// The answer the text written into `part` of `row` gives: the text, or none when it reads
@@ -267,8 +283,8 @@ impl<'a> Answers<'a> {
         starting: &str,
         value: Option<String>,
     ) -> impl for<'s> Fn(&'s mut State) -> &'s mut TextEdit + 'static {
-        let (tile, row, part, starting) = (
-            self.place.tile.clone(),
+        let (place, row, part, starting) = (
+            self.place.clone(),
             self.row().to_owned(),
             part.to_owned(),
             starting.to_owned(),
@@ -278,7 +294,7 @@ impl<'a> Answers<'a> {
             state
                 .views
                 .writing
-                .edit(&tile, (&row, &part), &starting, value.clone())
+                .edit(&place, (&row, &part), &starting, value.clone())
         }
     }
 
@@ -302,6 +318,7 @@ fn keep_written(state: &mut State, place: &TileKey, (row, part): (&str, &str), t
     let Some(answer) = state.views.writing.answer(&place.tile, row, part) else {
         return;
     };
+    state.views.writing.given(&place.tile, row, part);
     let kept = (content_of(state, place).and_then(|c| c.message.answers.as_ref()))
         .and_then(|a| {
             a.drafts.iter().find(|d| {
@@ -311,6 +328,44 @@ fn keep_written(state: &mut State, place: &TileKey, (row, part): (&str, &str), t
         .and_then(|d| d.text.clone());
     if answer.text != kept {
         give(state, place, answer, tx);
+    }
+}
+
+/// Gives the home the text written into each question once writing has paused for `PAUSE`, so
+/// an app that ends while a field still holds the keyboard keeps what was written, and wakes the
+/// window when the next is due. While the daemon is away nothing is due: the connection coming
+/// back runs the poll again.
+pub(crate) fn keep_paused(state: &mut State, now: f64, tx: &mut Tx) {
+    if state.facts.connection != Connection::Connected {
+        return;
+    }
+    let mut due = Vec::new();
+    let mut wake = f64::INFINITY;
+    for ((row, part), written) in state.views.writing.edits.values_mut().flatten() {
+        let text = &written.edit.text;
+        if *text == written.given {
+            written.pending = None;
+            continue;
+        }
+        match &written.pending {
+            Some((pending, at)) if pending == text => {
+                if now >= *at {
+                    due.push((written.place.clone(), row.clone(), part.clone()));
+                } else {
+                    wake = wake.min(*at);
+                }
+            }
+            _ => {
+                written.pending = Some((text.clone(), now + PAUSE));
+                wake = wake.min(now + PAUSE);
+            }
+        }
+    }
+    for (place, row, part) in due {
+        keep_written(state, &place, (&row, &part), tx);
+    }
+    if wake.is_finite() {
+        tx.wake_at(wake);
     }
 }
 

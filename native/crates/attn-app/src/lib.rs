@@ -435,6 +435,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     }
     let answered = requests::drain(state, tx);
     asks::save_drafts(state, now, tx);
+    view::keep_writing(state, now, tx);
     annotations::draft::follow(state, tx);
     let expired = annotations::draft::expire(state, now) | annotations::draft::due(state, now, tx);
     let browsed = picker::browse_due(state, tx) | launcher::tick(state, tx);

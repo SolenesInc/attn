@@ -14,7 +14,7 @@ use crate::State;
 
 /// How long editing pauses before the draft is saved: an annotation note's pause, measured to
 /// clear an ordinary gap between keystrokes, 100 to 250 ms.
-const PAUSE: f64 = 0.4;
+pub(crate) const PAUSE: f64 = 0.4;
 
 /// What the daemon holds of a draft as far as this window knows: what it was last sent, which a
 /// refused save leaves waiting for the next edit, or nothing known once a save never reached it,

@@ -11,6 +11,8 @@ use attn_protocol::{
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, WALL_START_MS, World, key_event};
 use base64::Engine;
+
+use super::asks::field_text;
 use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
@@ -695,6 +697,65 @@ fn f_chooses_the_file_of_a_one_by_one_item() {
     assert_eq!(
         given(&world).iter().map(|a| json!(a)).collect::<Vec<_>>(),
         vec![json!({"row": "clip-1", "part": "screenshot", "attachments": [put["attachment_id"]]})]
+    );
+}
+
+#[test]
+fn text_still_being_written_is_kept_once_writing_pauses_and_comes_back_after_a_relaunch() {
+    let mut world = start_opened_by_a();
+    let view = three_transcripts();
+    let kept = home_keeps_answers(&world, &view);
+    show(&mut world, view.clone());
+    typed(&mut world, "j");
+    press(&mut world, Key::Enter);
+    typed(&mut world, "e");
+    typed(&mut world, ", corrected");
+    let texts = |world: &World| -> Vec<Option<String>> {
+        given(world)
+            .into_iter()
+            .filter(|a| a.step.is_none())
+            .map(|a| a.text)
+            .collect()
+    };
+    assert!(
+        texts(&world).is_empty(),
+        "the text went out while writing went on"
+    );
+
+    world.advance(Duration::from_millis(400));
+    let written = texts(&world);
+    assert_eq!(
+        written.len(),
+        1,
+        "one pause gives the text once: {written:?}"
+    );
+    assert!(
+        written[0]
+            .as_deref()
+            .is_some_and(|t| t.ends_with(", corrected")),
+        "{written:?}"
+    );
+    assert_eq!(focused(&world).as_deref(), Some(SECOND_TRANSCRIPT));
+    world.advance(Duration::from_secs(2));
+    assert_eq!(texts(&world).len(), 1, "unchanged text was given again");
+    drop(world);
+
+    let mut world = start_opened_by_a();
+    home_keeps_answers(&world, &view);
+    let answers = kept.lock().unwrap().clone();
+    world.daemon.emit(content(Some(view), Some(answers)));
+    world.settle();
+    typed(&mut world, "j");
+    typed(&mut world, "e");
+    assert_eq!(focused(&world).as_deref(), Some(SECOND_TRANSCRIPT));
+    assert_eq!(
+        field_text(&world, SECOND_TRANSCRIPT),
+        written[0].clone().unwrap()
+    );
+    world.advance(Duration::from_secs(2));
+    assert!(
+        texts(&world).is_empty(),
+        "text brought back was given again unchanged"
     );
 }
 

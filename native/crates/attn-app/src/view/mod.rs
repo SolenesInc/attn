@@ -21,7 +21,7 @@ use rune_kit::ScrollBar;
 use crate::State;
 use crate::markdown::Document;
 
-pub(crate) use answers::Answers;
+pub(crate) use answers::{Answers, keep_paused as keep_writing};
 pub(crate) use keys::{on_key, send_key};
 pub(crate) use sounds::follow as follow_sounds;
 pub(crate) use values::{Data, Scope};
