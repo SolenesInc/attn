@@ -93,6 +93,7 @@ func (a *waitingAgent) restart() {
 	a.t.Helper()
 	a.w.restart()
 	a.claude.cli = a.w.Client()
+	a.app = a.w.TrustedApp()
 }
 
 func (a *waitingAgent) notices() []string {
@@ -235,6 +236,8 @@ func TestNoNoticeGoesOutInTheFiveMinutesAfterADaemonStart(t *testing.T) {
 		w.advance(57 * time.Minute)
 		agent.restart()
 		w.advance(3 * time.Minute)
+		agent.stopsWaiting("Still waiting on the staging deploy.")
+		settleFromApp(agent.app, agent.session())
 		agent.noNotice("at the 60-minute mark, 3 minutes after a restart")
 		w.advance(2 * time.Minute)
 		agent.noticeOnly("5 minutes after the restart", `"Deploy staging" (bdeploy) has run 1 h 2 min`)
@@ -253,7 +256,7 @@ func TestAWaitNoticeAnsweredBeforeARestartStaysAnsweredAfterIt(t *testing.T) {
 		w.advance(28 * time.Minute)
 		agent.noNotice("a minute before the 60-minute check, after a restart")
 		w.advance(time.Minute)
-		agent.noticeOnly("at the 60-minute check after a restart", "has run 1 h")
+		agent.noticeOnly("at the 60-minute check after a restart", "has run 1 h, and you have made no model request for 40 min.\n\nAt the last check you answered: \"The deploy is on step 4 of 6. Keeping the wait.\"")
 		if turn := agent.session(); protocol.Deref(turn.TurnOwed) {
 			t.Errorf("the restart opened the turn of an agent that answered its notice: %+v", turn)
 		}

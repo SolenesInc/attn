@@ -64,9 +64,9 @@ func (d *Daemon) actOnAttentionVerdict(verdict attention.LogEntry, facts attenti
 	if facts.TurnOwed || facts.OpenTool != nil {
 		return
 	}
-	if verdict.Checkpoint.Elapsed() && !onlyTheUserCanAct(verdict) {
+	if view, _ := d.monitorViewFor(verdict.Session); verdict.Checkpoint.Elapsed() && waitsOnBackground(view) && !onlyTheUserCanAct(verdict) {
 		if verdict.Checkpoint != attention.CheckpointElapsed20m || verdict.Verdict == attention.Open {
-			d.checkOnWait(verdict, facts)
+			d.checkOnWait(verdict, facts, view)
 		}
 		return
 	}
@@ -135,27 +135,25 @@ func (d *Daemon) sendSupervisorNotice(about, to protocol.SessionID, key, text st
 	return true
 }
 
-func (d *Daemon) checkOnWait(verdict attention.LogEntry, facts attention.Facts) {
+func (d *Daemon) checkOnWait(verdict attention.LogEntry, facts attention.Facts, view sessionmonitor.View) {
 	session := verdict.Session
+	noticedAt := d.clock.Now()
+	wait := &supervisedWait{since: elapsedSince(view), notice: verdict.Checkpoint, noticedAt: noticedAt, silent: view.LastModelRequestAt.V}
+	answered := false
 	a := &d.attention
 	a.mu.Lock()
-	previous := a.waits[session]
+	if previous := a.waits[session]; previous != nil {
+		wait.since, answered = previous.since, previous.answered
+	}
 	a.mu.Unlock()
-	view, _ := d.monitorViewFor(session)
-	noticedAt := d.clock.Now()
-	silent := view.LastModelRequestAt.V
-	wait := &supervisedWait{since: silent, notice: verdict.Checkpoint, noticedAt: noticedAt, silent: silent}
 	answer := ""
-	if previous != nil {
-		wait.since = previous.since
-		if previous.answered {
-			answer = answerTail(facts.LastMessage)
-		}
+	if answered {
+		answer = answerTail(facts.LastMessage)
 	}
 	if !d.sendSupervisorNotice(session, session, waitNoticeKey, waitCheckText(verdict.Checkpoint, facts, noticedAt.Sub(wait.since), answer)) {
 		return
 	}
-	d.appendAttentionLog(attention.LogEntry{Kind: attention.LogNotice, At: noticedAt, Session: session, To: session, Checkpoint: verdict.Checkpoint, WaitSince: wait.since, SilentSince: silent})
+	d.appendAttentionLog(attention.LogEntry{Kind: attention.LogNotice, At: noticedAt, Session: session, To: session, Checkpoint: verdict.Checkpoint, WaitSince: wait.since, SilentSince: wait.silent})
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if previous := a.waits[session]; previous != nil {

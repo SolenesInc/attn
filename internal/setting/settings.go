@@ -103,9 +103,9 @@ var (
 		Since:   "2026-11-19",
 		Search:  "harness sigma pi server",
 	})
-	AttentionSupervisor = feature("attention_supervisor", "Let the attention supervisor open the turn of an agent that stopped quietly but still needs the user: true or false. Experimental; off by default.", Info{
+	AttentionSupervisor = feature("attention_supervisor", "Let the attention supervisor look after agents that stopped quietly or wait on a background task: it opens the turn of one that still needs the user, and first asks the agent, or a delegate's dispatcher, in their inbox when they can settle it: true or false. Experimental; off by default.", Info{
 		Name:    "Attention supervisor",
-		Summary: "Open the turn of an agent that stopped quietly but holds a result or waits on something that will never come.",
+		Summary: "Open the turn of an agent that stopped quietly but holds a result or waits on something that will never come, after asking the agent or its dispatcher first.",
 		Group:   Agents,
 		Applies: Now,
 		Stage:   Experimental,
