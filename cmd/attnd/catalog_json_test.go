@@ -29,6 +29,7 @@ var jsonDaemonResults = map[string]any{
 	"review check":       protocol.ReviewCheckResult{},
 	"seed standby":       protocol.SeedStandbyResult{},
 	"seed export":        protocol.SeedExportResult{Text: protocol.Ptr("# seed\n")},
+	"view export":        protocol.ViewExportResult{View: "x", Files: protocol.RecordString{}},
 	"session snooze":     protocol.SessionSnoozeResult{},
 	"session unsnooze":   protocol.SessionSnoozeResult{},
 	"terminal run":       protocol.TerminalRunResult{Exited: protocol.Ptr(true), ExitCode: protocol.Ptr(3)},
@@ -116,13 +117,14 @@ func requiredArgs(t *testing.T, all *catalog.Catalog, cmd *catalog.Command) []st
 			continue
 		}
 		value := "x"
-		if arg.File || arg.Stdin {
-			value = "-"
-		}
 		kind := all.Types[arg.Type].Schema
 		switch {
+		case arg.File || arg.Stdin:
+			value = "-"
 		case kind["type"] == "integer":
 			value = "1"
+		case kind["type"] == "object":
+			value = "{}"
 		case kind["enum"] != nil:
 			value = kind["enum"].([]any)[0].(string)
 		}

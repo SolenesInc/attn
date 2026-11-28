@@ -634,7 +634,10 @@ fn flag_values(
                     FlagValue::Bool(true) => Json::from(true),
                     FlagValue::Int(number) => Json::from(*number),
                     FlagValue::Repeated(list) => Json::from(list.clone()),
-                    other if matches!(arg.value, Value::Json) => {
+                    other
+                        if matches!(arg.value, Value::Json)
+                            && matches!(arg.source, Source::Given) =>
+                    {
                         serde_json::from_str(&other.to_string()).map_err(|error| {
                             ParseStop::Usage(format!("--{name} is not JSON: {error}"))
                         })?
