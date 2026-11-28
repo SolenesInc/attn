@@ -286,6 +286,8 @@ type Signals struct {
 	ReportsTools bool
 	// ReportsBackgroundTasks: the harness's stops list the background tasks it left running.
 	ReportsBackgroundTasks bool
+	// ReportsSteps: the harness reports each step of a run as it finishes, so a working agent that reports none has stopped moving.
+	ReportsSteps bool
 	// ConfirmsFirstTurn: an automation waits for the harness's first report before it counts as delivered.
 	ConfirmsFirstTurn bool
 	// Titles is which of attn's title parsers reads the terminal's titles.

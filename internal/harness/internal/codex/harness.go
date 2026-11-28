@@ -79,6 +79,7 @@ func Facts() harness.Facts {
 			ReviewerDwell:          time.Minute,
 			ReportsTools:           true,
 			ReportsBackgroundTasks: false,
+			ReportsSteps:           false,
 			ConfirmsFirstTurn:      true,
 			Titles:                 harness.TitlesCodex,
 			StopsReadable:          true,

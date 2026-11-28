@@ -91,6 +91,7 @@ type Monitor struct {
 	runRecord            RunRecord
 	turn                 TurnStamps
 	lastModelRequestAt   time.Time
+	lastStepAt           time.Time
 	firstReportAt        time.Time
 	awaitingHarness      bool
 	folderTrustRead      stepclock.Timer

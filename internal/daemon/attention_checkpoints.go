@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/sessionstate"
@@ -130,8 +131,24 @@ func waitsOnBackground(view sessionmonitor.View) bool {
 	return len(view.BackgroundTasks.V) > 0 || view.State.V.Reason == string(sessionstate.ReasonBackgroundParked)
 }
 
+func elapsedCheckpointsApply(view sessionmonitor.View, signals harness.Signals) bool {
+	return waitsOnBackground(view) || signals.ReportsSteps && view.State.V.State == protocol.SessionStateWorking
+}
+
+func lastHeardFrom(view sessionmonitor.View) time.Time {
+	return latest(view.LastModelRequestAt.V, view.LastStepAt.V)
+}
+
+func elapsedSince(view sessionmonitor.View) time.Time {
+	if heard := lastHeardFrom(view); !heard.IsZero() {
+		return heard
+	}
+	return view.State.V.Since
+}
+
 func (d *Daemon) observeAttention(session protocol.SessionID, previous, view sessionmonitor.View) {
-	if !d.attentionWatches(d.store.Get(session)) {
+	record := d.store.Get(session)
+	if !d.attentionWatches(record) {
 		return
 	}
 	state, before := view.State.V, previous.State.V
@@ -141,7 +158,7 @@ func (d *Daemon) observeAttention(session protocol.SessionID, previous, view ses
 		}
 		d.armAttentionStop(session, view)
 	}
-	d.armAttentionElapsed(session, view)
+	d.armAttentionElapsed(session, record.Agent, view)
 }
 
 func (d *Daemon) armAttentionStop(session protocol.SessionID, view sessionmonitor.View) {
@@ -172,11 +189,9 @@ func (d *Daemon) armAttentionStop(session protocol.SessionID, view sessionmonito
 	})
 }
 
-func (d *Daemon) armAttentionElapsed(session protocol.SessionID, view sessionmonitor.View) {
-	since := view.LastModelRequestAt.V
-	if since.IsZero() {
-		since = view.State.V.Since
-	}
+func (d *Daemon) armAttentionElapsed(session protocol.SessionID, agent protocol.SessionAgent, view sessionmonitor.View) {
+	signals := d.signalsOf(agent)
+	since := elapsedSince(view)
 	step := slices.IndexFunc(attentionElapsedSteps, func(s struct {
 		after      time.Duration
 		checkpoint attention.Checkpoint
@@ -187,14 +202,14 @@ func (d *Daemon) armAttentionElapsed(session protocol.SessionID, view sessionmon
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	armed, ok := a.elapsed[session]
-	if ok && armed.since.Equal(since) && armed.step == step && waitsOnBackground(view) {
+	if ok && armed.since.Equal(since) && armed.step == step && elapsedCheckpointsApply(view, signals) {
 		return
 	}
 	if ok {
 		armed.timer.Stop()
 		delete(a.elapsed, session)
 	}
-	if step < 0 || !waitsOnBackground(view) {
+	if step < 0 || !elapsedCheckpointsApply(view, signals) {
 		return
 	}
 	checkpoint := attentionElapsedSteps[step].checkpoint
@@ -204,10 +219,10 @@ func (d *Daemon) armAttentionElapsed(session protocol.SessionID, view sessionmon
 	timer := d.clock.AfterFunc(AttentionElapsedTimer, since.Add(attentionElapsedSteps[step].after).Sub(d.clock.Now()), func() {
 		d.life.Do("attentionElapsed", func() {
 			current, _ := d.monitorViewFor(session)
-			if waitsOnBackground(current) && (current.LastModelRequestAt.V.Equal(since) || current.LastModelRequestAt.V.IsZero()) {
+			if elapsedCheckpointsApply(current, signals) && elapsedSince(current).Equal(since) {
 				d.attentionCheckpoint(session, checkpoint)
 			}
-			d.armAttentionElapsed(session, current)
+			d.armAttentionElapsed(session, agent, current)
 		})
 	})
 	a.elapsed[session] = elapsedCheckpoint{timer: timer, since: since, step: step}
@@ -264,7 +279,7 @@ func (d *Daemon) startAttentionCheckpoints() {
 				continue
 			}
 			view, _ := d.monitorViewFor(session.ID)
-			d.armAttentionElapsed(session.ID, view)
+			d.armAttentionElapsed(session.ID, session.Agent, view)
 			if !stoppedWithNoTurn(view, now) {
 				continue
 			}
@@ -301,13 +316,20 @@ func (d *Daemon) attentionCheckpoint(session protocol.SessionID, checkpoint atte
 		return
 	}
 	verdict := d.attentionSupervisor(record.Agent).Judge(ctx, facts)
-	d.actOnAttentionVerdict(d.recordAttentionVerdict(session, now, facts, key, view.LastModelRequestAt.V, verdict))
+	d.actOnAttentionVerdict(d.recordAttentionVerdict(session, now, facts, key, stopJudgedBy(checkpoint, view), verdict))
+}
+
+func stopJudgedBy(checkpoint attention.Checkpoint, view sessionmonitor.View) time.Time {
+	if checkpoint.Elapsed() {
+		return time.Time{}
+	}
+	return view.LastModelRequestAt.V
 }
 
 func attentionKey(facts attention.Facts, view sessionmonitor.View) string {
 	key := facts.Fingerprint() + "|" + view.LastModelRequestAt.V.UTC().Format(time.RFC3339Nano) + "|" + view.Turn.V.SettledAt.UTC().Format(time.RFC3339Nano)
 	if facts.Checkpoint.Elapsed() {
-		key += "|" + string(facts.Checkpoint)
+		key += "|" + string(facts.Checkpoint) + "|" + elapsedSince(view).UTC().Format(time.RFC3339Nano)
 	}
 	return key
 }

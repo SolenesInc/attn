@@ -60,6 +60,7 @@ func Facts() harness.Facts {
 			Heartbeat:              1500 * time.Millisecond,
 			ReportsTools:           true,
 			ReportsBackgroundTasks: true,
+			ReportsSteps:           true,
 			Titles:                 harness.TitlesClaude,
 			StopsReadable:          true,
 			StopsClassified:        true,

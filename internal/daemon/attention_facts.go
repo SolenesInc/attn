@@ -35,8 +35,8 @@ func (d *Daemon) attentionFacts(ctx context.Context, session *protocol.Session, 
 	if view.NotificationRun.V || view.NotificationStop.V {
 		facts.RunStartedBy = attention.RunStartedByNotification
 	}
-	if request := view.LastModelRequestAt.V; !request.IsZero() {
-		facts.SinceModelRequest = protocol.Ptr(attention.AgeOf(request, now))
+	if heard := lastHeardFrom(view); !heard.IsZero() {
+		facts.SinceModelRequest = protocol.Ptr(attention.AgeOf(heard, now))
 	}
 	focused := d.sessionFocusedAt(session.ID)
 	facts.ReportUnread = !turn.OpenedAt.IsZero() && turn.OpenedAt.After(focused)

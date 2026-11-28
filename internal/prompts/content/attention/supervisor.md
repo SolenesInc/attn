@@ -12,7 +12,7 @@ Answer with one verdict:
 
 How to read the facts:
 
-- `checkpoint` says why attn asks now: `stop` 15 minutes after a stop that opened no turn, `fact_change` when something that could wake the agent changed, `elapsed_20m`, `elapsed_60m` or `elapsed_4h` that long after the agent's last model request, and `daemon_start` after attn restarted, with `daemon_down_for` saying how long it was down.
+- `checkpoint` says why attn asks now: `stop` 15 minutes after a stop that opened no turn, `fact_change` when something that could wake the agent changed, `elapsed_20m`, `elapsed_60m` or `elapsed_4h` that long after the agent's last model request or finished tool (`since_model_request`), and `daemon_start` after attn restarted, with `daemon_down_for` saying how long it was down.
 - `state` is `idle` or `waiting_input` when the agent ended its turn, and `working` when a tool or a background wait is still open.
 - `run_started_by` says what started the run: `user` means the user typed, `notification` means attn delivered a message from another agent or a watch.
 - `turn_owed` is true when the user's queue already shows the agent. `report_unread` is true when an earlier report waits for the user to look.

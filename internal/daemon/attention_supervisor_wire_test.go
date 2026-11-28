@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -304,6 +305,59 @@ func TestABackgroundWaitIsJudgedTwentyMinutesAfterTheLastModelRequest(t *testing
 		w.advance(5 * time.Minute)
 		if logged := elapsedCheckpoints(t, w, "s1"); len(logged) != 2 || logged[1].Checkpoint != attention.CheckpointElapsed20m {
 			t.Errorf("20 minutes after the new request the decision log holds %+v, want a second elapsed_20m checkpoint", logged)
+		}
+	})
+}
+
+func TestAForegroundWaitIsJudgedTwentyMinutesAfterTheAgentLastReported(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		toolFinished := func() {
+			if err := agent.cli.UpdateState(protocol.TerminalID(agent.self), protocol.StateWorking); err != nil {
+				t.Fatal(err)
+			}
+			w.advance(0)
+		}
+		app.TypeLine(agent.id, "migrate the orders table")
+		agent.term.ProgramStatus(pty.ProgramWorking)
+		w.advance(0)
+		for range 4 {
+			w.advance(10 * time.Minute)
+			toolFinished()
+		}
+		if logged := elapsedCheckpoints(t, w, agent.id); len(logged) != 0 {
+			t.Fatalf("40 minutes into a run whose tools finish every 10 minutes the decision log holds %+v, want no elapsed checkpoint", logged)
+		}
+
+		w.advance(19 * time.Minute)
+		if logged := elapsedCheckpoints(t, w, agent.id); len(logged) != 0 {
+			t.Fatalf("19 minutes into a foreground tool the decision log holds %+v", logged)
+		}
+		w.advance(time.Minute)
+		logged := elapsedCheckpoints(t, w, agent.id)
+		if len(logged) != 1 || logged[0].Checkpoint != attention.CheckpointElapsed20m || !strings.Contains(string(logged[0].Facts), `"state":"working"`) {
+			t.Fatalf("20 minutes into a foreground tool the decision log holds %+v, want one elapsed_20m checkpoint of a working agent", logged)
+		}
+
+		toolFinished()
+		w.advance(19 * time.Minute)
+		if logged := elapsedCheckpoints(t, w, agent.id); len(logged) != 1 {
+			t.Fatalf("19 minutes after the tool finished the decision log holds %d elapsed checkpoints, want the first alone", len(logged))
+		}
+		w.advance(time.Minute)
+		if logged := elapsedCheckpoints(t, w, agent.id); len(logged) != 2 || logged[1].Checkpoint != attention.CheckpointElapsed20m {
+			t.Fatalf("20 minutes into the next foreground tool the decision log holds %+v, want a second elapsed_20m checkpoint", logged)
+		}
+
+		w.restart()
+		agent.cli = w.Client()
+		w.advance(21 * time.Minute)
+		if s := queriedSession(t, agent.cli, agent.id); s.State != protocol.SessionStateWorking {
+			t.Fatalf("21 minutes after the restart the agent is %s, want still working in its tool", s.State)
+		}
+		if logged := elapsedCheckpoints(t, w, agent.id); len(logged) != 2 {
+			t.Errorf("21 minutes after a daemon restart the decision log holds %+v, want the restart to start no new 20-minute wait", logged)
 		}
 	})
 }

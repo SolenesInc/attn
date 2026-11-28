@@ -168,8 +168,9 @@ verdict opens no turn, closes nothing and changes nothing you see.
 
 The supervisor judges an agent at a checkpoint: 15 minutes after a stop that
 opened no turn, when something that could wake the agent changes, 20 minutes,
-60 minutes and 4 hours after the agent's last model request while a background
-task runs, and when the daemon starts. Its rules decide first. When no rule
+60 minutes and 4 hours after the agent's last model request or finished tool
+while a background task runs or, in Claude Code, while it works, and when the
+daemon starts. Its rules decide first. When no rule
 decides, Attn makes one call to the small model that judges your sessions'
 states, through the session's harness or, for a harness with no classifier,
 Claude Code, on your harness account. The call sends what Attn knows of the

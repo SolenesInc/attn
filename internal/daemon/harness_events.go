@@ -69,6 +69,7 @@ func (e harnessEvents) Turn(r harness.Reporter, at time.Time, event harness.Turn
 		monitor.RecordServerStatus(programStatusOfTurn[event.Turn], at)
 	case event.Turn == harness.TurnRunning:
 		monitor.RecordBracket(protocol.StateWorking)
+		monitor.ReportStep(at)
 	case event.Turn == harness.TurnApproval:
 		monitor.RecordApproval(event.Detail)
 	case event.Turn == harness.TurnQuestion:

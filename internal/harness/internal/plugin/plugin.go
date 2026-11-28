@@ -116,7 +116,7 @@ func (h Harness) Facts() harness.Facts {
 
 func signals(reg harness.PluginDriver) harness.Signals {
 	declared := reg.Capabilities
-	s := harness.Signals{Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ReportsTools: declared["pull_request_reporting"], ReportsBackgroundTasks: false, StopsReadable: true, StopsClassified: true}
+	s := harness.Signals{Heartbeat: 500 * time.Millisecond, ReviewerDwell: time.Minute, ReportsTools: declared["pull_request_reporting"], ReportsBackgroundTasks: false, ReportsSteps: false, StopsReadable: true, StopsClassified: true}
 	if declared["state_reporting"] {
 		s.StateAuthority = harness.StateByHarness
 	}

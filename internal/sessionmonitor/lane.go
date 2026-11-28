@@ -599,6 +599,17 @@ func (l *lane) currentUserRunLocked() (runRef, bool) {
 	return l.run.ref, true
 }
 
+func (m *Monitor) ReportStep(at time.Time) bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	m.lastStepAt = at
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
+}
+
 func (m *Monitor) MarkModelRequestStarted(at time.Time) bool {
 	if m == nil {
 		return false

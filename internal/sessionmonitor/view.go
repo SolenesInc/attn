@@ -134,6 +134,7 @@ type View struct {
 	Turn                Value[TurnStamps]                          `fact:"session.state.changed"`
 	AutoSettle          Value[AutoSettleView]                      `fact:"session.state.changed"`
 	LastModelRequestAt  Value[time.Time]                           `fact:"session.model_request.started"`
+	LastStepAt          Value[time.Time]                           `fact:"-"`
 	RunRecord           Value[RunRecord]                           `fact:"session.state.changed"`
 	Branch              Value[attngit.BranchInfo]                  `fact:"session.branch.changed"`
 	PullRequests        KeyedSet[string, PullRequest]              `fact:"session.pull_request.changed"`
@@ -188,6 +189,7 @@ func (m *Monitor) snapshotLocked() View {
 		Turn:                Value[TurnStamps]{m.turn},
 		AutoSettle:          Value[AutoSettleView]{auto},
 		LastModelRequestAt:  Value[time.Time]{m.lastModelRequestAt},
+		LastStepAt:          Value[time.Time]{m.lastStepAt},
 		RunRecord:           Value[RunRecord]{m.runRecord},
 		FirstReportAt:       Value[time.Time]{m.firstReportAt},
 		AwaitingHarness:     Value[bool]{m.awaitingHarness},
