@@ -276,7 +276,7 @@ pub(crate) fn named(command: &str) -> String {
 }
 
 /// Sends `run` to the home, which keeps how it goes on the tile. Once the home takes a run
-/// with typed text, the text leaves the entry `from`.
+/// with typed text, the entry `from` clears if it still holds that text.
 fn send(
     state: &mut State,
     place: &TileKey,
@@ -284,7 +284,7 @@ fn send(
     tx: &mut Tx,
 ) {
     let tile = place.tile.clone();
-    let typed = run.text.is_some().then_some(from).flatten();
+    let sent = from.zip(run.text.clone());
     state.ask(
         move |request_id| ViewRunMessage {
             request_id,
@@ -300,9 +300,14 @@ fn send(
                 None => Some("the daemon did not answer, so the command may not have run".into()),
             };
             if refused.is_none()
-                && let Some(field) = &typed
-                && state.views.entries.remove(field).is_some()
+                && let Some((field, text)) = &sent
+                && state
+                    .views
+                    .entries
+                    .get(field)
+                    .is_some_and(|e| &e.text == text)
             {
+                state.views.entries.remove(field);
                 state.views.revision += 1;
             }
             state.views.refused(&tile, refused);

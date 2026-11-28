@@ -9,7 +9,7 @@ use attn_protocol::{
     ViewProblem, ViewRunCommand, ViewSent, ViewSource, ViewValues,
 };
 use attn_testkit::tree::{pane, row};
-use attn_testkit::{Daemon, Target, WALL_START_MS, World, key_event};
+use attn_testkit::{Answer, Daemon, Target, WALL_START_MS, World, key_event};
 use base64::Engine;
 
 use super::asks::field_text;
@@ -1123,31 +1123,13 @@ fn an_entry_keeps_its_text_until_the_home_takes_the_run() {
             json!({"event": "view_run_result", "request_id": r["request_id"], "success": true})
         }
     });
-    show(
-        &mut world,
-        ViewDocument {
-            language: 1,
-            parts: parts_of(ENTRY),
-            commands: vec![ViewRunCommand {
-                line: "note: scripts/add-note.sh".into(),
-                name: Some("note".into()),
-                script_sha256: "9b0e".into(),
-                state: "started".into(),
-                ..ViewRunCommand::default()
-            }],
-            ..ViewDocument::default()
-        },
-    );
-    click(&mut world, Target::key("tile.m.view.1.text"));
+    show(&mut world, note_view());
+    click(&mut world, Target::key(NOTE));
     typed(&mut world, "ship it; rm -rf ~");
     press(&mut world, Key::Enter);
     assert_eq!(
-        world
-            .screen()
-            .get(Target::key("tile.m.view.1.text"))
-            .value
-            .as_deref(),
-        Some("ship it; rm -rf ~"),
+        note_text(&world),
+        "ship it; rm -rf ~",
         "a refused run took the typed text"
     );
     assert!(
@@ -1164,15 +1146,57 @@ fn an_entry_keeps_its_text_until_the_home_takes_the_run() {
         (&runs[0]["command"], &runs[0]["part"], &runs[0]["text"]),
         (&json!("note"), &json!(5), &json!("ship it; rm -rf ~"))
     );
+    assert_eq!(note_text(&world), "");
+}
+
+const NOTE: &str = "tile.m.view.1.text";
+
+fn note_view() -> ViewDocument {
+    ViewDocument {
+        language: 1,
+        parts: parts_of(ENTRY),
+        commands: vec![ViewRunCommand {
+            line: "note: scripts/add-note.sh".into(),
+            name: Some("note".into()),
+            script_sha256: "9b0e".into(),
+            state: "started".into(),
+            ..ViewRunCommand::default()
+        }],
+        ..ViewDocument::default()
+    }
+}
+
+fn note_text(world: &World) -> String {
+    (world.screen().get(Target::key(NOTE)).value).unwrap_or_default()
+}
+
+#[test]
+fn an_entry_keeps_text_typed_while_the_home_takes_the_run() {
+    let mut world = start();
+    world
+        .daemon
+        .answer_in_turn("view_run", [Answer::Hold, Answer::Hold]);
+    show(&mut world, note_view());
+    click(&mut world, Target::key(NOTE));
+    typed(&mut world, "ship it");
+    press(&mut world, Key::Enter);
+    typed(&mut world, " now");
+    let took = json!({"event": "view_run_result", "success": true});
+    let first = world.daemon.sent_of("view_run")[0].clone();
+    world.daemon.reply_to(&first, &took);
+    world.settle();
     assert_eq!(
-        world
-            .screen()
-            .get(Target::key("tile.m.view.1.text"))
-            .value
-            .as_deref()
-            .unwrap_or_default(),
-        ""
+        note_text(&world),
+        "ship it now",
+        "taking the run lost what the user typed after sending"
     );
+
+    press(&mut world, Key::Enter);
+    let second = world.daemon.sent_of("view_run")[1].clone();
+    assert_eq!(second["text"], json!("ship it now"));
+    world.daemon.reply_to(&second, &took);
+    world.settle();
+    assert_eq!(note_text(&world), "", "the sent text stayed in the entry");
 }
 
 fn runs_of(world: &World) -> Vec<(Value, Value, Value)> {
