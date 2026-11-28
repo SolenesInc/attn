@@ -113,18 +113,26 @@ func viewCommandState(folder string, command viewCommand, files []string, script
 		if s.ScriptSHA256 == script {
 			return protocol.ViewRunStateStarted, nil
 		}
-		if len(files) == 1 {
-			name, _ := filepath.Rel(folder, files[0])
-			return protocol.ViewRunStateChanged, protocol.Ptr(name + " changed since you started it")
-		}
-		return protocol.ViewRunStateChanged, protocol.Ptr("a file it runs changed since you started it")
+		return protocol.ViewRunStateChanged, protocol.Ptr(viewScriptChange(folder, command.line, files))
 	}
 	for _, s := range started {
 		if !slices.Contains(lines, s.Line) {
-			return protocol.ViewRunStateChanged, protocol.Ptr(fmt.Sprintf("it was %q when you started it", s.Line))
+			return protocol.ViewRunStateChanged, protocol.Ptr(fmt.Sprintf("was %q when you started it", s.Line))
 		}
 	}
 	return protocol.ViewRunStateWaiting, nil
+}
+
+// viewScriptChange says what changed in the files a command runs, read after the command's line.
+func viewScriptChange(folder, line string, files []string) string {
+	if len(files) != 1 {
+		return "uses a file that changed since you started it"
+	}
+	name, _ := filepath.Rel(folder, files[0])
+	if program := strings.Fields(line)[0]; filepath.Clean(program) == name {
+		return "changed since you started it"
+	}
+	return fmt.Sprintf("uses %s, which changed since you started it", name)
 }
 
 // viewRun is one command of a shown view: the loop that reruns it while it

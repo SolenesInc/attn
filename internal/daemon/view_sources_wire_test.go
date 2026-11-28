@@ -104,7 +104,7 @@ func TestAViewRunsItsCommandOnlyOnceTheUserStartsItAndStopsWhenTheScriptChanges(
 		writeStatusScript(t, folder, statusScript+"echo changed >&2\n")
 		w.advance(time.Second)
 		stopped := awaitViewTile(app, view, mark, func(v *protocol.ViewDocument) bool {
-			return runCommandState(v) == "changed scripts/status.sh changed since you started it"
+			return runCommandState(v) == "changed changed since you started it"
 		})
 		if got := viewSourceStates(stopped.View)["scripts/status.sh"]; got != "out_of_date " {
 			t.Errorf("after the script changed its source is %q, want out_of_date", got)
