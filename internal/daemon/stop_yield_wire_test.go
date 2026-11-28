@@ -23,6 +23,12 @@ func TestAParkedVerdictHoldsAYieldedTurnWorkingPastTheIdlePromptUntilItExpires(t
 			t.Errorf("the verdict prompt %q does not name the work still running", task.Prompt)
 		}
 		task.Answer(`{"verdict":"PARKED"}`)
+		w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
+			if !strings.Contains(task.Prompt, supervisorQuestion) {
+				t.Errorf("past the parked verdict the daemon ran a headless task other than the attention supervisor's: %q", task.Prompt)
+			}
+			task.Answer(`{"verdict":"QUIET","reason":"the deploy is still running"}`)
+		})
 		parked := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {
 			return protocol.Deref(s.StateReason) == "background_parked"
 		})
