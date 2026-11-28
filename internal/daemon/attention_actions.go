@@ -274,7 +274,8 @@ func (d *Daemon) awaitDispatcher(notice attention.LogEntry) {
 		a.dispatcherAsks = map[protocol.SessionID]stepclock.Timer{}
 	}
 	var asked stepclock.Timer
-	asked = d.clock.AfterFunc(AttentionNoticeTimer, notice.At.Add(attentionNoticeAnswerWindow).Sub(d.clock.Now()), func() {
+	deadline := latest(notice.At.Add(attentionNoticeAnswerWindow), a.startedAt.Add(attentionNoticeHoldAtStart))
+	asked = d.clock.AfterFunc(AttentionNoticeTimer, deadline.Sub(d.clock.Now()), func() {
 		d.life.Do("attentionDispatcherNotice", func() {
 			a.mu.Lock()
 			current := a.dispatcherAsks[delegate] == asked
@@ -285,7 +286,9 @@ func (d *Daemon) awaitDispatcher(notice attention.LogEntry) {
 			if !current {
 				return
 			}
-			if view, _ := d.monitorViewFor(dispatcher); view.LastModelRequestAt.V.Equal(silent) && d.store.Get(delegate) != nil {
+			view, bound := d.monitorViewFor(dispatcher)
+			answered := bound && !view.LastModelRequestAt.V.Equal(silent)
+			if !answered && d.store.Get(delegate) != nil {
 				surface.At = d.clock.Now()
 				d.surfaceAttention(surface)
 			}

@@ -590,22 +590,37 @@ func (d *bubbleDelegation) turnOpenedByTheDispatchersSilence(when string) {
 	}
 }
 
-func TestADispatchersSilenceAcrossARestartOpensTheDelegatesTurnAtTheOriginalDeadline(t *testing.T) {
-	inBubbleWithAgentsAndVerdicts(t, func(t *testing.T, w *world) {
-		d := delegateStopsQuietlyInBubble(t, w)
-		d.noticesTheDispatcher()
-		w.advance(2 * time.Minute)
-		d.restart()
-		w.advance(noticeAnswerTime - 2*time.Minute - time.Second)
-		if d.turnOwed() {
-			t.Fatalf("a second before the dispatcher's 5 minutes ran out, across a restart, the delegate's turn is open")
-		}
-		w.advance(time.Second)
-		d.turnOpenedByTheDispatchersSilence("5 minutes after the notice, across a restart,")
-	})
+func TestADispatchersSilenceAcrossARestartOpensTheDelegatesTurnOnceTheStartHoldEnds(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		down func(*bubbleDelegation)
+	}{
+		{name: "it restarts inside the window", down: func(d *bubbleDelegation) { d.restart() }},
+		{name: "it is down past the deadline", down: func(d *bubbleDelegation) {
+			d.w.stop()
+			d.w.advance(10 * time.Minute)
+			d.w.start()
+			d.reconnect()
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inBubbleWithAgentsAndVerdicts(t, func(t *testing.T, w *world) {
+				d := delegateStopsQuietlyInBubble(t, w)
+				d.noticesTheDispatcher()
+				w.advance(2 * time.Minute)
+				tc.down(d)
+				w.advance(noticeAnswerTime - time.Second)
+				if d.turnOwed() {
+					t.Fatalf("a second before the start hold ended the delegate's turn is open")
+				}
+				w.advance(time.Second)
+				d.turnOpenedByTheDispatchersSilence("5 minutes after a start, past the dispatcher's deadline,")
+			})
+		})
+	}
 }
 
-func TestADispatcherDeadlineThatPassesWhileTheDaemonIsDownOpensTheDelegatesTurnAtStart(t *testing.T) {
+func TestADispatcherThatAnswersInsideTheStartHoldLeavesTheDelegatesTurnClosed(t *testing.T) {
 	inBubbleWithAgentsAndVerdicts(t, func(t *testing.T, w *world) {
 		d := delegateStopsQuietlyInBubble(t, w)
 		d.noticesTheDispatcher()
@@ -614,9 +629,43 @@ func TestADispatcherDeadlineThatPassesWhileTheDaemonIsDownOpensTheDelegatesTurnA
 		w.advance(10 * time.Minute)
 		w.start()
 		d.reconnect()
-		w.advance(0)
-		d.turnOpenedByTheDispatchersSilence("at a start after the dispatcher's deadline passed while the daemon was down,")
+		w.advance(2 * time.Minute)
+		d.dispatcherMakesAModelRequest()
+		w.advance(noticeAnswerTime)
+		if d.turnOwed() {
+			t.Errorf("the delegate's turn opened although its dispatcher answered inside the start hold, after its deadline passed while the daemon was down")
+		}
 	})
+}
+
+func TestADispatcherThatClosesInsideItsWindowLeavesTheDelegatesTurnToItsSilence(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		restart bool
+		opensIn time.Duration
+	}{
+		{name: "without a restart", opensIn: noticeAnswerTime - time.Minute},
+		{name: "across a restart", restart: true, opensIn: noticeAnswerTime},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inBubbleWithAgentsAndVerdicts(t, func(t *testing.T, w *world) {
+				d := delegateStopsQuietlyInBubble(t, w)
+				d.noticesTheDispatcher()
+				w.advance(time.Minute)
+				closeSession(t, d.cli, d.dispatcher.id, "done for the day")
+				awaitClosed(d.app, d.dispatcher.id)
+				if tc.restart {
+					d.restart()
+				}
+				w.advance(tc.opensIn - time.Second)
+				if d.turnOwed() {
+					t.Fatalf("a second before its deadline the delegate's turn is open")
+				}
+				w.advance(time.Second)
+				d.turnOpenedByTheDispatchersSilence("at the deadline of a dispatcher that closed inside its window")
+			})
+		})
+	}
 }
 
 func TestADispatcherThatAnswersAroundARestartLeavesTheDelegatesTurnClosed(t *testing.T) {
