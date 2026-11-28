@@ -2,6 +2,7 @@
 //! owned by its ask, so a send names files the daemon already holds.
 
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Arc;
 
 use attn_protocol::{
@@ -137,28 +138,33 @@ pub(crate) fn pick(ask: &str, to: Stop, tx: &mut Tx) {
 }
 
 fn on_disk(path: &Path) -> (String, Source) {
-    let name = path.file_name().map_or_else(
+    (file_name(path), Source::Path(path.to_owned()))
+}
+
+/// The name a file at `path` attaches as.
+pub(crate) fn file_name(path: &Path) -> String {
+    path.file_name().map_or_else(
         || "Dropped file".to_owned(),
         |n| n.to_string_lossy().into_owned(),
-    );
-    (name, Source::Path(path.to_owned()))
+    )
+}
+
+/// The size of the file at `path`, or why `name` cannot be attached from there.
+pub(crate) fn file_size(path: &Path, name: &str) -> Result<u64, String> {
+    match std::fs::metadata(path) {
+        Ok(meta) if meta.is_file() => Ok(meta.len()),
+        Ok(_) => Err(format!("Cannot attach {name}: it is a folder")),
+        Err(why) => Err(format!("Cannot attach {name}: {why}")),
+    }
 }
 
 fn add(state: &mut State, ask: &str, to: &Stop, files: Vec<(String, Source)>, tx: &mut Tx) {
     for (name, source) in files {
         let size = match &source {
-            Source::Path(path) => match std::fs::metadata(path) {
-                Ok(meta) if meta.is_file() => meta.len(),
-                Ok(_) => {
-                    state.window.asks.error = Some((
-                        ask.to_owned(),
-                        format!("Cannot attach {name}: it is a folder"),
-                    ));
-                    continue;
-                }
+            Source::Path(path) => match file_size(path, &name) {
+                Ok(size) => size,
                 Err(why) => {
-                    state.window.asks.error =
-                        Some((ask.to_owned(), format!("Cannot attach {name}: {why}")));
+                    state.window.asks.error = Some((ask.to_owned(), why));
                     continue;
                 }
             },
@@ -179,7 +185,7 @@ fn add(state: &mut State, ask: &str, to: &Stop, files: Vec<(String, Source)>, tx
             source,
             upload: Upload::Running,
         });
-        put(state, ask.to_owned(), id, 0, tx);
+        put(state, ask.to_owned(), id, tx);
     }
 }
 
@@ -214,35 +220,48 @@ fn discard(state: &mut State, ask: String, id: String, tx: &mut Tx) {
     );
 }
 
-/// Sends the chunk of file `id` that starts at `offset`.
-fn put(state: &mut State, ask: String, id: String, offset: u64, tx: &mut Tx) {
-    let Some(file) = held(state, &ask, &id) else {
-        return discard(state, ask, id, tx);
-    };
-    let (size, name) = (file.size, file.name.clone());
-    let chunk = match &file.source {
-        Source::Path(path) => read_chunk(path, offset),
-        Source::Png(png) => {
-            let start = (offset as usize).min(png.len());
-            let end = (start + CHUNK as usize).min(png.len());
-            Ok(png[start..end].to_vec())
-        }
-        Source::Daemon => Err("the daemon already holds it".to_owned()),
-    };
-    let bytes = match chunk {
+/// Reads at most a chunk of a file's bytes, from an offset.
+pub(crate) type ReadChunk = Box<dyn Fn(&State, u64) -> Result<Vec<u8>, String>>;
+
+/// Hears how an upload ended.
+pub(crate) type Ended = Box<dyn Fn(&mut State, Uploaded, &mut Tx)>;
+
+/// A file going up to the daemon a chunk at a time, and what its owner does around it.
+pub(crate) struct Chunked {
+    pub(crate) owner: AttachmentOwner,
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) size: u64,
+    /// Whether the owner still wants the file; the upload stops once it does not.
+    pub(crate) wanted: Box<dyn Fn(&State) -> bool>,
+    pub(crate) read: ReadChunk,
+    pub(crate) ended: Ended,
+}
+
+/// How an upload ended.
+pub(crate) enum Uploaded {
+    Done,
+    Failed(String),
+    /// The owner no longer wanted the file, so the daemon should forget it.
+    Unwanted,
+}
+
+/// Sends the chunk of `file` that starts at `offset`, and each chunk after it.
+pub(crate) fn upload(state: &mut State, file: Rc<Chunked>, offset: u64, tx: &mut Tx) {
+    if !(file.wanted)(state) {
+        return (file.ended)(state, Uploaded::Unwanted, tx);
+    }
+    let bytes = match (file.read)(state, offset) {
         Ok(bytes) => bytes,
-        Err(why) => return failed(state, &ask, &id, why, tx),
+        Err(why) => return (file.ended)(state, Uploaded::Failed(why), tx),
     };
     let message = AttachmentPutMessage {
-        owner: AttachmentOwner {
-            kind: "ask".into(),
-            id: ask.clone(),
-        },
-        attachment_id: id.clone(),
-        name,
+        owner: file.owner.clone(),
+        attachment_id: file.id.clone(),
+        name: file.name.clone(),
         offset: offset as i64,
         data_base64: base64::engine::general_purpose::STANDARD.encode(bytes),
-        r#final: offset + CHUNK >= size,
+        r#final: offset + CHUNK >= file.size,
         ..AttachmentPutMessage::new()
     };
     state.ask(
@@ -251,8 +270,8 @@ fn put(state: &mut State, ask: String, id: String, offset: u64, tx: &mut Tx) {
             ..message
         },
         move |state, answer, tx| {
-            if held(state, &ask, &id).is_none() {
-                return discard(state, ask, id, tx);
+            if !(file.wanted)(state) {
+                return (file.ended)(state, Uploaded::Unwanted, tx);
             }
             let next = answer
                 .outcome()
@@ -265,19 +284,64 @@ fn put(state: &mut State, ask: String, id: String, offset: u64, tx: &mut Tx) {
                 })
                 .map(|upload| upload.next_offset.max(0) as u64);
             match next {
-                Ok(next) if next < size => put(state, ask, id, next, tx),
-                Ok(_) => {
-                    set(state, &ask, &id, Upload::Done);
-                    super::uploaded(state, &ask, tx);
-                }
-                Err(why) => failed(state, &ask, &id, why, tx),
+                Ok(next) if next < file.size => upload(state, file, next, tx),
+                Ok(_) => (file.ended)(state, Uploaded::Done, tx),
+                Err(why) => (file.ended)(state, Uploaded::Failed(why), tx),
             }
         },
         tx,
     );
 }
 
-fn read_chunk(path: &Path, offset: u64) -> Result<Vec<u8>, String> {
+/// Uploads file `id` of `ask`'s answer, owned by the ask.
+fn put(state: &mut State, ask: String, id: String, tx: &mut Tx) {
+    let Some(file) = held(state, &ask, &id) else {
+        return discard(state, ask, id, tx);
+    };
+    let (name, size) = (file.name.clone(), file.size);
+    let (a, i) = (ask.clone(), id.clone());
+    let wanted = Box::new(move |state: &State| held(state, &a, &i).is_some());
+    let (a, i) = (ask.clone(), id.clone());
+    let read =
+        Box::new(
+            move |state: &State, offset: u64| match held(state, &a, &i).map(|f| &f.source) {
+                Some(Source::Path(path)) => read_chunk(path, offset),
+                Some(Source::Png(png)) => {
+                    let start = (offset as usize).min(png.len());
+                    let end = (start + CHUNK as usize).min(png.len());
+                    Ok(png[start..end].to_vec())
+                }
+                _ => Err("the daemon already holds it".to_owned()),
+            },
+        );
+    let (a, i) = (ask.clone(), id.clone());
+    let ended = Box::new(
+        move |state: &mut State, how: Uploaded, tx: &mut Tx| match how {
+            Uploaded::Done => {
+                set(state, &a, &i, Upload::Done);
+                super::uploaded(state, &a, tx);
+            }
+            Uploaded::Failed(why) => failed(state, &a, &i, why, tx),
+            Uploaded::Unwanted => discard(state, a.clone(), i.clone(), tx),
+        },
+    );
+    let owner = AttachmentOwner {
+        kind: "ask".into(),
+        id: ask,
+    };
+    let chunked = Chunked {
+        owner,
+        id,
+        name,
+        size,
+        wanted,
+        read,
+        ended,
+    };
+    upload(state, Rc::new(chunked), 0, tx);
+}
+
+pub(crate) fn read_chunk(path: &Path, offset: u64) -> Result<Vec<u8>, String> {
     use std::io::{Read, Seek, SeekFrom};
     let io = |e: std::io::Error| format!("{}: {e}", path.display());
     let mut file = std::fs::File::open(path).map_err(io)?;

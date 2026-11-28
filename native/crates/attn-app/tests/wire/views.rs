@@ -1,14 +1,16 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
-    Desktop, DesktopPane, DesktopTileContentMessage, InitialStateMessage, Profile, Session,
-    ViewAnswer, ViewAnswers, ViewDocument, ViewProblem, ViewRunCommand, ViewSent, ViewSource,
-    ViewValues,
+    Attachment, AttachmentOwner, Desktop, DesktopPane, DesktopTileContentMessage,
+    InitialStateMessage, Profile, Session, ViewAnswer, ViewAnswers, ViewDocument, ViewProblem,
+    ViewRunCommand, ViewSent, ViewSource, ViewValues,
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, WALL_START_MS, World, key_event};
+use base64::Engine;
 use rune::{Key, KeyEvent, Mods};
 use serde_json::{Value, json};
 
@@ -171,14 +173,49 @@ fn content(view: Option<ViewDocument>, answers: Option<ViewAnswers>) -> DesktopT
 /// The home's part in answering `view`: it keeps each answer as a draft and shows the tile
 /// again with its drafts, and a send writes the responses and tells the agent. What it keeps.
 fn home_keeps_answers(world: &World, view: &ViewDocument) -> Arc<Mutex<ViewAnswers>> {
-    let kept = Arc::new(Mutex::new(ViewAnswers::default()));
+    let kept = Arc::new(Mutex::new(ViewAnswers {
+        owner: AttachmentOwner {
+            kind: "view".into(),
+            id: format!("home:{VIEW}"),
+        },
+        ..ViewAnswers::default()
+    }));
+    let uploaded = Arc::new(Mutex::new(HashMap::<String, Attachment>::new()));
+    let up = uploaded.clone();
+    world.daemon.on("attachment_put", move |r| {
+        let chunk = (base64::engine::general_purpose::STANDARD)
+            .decode(r["data_base64"].as_str().unwrap())
+            .unwrap();
+        let mut up = up.lock().unwrap();
+        let held = (up.entry(r["attachment_id"].as_str().unwrap().to_owned()))
+            .or_insert_with(|| Attachment {
+                id: r["attachment_id"].as_str().unwrap().into(),
+                name: r["name"].as_str().unwrap().into(),
+                ..Attachment::default()
+            });
+        held.bytes += chunk.len() as i64;
+        vec![json!({"event": "attachment_result", "request_id": r["request_id"], "profile_id": "work",
+            "success": true, "result": {"upload": {"next_offset": held.bytes}}})]
+    });
     let (k, shown) = (kept.clone(), view.clone());
     world.daemon.on("view_answer", move |r| {
         let answer: ViewAnswer = serde_json::from_value(r["answer"].clone()).unwrap();
         let mut kept = k.lock().unwrap();
         kept.drafts
             .retain(|d| (&d.row, &d.part) != (&answer.row, &answer.part));
-        if answer.picked.is_some() || answer.text.is_some() || answer.step.is_some() {
+        let held = uploaded.lock().unwrap();
+        (kept.files).extend(
+            answer
+                .attachments
+                .iter()
+                .flatten()
+                .filter_map(|id| held.get(id).cloned()),
+        );
+        if answer.picked.is_some()
+            || answer.text.is_some()
+            || answer.attachments.is_some()
+            || answer.step.is_some()
+        {
             kept.drafts.push(answer);
         }
         let reply =
@@ -428,24 +465,18 @@ fn a_views_ages_move_on_while_the_window_is_idle() {
 #[test]
 fn parts_attn_cannot_run_yet_say_so_in_their_place() {
     let mut world = start();
-    let mut parts = parts_of(COMMANDS);
-    parts.extend(parts_of(QUESTION_FILE));
+    let parts = parts_of(COMMANDS);
     let view = ViewDocument {
         language: 1,
         parts,
         ..ViewDocument::default()
     };
     show(&mut world, view);
-    for said in [
-        "Running a view's own commands is not available yet",
-        "Answering \"Which screenshot shows the problem?\" with a file in a view is not available yet",
-    ] {
-        assert!(
-            says(&world, said),
-            "{said:?} is not said in {:#?}",
-            shown(&world)
-        );
-    }
+    assert!(
+        says(&world, "Running a view's own commands is not available yet"),
+        "{:#?}",
+        shown(&world)
+    );
 }
 
 #[test]
@@ -538,6 +569,136 @@ fn a_view_is_answered_by_keys_alone_and_sent_back_to_the_agent_that_opened_it() 
 }
 
 #[test]
+fn a_file_is_chosen_for_a_question_by_keys_and_its_answer_goes_home_once_it_is_uploaded() {
+    let mut world = start_opened_by_a();
+    let owner = show_answering(&mut world, file_question());
+    let chosen = world.data_dir().with_file_name("broken screen.png");
+    let screenshot: Vec<u8> = (0..700_000u32).map(|i| i as u8).collect();
+    std::fs::write(&chosen, &screenshot).unwrap();
+    assert!(says(&world, "No file chosen"), "{:#?}", shown(&world));
+
+    typed(&mut world, "j");
+    assert_eq!(highlighted(&world).as_deref(), Some("tile.m.view.0"));
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        world.file_dialog().map(|(_, title)| title).as_deref(),
+        Some("Choose a file for your answer")
+    );
+    world.answer_file_dialog(chosen.to_str());
+
+    let puts = world.daemon.sent_of("attachment_put");
+    let id = puts[0]["attachment_id"].as_str().unwrap().to_owned();
+    let mut uploaded = Vec::new();
+    for put in &puts {
+        assert_eq!(put["owner"], json!(owner.owner));
+        assert_eq!(put["attachment_id"], id);
+        uploaded.extend(
+            (base64::engine::general_purpose::STANDARD)
+                .decode(put["data_base64"].as_str().unwrap())
+                .unwrap(),
+        );
+    }
+    assert!(puts.len() > 1, "a file past one chunk goes up in several");
+    assert!(
+        uploaded == screenshot,
+        "the home holds other bytes than the file"
+    );
+    assert_eq!(
+        given(&world).iter().map(|a| json!(a)).collect::<Vec<_>>(),
+        vec![json!({"part": "screenshot", "attachments": [id]})]
+    );
+    assert!(says(&world, "broken screen.png"), "{:#?}", shown(&world));
+    assert!(says(&world, "Choose another file"), "{:#?}", shown(&world));
+
+    press(&mut world, Key::Backspace);
+    assert_eq!(
+        given(&world).iter().map(|a| json!(a)).next_back(),
+        Some(json!({"part": "screenshot"}))
+    );
+    assert!(says(&world, "No file chosen"), "{:#?}", shown(&world));
+}
+
+/// Shows `view` as the home first does: with the owner its files go up as.
+fn show_answering(world: &mut World, view: ViewDocument) -> ViewAnswers {
+    let kept = home_keeps_answers(world, &view);
+    let first = kept.lock().unwrap().clone();
+    world.daemon.emit(content(Some(view), Some(first.clone())));
+    world.settle();
+    first
+}
+
+fn file_question() -> ViewDocument {
+    ViewDocument {
+        language: 1,
+        parts: parts_of(QUESTION_FILE),
+        ..ViewDocument::default()
+    }
+}
+
+fn a_screenshot(world: &World) -> std::path::PathBuf {
+    let chosen = world.data_dir().with_file_name("broken screen.png");
+    std::fs::write(&chosen, b"the broken screen").unwrap();
+    chosen
+}
+
+#[test]
+fn send_waits_for_a_file_still_uploading_then_sends_it() {
+    let mut world = start_opened_by_a();
+    show_answering(&mut world, file_question());
+    world.daemon.on("attachment_put", |_| Vec::<Value>::new());
+    let chosen = a_screenshot(&world);
+    typed(&mut world, "j");
+    press(&mut world, Key::Enter);
+    world.answer_file_dialog(chosen.to_str());
+    press_action(&mut world, &Action::MarkdownSendAnnotations);
+
+    assert!(
+        world.daemon.sent_of("view_send").is_empty(),
+        "the answers left before the file"
+    );
+    assert!(
+        says(&world, "Uploading broken screen.png"),
+        "{:#?}",
+        shown(&world)
+    );
+    let put = world.daemon.sent_of("attachment_put").remove(0);
+    world.daemon.emit(
+        json!({"event": "attachment_result", "request_id": put["request_id"], "profile_id": "work",
+        "success": true, "result": {"upload": {"next_offset": 17}}}),
+    );
+    world.settle();
+    assert_eq!(
+        given(&world).iter().map(|a| json!(a)).collect::<Vec<_>>(),
+        vec![json!({"part": "screenshot", "attachments": [put["attachment_id"]]})]
+    );
+    assert_eq!(world.daemon.sent_of("view_send").len(), 1);
+}
+
+#[test]
+fn f_chooses_the_file_of_a_one_by_one_item() {
+    let mut world = start_opened_by_a();
+    let mut view = three_transcripts();
+    let steps = view.parts[1]
+        .one_by_one
+        .as_mut()
+        .expect("the second part is a one-by-one");
+    steps.blocks.extend(parts_of(QUESTION_FILE));
+    show_answering(&mut world, view);
+    let chosen = a_screenshot(&world);
+
+    typed(&mut world, "j");
+    assert_eq!(highlighted(&world).as_deref(), Some(STEPS));
+    typed(&mut world, "f");
+    world.answer_file_dialog(chosen.to_str());
+
+    let put = world.daemon.sent_of("attachment_put").remove(0);
+    assert_eq!(
+        given(&world).iter().map(|a| json!(a)).collect::<Vec<_>>(),
+        vec![json!({"row": "clip-1", "part": "screenshot", "attachments": [put["attachment_id"]]})]
+    );
+}
+
+#[test]
 fn sending_while_writing_an_answer_sends_the_text_written() {
     let mut world = start_opened_by_a();
     let view = three_transcripts();
@@ -588,6 +749,7 @@ fn a_view_shows_the_answers_the_home_kept_and_rests_on_the_first_item_left() {
                 serde_json::from_value(json!({"part": "size", "picked": ["48 px"]})).unwrap(),
             ],
             sent: None,
+            ..ViewAnswers::default()
         }),
     ));
     world.settle();

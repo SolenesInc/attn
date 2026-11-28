@@ -35,6 +35,8 @@ pub struct Tiles {
     tiles: HashMap<String, TileState>,
     /// The text being written into each tile's questions.
     pub(crate) writing: answers::Writing,
+    /// The files being uploaded into each tile's file questions.
+    pub(crate) choosing: answers::Choosing,
     /// Why the home last refused an answer or a send, by tile, until it takes one.
     refusals: HashMap<String, String>,
     pub(crate) sounds: sounds::Sounds,
@@ -55,6 +57,7 @@ impl Tiles {
         self.tiles.retain(|tile, _| shown.contains(tile));
         self.refusals.retain(|tile, _| shown.contains(tile));
         self.writing.keep_only(shown);
+        self.choosing.keep_only(shown);
     }
 
     /// Keeps why the home refused the tile's last answer or send, or forgets it once one is taken.
@@ -399,7 +402,7 @@ pub(crate) fn body(
         let doors = Doors {
             values: data.scope(now_ms),
             commands: Commands,
-            answers: Answers::of(&place, content.message.answers.as_ref(), &tiles.writing),
+            answers: Answers::of(&place, content.message.answers.as_ref(), tiles),
             tile: TileDoor {
                 tile,
                 state: &state,

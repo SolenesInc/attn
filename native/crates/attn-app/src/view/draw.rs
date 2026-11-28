@@ -134,27 +134,26 @@ pub(crate) fn field_key(question: &str) -> String {
 
 pub(crate) fn question(part: &ViewPart, doors: &Doors<'_>) -> Block {
     let (key, t) = (&doors.room.key, doors.room.t);
-    if let Some(file) = &part.question_file {
-        let prompt = &file.question.prompt;
-        return not_yet(
-            key,
-            &format!("Answering \"{prompt}\" with a file in a view"),
-            t,
-        );
-    }
-    let (name, asked, many) = match (&part.question, &part.question_multi, &part.question_text) {
-        (Some(q), _, _) => (&q.name, &q.question, false),
-        (_, Some(q), _) => (&q.name, &q.question, true),
-        (_, _, Some(q)) => (&q.name, &q.question, false),
+    let (name, asked, many) = match (
+        &part.question,
+        &part.question_multi,
+        &part.question_text,
+        &part.question_file,
+    ) {
+        (Some(q), ..) => (&q.name, &q.question, false),
+        (_, Some(q), ..) => (&q.name, &q.question, true),
+        (_, _, Some(q), _) => (&q.name, &q.question, false),
+        (.., Some(q)) => (&q.name, &q.question, false),
         _ => return Block::custom(key.clone(), col()),
     };
     let prompt = doors.values.text(&[attn_protocol::ViewTemplatePiece {
         text: Some(asked.prompt.clone()),
         ..Default::default()
     }]);
-    let shown = match &part.question_text {
-        Some(text) => written(name, &prompt, text.value.as_ref(), doors),
-        None => choices(name, &prompt, asked, many, doors),
+    let shown = match (&part.question_text, &part.question_file) {
+        (Some(text), _) => written(name, &prompt, text.value.as_ref(), doors),
+        (_, Some(_)) => chosen_file(name, doors),
+        _ => choices(name, &prompt, asked, many, doors),
     };
     let heading = words(prompt.clone(), Type::Name, t.text_primary).key(format!("{key}.prompt"));
     Block::custom(
@@ -230,6 +229,57 @@ fn written(
         .on_blur(doors.answers.wrote(name))
         .on_key(leave_field);
     area_box(area, FieldState::Ready, t).into()
+}
+
+/// A question-file's button, which chooses the file, and the file the home keeps or the one
+/// still uploading.
+fn chosen_file(name: &str, doors: &Doors<'_>) -> El {
+    let (key, t) = (&doors.room.key, doors.room.t);
+    let kept = doors.answers.files(name);
+    let (said, tone) = match doors.answers.choosing(name) {
+        Some(chosen) => match &chosen.failed {
+            Some(why) => (format!("Cannot attach {}: {why}", chosen.name), t.warning),
+            None => (format!("Uploading {}…", chosen.name), t.text_secondary),
+        },
+        None if kept.is_empty() => ("No file chosen".to_owned(), t.text_secondary),
+        None => {
+            let names: Vec<&str> = kept.iter().map(|f| f.name.as_str()).collect();
+            (names.join(", "), t.text_primary)
+        }
+    };
+    let label = if kept.is_empty() {
+        "Choose a file…"
+    } else {
+        "Choose another file…"
+    };
+    let button = Button::new(label)
+        .size(Size::Compact)
+        .on_press_tx(doors.answers.choose(name))
+        .build(t);
+    let removable = !kept.is_empty() || doors.answers.choosing(name).is_some();
+    let remove = removable.then(|| {
+        let button = Button::new("Remove")
+            .look(Look::Quiet)
+            .size(Size::Compact)
+            .on_press_tx(doors.answers.remove(name))
+            .build(t);
+        El::from(button).key(format!("{key}.remove"))
+    });
+    let active = doors.tile.reaches(key);
+    let hint = active.then(|| match removable {
+        true => keys_hint(["↩", "⌫"], "choose · remove", t),
+        false => keys_hint(["↩"], "chooses", t),
+    });
+    Inline::loose()
+        .w_full()
+        .child(El::from(button).key(format!("{key}.choose")))
+        .children(hint)
+        .child(
+            words(said, Type::Small, tone)
+                .key(format!("{key}.file"))
+                .grow(1.0),
+        )
+        .children(remove)
 }
 
 /// Escape leaves a view's text field, which keeps what was written.

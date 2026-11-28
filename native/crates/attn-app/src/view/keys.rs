@@ -2,7 +2,8 @@
 //! the view's rows, foldable headings, questions, clips and `one-by-one` parts; ↩ folds a
 //! heading, and keeps and goes on in a `one-by-one`, where s skips and ← and → step back and on.
 //! On a question, or in a `one-by-one` item that holds one, digits pick a choice and e writes the
-//! text; ⌘↩ sends the view's answers; r starts the view's commands while they wait for the user.
+//! text; ↩ on a file question, or f in a `one-by-one` item, chooses its file, and ⌫ takes it back;
+//! ⌘↩ sends the view's answers; r starts the view's commands while they wait for the user.
 //! Space plays or pauses the clip at the highlight, and Shift with ← or → moves it back or on.
 
 use attn_protocol::{DesktopTileContentMessage, ViewPart};
@@ -173,7 +174,7 @@ fn stops(
                 out.push(Stop::Clip(format!("{key}.{n}")));
             }
         }
-        if asked(part).is_some() {
+        if asked(part).is_some() || part.question_file.is_some() {
             out.push(Stop::Question {
                 key: key.clone(),
                 row: row.map(str::to_owned),
@@ -238,7 +239,7 @@ fn held(state: &State) -> Option<(String, &attn_client::TileContent)> {
 }
 
 /// What a question part asks: its name, its choices' labels, whether it takes several, and
-/// whether it is written. A file question takes no keys.
+/// whether it is written. A file question is not among them: ↩ or f chooses its file.
 fn asked(part: &ViewPart) -> Option<(&str, Vec<String>, bool, bool)> {
     let labels =
         |q: &attn_protocol::AskQuestion| q.choices.iter().map(|c| c.label.clone()).collect();
@@ -286,6 +287,9 @@ pub(crate) fn steps_hint(blocks: &[ViewPart]) -> String {
     if blocks.iter().any(|b| asked(b).is_some_and(|a| !a.3)) {
         hint.push_str(" · 1–9 pick");
     }
+    if blocks.iter().any(|b| b.question_file.is_some()) {
+        hint.push_str(" · f file");
+    }
     hint.push_str(" · ← →");
     hint
 }
@@ -330,7 +334,7 @@ fn answer_with(
     let pick = {
         let content = answers::content_of(state, place);
         let kept = content.and_then(|c| c.message.answers.as_ref());
-        let answers = Answers::of(place, kept, &state.views.writing);
+        let answers = Answers::of(place, kept, &state.views);
         let answers = match row {
             Some(row) => answers.within(row),
             None => answers,
@@ -350,7 +354,7 @@ pub(super) fn steps_at(state: &State, place: &TileKey, key: &str, rows: &[String
         .get(key)
         .and_then(|s| s.at);
     let kept = answers::content_of(state, place).and_then(|c| c.message.answers.as_ref());
-    resting(moved, rows, &Answers::of(place, kept, &state.views.writing))
+    resting(moved, rows, &Answers::of(place, kept, &state.views))
 }
 
 /// Where a `one-by-one` whose items are `rows` rests: where the user `moved` it, or else its
@@ -485,6 +489,36 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         (Key::Right, _, Some(Stop::Steps { key, rows, .. })) => {
             step(state, &place, (&key, &rows), Verdict::On, tx)
+        }
+        (_, "f", Some(Stop::Steps { key, rows, blocks })) => {
+            let at = steps_at(state, &place, &key, &rows);
+            let file = (blocks.iter())
+                .find_map(|b| b.question_file.as_ref().filter(|_| b.problem.is_none()));
+            match (rows.get(at), file) {
+                (Some(row), Some(file)) => {
+                    answers::choose_file(&place, (row.clone(), file.name.clone()), tx);
+                    true
+                }
+                _ => false,
+            }
+        }
+        (Key::Backspace | Key::Delete, _, Some(Stop::Question { row, part, .. }))
+            if part.question_file.is_some() =>
+        {
+            let name = (part.question_file.as_ref())
+                .map(|f| f.name.clone())
+                .unwrap_or_default();
+            answers::remove_file(state, &place, (row.unwrap_or_default(), name), tx);
+            true
+        }
+        (Key::Enter, _, Some(Stop::Question { row, part, .. })) if part.question_file.is_some() => {
+            let name = part
+                .question_file
+                .as_ref()
+                .map(|f| f.name.clone())
+                .unwrap_or_default();
+            answers::choose_file(&place, (row.unwrap_or_default(), name), tx);
+            true
         }
         (_, _, Some(Stop::Steps { key, rows, blocks })) if digit.is_some() || typed == "e" => {
             let at = steps_at(state, &place, &key, &rows);

@@ -1,4 +1,4 @@
-mod attach;
+pub(crate) mod attach;
 pub(crate) mod commands;
 pub(crate) mod inline;
 mod mentions;
