@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use attn_client::TileKey;
 
@@ -82,8 +83,10 @@ pub(crate) struct Sounds {
     /// Each shown view's tile, by the revision of its content and a hash of its document, as the
     /// clips were last read for it.
     documents: HashMap<TileKey, (u64, u64)>,
-    written: u64,
 }
+
+/// How many clips this process has written, so each window's clips have files of their own.
+static WRITTEN: AtomicU64 = AtomicU64::new(0);
 
 impl Sounds {
     /// Wakes the window when a clip loads, ends or fails.
@@ -263,15 +266,15 @@ fn arrived(state: &mut State, clip: Clip, bytes: Result<Vec<u8>, String>) {
 }
 
 /// Writes `bytes`, the sound of `clip`, where its player opens it, named for the clip's own kind.
-fn written(sounds: &mut Sounds, clip: &Clip, bytes: &[u8]) -> Result<PathBuf, String> {
+fn written(sounds: &Sounds, clip: &Clip, bytes: &[u8]) -> Result<PathBuf, String> {
     let folder = sounds.folder();
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
-    sounds.written += 1;
+    let n = WRITTEN.fetch_add(1, Ordering::Relaxed) + 1;
     let kind = std::path::Path::new(&clip.path)
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("wav");
-    let file = folder.join(format!("{}.{kind}", sounds.written));
+    let file = folder.join(format!("{n}.{kind}"));
     std::fs::write(&file, bytes).map_err(|e| e.to_string())?;
     Ok(file)
 }
