@@ -264,10 +264,11 @@ apply                   puts a member's saved settings into their current
 ```
 
 ```text
-automation              a prompt that attn starts on its own
+automation              a prompt that attn starts on its own, or sends to a crew member
 ├─ trigger (1)          a schedule or an event, like a PR review request
 │  └─ guard (at most 1) a shell command that decides whether a due tick starts a run
-├─ launch desktop (1)   the desktop where its sessions start
+├─ launch desktop (at most 1) the desktop where its sessions start
+├─ member (at most 1)   the crew member whose mailbox gets each run's message
 ├─ continuity (1)       which session takes the next occurrence:
 │                       a new one each time, one per subject, or one only
 └─ occurrence (0..n)    one time the trigger fires
