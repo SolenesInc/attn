@@ -13,7 +13,11 @@ func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) error {
 	if msg == nil {
 		return nil
 	}
-	return d.closeTurn(protocol.TrimID(msg.SessionID), sessionmonitor.Settle)
+	session := protocol.TrimID(msg.SessionID)
+	if closed, err := d.settleClosesFinished(session); closed {
+		return err
+	}
+	return d.closeTurn(session, sessionmonitor.Settle)
 }
 
 func (d *Daemon) handBackTurn(sessionID protocol.SessionID) {

@@ -16,6 +16,9 @@ const (
 	LogNotice         = "notice"
 	LogWaitEnded      = "wait_ended"
 	LogNoticeDeadline = "notice_deadline"
+	LogMarked         = "marked"
+	LogUnmarked       = "unmarked"
+	LogFinishedEnded  = "finished_ended"
 )
 
 type LogEntry struct {

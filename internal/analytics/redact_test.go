@@ -91,6 +91,7 @@ func TestRedactShipsNoTextOutsideItsClassifiedFields(t *testing.T) {
 		{`{"closed_by":"` + sessionID + `"}`, `{"closed_by":"` + sessionHash + `"}`, analytics.Fields{"closed_by": analytics.Actor}},
 		{`{"closed_by":"user"}`, `{"closed_by":"user"}`, analytics.Fields{"closed_by": analytics.Actor}},
 		{`{"closed_by":"attn"}`, `{"closed_by":"attn"}`, analytics.Fields{"closed_by": analytics.Actor}},
+		{`{"closed_by":"supervisor"}`, `{"closed_by":"supervisor"}`, analytics.Fields{"closed_by": analytics.Actor}},
 		{`{"closed_by":"member:reviewer"}`, `{"closed_by":"` + analytics.HashSubject(testSecret, "member:reviewer") + `"}`, analytics.Fields{"closed_by": analytics.Actor}},
 		{`{"by_path":{"/Users/someone/repo":"dirty","0095c903-0123-4029":"idle"},"n":2}`, `{"by_path":{"n":2},"n":2}`, nil},
 		{`{"empty":{}}`, `{"empty":{}}`, nil},
@@ -147,7 +148,7 @@ func compareRedacted(t *testing.T, path string, in, out any, fields analytics.Fi
 			return
 		case analytics.Actor:
 			want := analytics.HashSubject(testSecret, v)
-			if v == "user" || v == "attn" {
+			if v == "user" || v == "attn" || v == "supervisor" {
 				want = v
 			}
 			if out != want {

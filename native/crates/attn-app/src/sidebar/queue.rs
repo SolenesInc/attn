@@ -185,10 +185,19 @@ pub fn actions(facts: &Facts, session: &Session, now_ms: i64) -> QueueActions {
     let by_id: HashMap<&str, &Session> =
         facts.sessions.iter().map(|s| (s.id.as_str(), s)).collect();
     let automation_member = super::model::is_automation_session(session, &by_id);
+    let settles = session.turn_owed == Some(true) || marked_finished(session);
     QueueActions {
-        settle: session.turn_owed == Some(true) && (in_queue || automation_member),
+        settle: settles && (in_queue || automation_member),
         snooze: in_queue,
     }
+}
+
+/// An agent the supervisor marked finished, whose settle closes it.
+fn marked_finished(session: &Session) -> bool {
+    session
+        .attention
+        .as_ref()
+        .is_some_and(|attention| attention.verdict == "finished")
 }
 
 /// The selected profile's agents by place: each desktop in order with the sessions on it, then,

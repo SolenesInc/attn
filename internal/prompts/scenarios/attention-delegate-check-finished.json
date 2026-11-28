@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "attention-delegate-check-finished",
+  "description": "A dispatcher asked about a delegate the supervisor judged finished.",
+  "recipient": "attention",
+  "event": "delegate-check",
+  "values": {
+    "delegate": "Port agent and session commands",
+    "session": "ag-nrkwhp",
+    "finished": "true",
+    "reason": "the migration is reported and nothing is left for anyone"
+  }
+}

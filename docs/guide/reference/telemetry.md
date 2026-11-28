@@ -115,7 +115,8 @@ it stores them:
   (`caused_by_session_id`), becomes the same keyed hash as that id's subject,
   so a record can be joined to the records about the thing it names. A field
   that names who acted, such as who closed a session (`closed_by`), keeps
-  `user` and `attn` as they are and hashes any other actor the same way.
+  `user`, `attn` and `supervisor` as they are and hashes any other actor the
+  same way.
 - A failed git operation says why it failed without its error text: `failure`
   names the reason from a fixed set, such as `missing_directory`, `timeout` or
   `exited`, and `exit_code` gives git's exit code when git itself exited

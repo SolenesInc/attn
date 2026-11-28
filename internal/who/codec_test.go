@@ -76,7 +76,7 @@ func TestWhoCodecMatchesItsTextSpecification(t *testing.T) {
 			}
 			roundTrip(t, address, who.ParseAddress)
 		}
-		for _, text := range []string{"user", "attn"} {
+		for _, text := range []string{"user", "attn", "supervisor"} {
 			a, err := who.ParseActor(text)
 			if err != nil {
 				t.Fatal(err)

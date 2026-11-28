@@ -50,11 +50,13 @@ type rule struct {
 	holds  func(Facts) bool
 }
 
+const ruleDelegateFinished = "delegate_finished"
+
 var rules = []rule{
 	{"tool_open", Open, LabelAsksYou, "a question or an approval waits on the user", func(f Facts) bool { return f.OpenTool != nil }},
 	{"turn_owed", Open, LabelUnreadReport, "the agent's turn is already open to the user", func(f Facts) bool { return f.TurnOwed }},
 	{"ask_open", Open, LabelAsksYou, "the agent sent an ask since its turn last opened or settled", sentAnAsk},
-	{"delegate_finished", Finished, LabelFinished, "the stake is done, nothing runs, and the dispatcher watches it", delegateFinished},
+	{ruleDelegateFinished, Finished, LabelFinished, "the stake is done, nothing runs, and the dispatcher watches it", delegateFinished},
 	{"background_young", Quiet, "", "a background task started under 20 min ago", youngBackground},
 	{"wake_registered", Quiet, "", "something registered will wake the agent", wakeRegistered},
 }
@@ -66,6 +68,10 @@ func Rules(f Facts) Verdict {
 		}
 	}
 	return Verdict{Kind: Unsure, Decider: DeciderNone, Reason: "no rule decides"}
+}
+
+func ClosesAgent(decider string) bool {
+	return decider == "rule:"+ruleDelegateFinished
 }
 
 func RuleNames() []string {

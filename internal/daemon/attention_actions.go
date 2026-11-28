@@ -28,8 +28,6 @@ const (
 
 	attentionNoticeSource = "attention-supervisor"
 	waitNoticeKey         = "background-wait"
-	// The tail of an answer is enough to show the agent what it said; 300 characters is about three lines.
-	answerTailMaxChars = 300
 )
 
 type surfacedTurn struct {
@@ -61,7 +59,14 @@ func sessionAttention(entry attention.LogEntry, at time.Time) protocol.SessionAt
 }
 
 func (d *Daemon) actOnAttentionVerdict(verdict attention.LogEntry, facts attention.Facts) {
-	if facts.TurnOwed || facts.OpenTool != nil {
+	if verdict.Verdict != attention.Finished && verdict.Decider != attention.DeciderNone {
+		d.endFinished(verdict.Session)
+	}
+	if facts.TurnOwed || facts.OpenTool != nil || verdict.Verdict == attention.Finished && !restingAt(facts.State) {
+		return
+	}
+	if attention.ClosesAgent(verdict.Decider) && facts.Stake != nil {
+		d.closeFinishedDelegate(verdict.Session, facts.Stake)
 		return
 	}
 	if view, _ := d.monitorViewFor(verdict.Session); verdict.Checkpoint.Elapsed() && waitsOnBackground(view) && !onlyTheUserCanAct(verdict) {
@@ -85,9 +90,11 @@ func (d *Daemon) raiseAttention(verdict attention.LogEntry) {
 		d.askDispatcher(dispatcher, verdict)
 		return
 	}
-	if verdict.Verdict == attention.Open {
-		d.surfaceAttention(verdict)
+	if verdict.Verdict == attention.Finished {
+		d.checkFinished(verdict)
+		return
 	}
+	d.surfaceAttention(verdict)
 }
 
 func (d *Daemon) liveDispatcherOf(session protocol.SessionID) (protocol.SessionID, bool) {
@@ -148,7 +155,7 @@ func (d *Daemon) checkOnWait(verdict attention.LogEntry, facts attention.Facts, 
 	a.mu.Unlock()
 	answer := ""
 	if answered {
-		answer = answerTail(facts.LastMessage)
+		answer = strings.TrimSpace(statemarker.Strip(facts.LastMessage))
 	}
 	if !d.sendSupervisorNotice(session, session, waitNoticeKey, waitCheckText(verdict.Checkpoint, facts, noticedAt.Sub(wait.since), answer)) {
 		return
@@ -247,15 +254,14 @@ func (d *Daemon) askDispatcher(dispatcher protocol.SessionID, verdict attention.
 	if record == nil {
 		return
 	}
-	finished := verdict.Verdict == attention.Finished
 	text := prompts.RenderText("attention", "delegate-check", prompts.Values{
-		"delegate": sessionDisplayName(record), "session": shortSessionID(delegate), "finished": strconv.FormatBool(finished), "reason": verdict.Reason})
+		"delegate": sessionDisplayName(record), "session": shortSessionID(delegate), "finished": strconv.FormatBool(verdict.Verdict == attention.Finished), "reason": verdict.Reason})
 	if !d.sendSupervisorNotice(delegate, dispatcher, "delegate/"+string(delegate), text) {
 		return
 	}
 	asking, _ := d.monitorViewFor(dispatcher)
 	notice := attention.LogEntry{Kind: attention.LogNotice, At: d.clock.Now(), Session: delegate, To: dispatcher, Checkpoint: verdict.Checkpoint,
-		SilentSince: asking.LastModelRequestAt.V, Verdict: verdict.Verdict, Decider: verdict.Decider, Label: verdict.Label, Reason: verdict.Reason}
+		SilentSince: asking.LastModelRequestAt.V, VerdictAt: &verdict.At, Verdict: verdict.Verdict, Decider: verdict.Decider, Label: verdict.Label, Reason: verdict.Reason}
 	d.appendAttentionLog(notice)
 	d.awaitDispatcher(notice)
 }
@@ -288,7 +294,11 @@ func (d *Daemon) awaitDispatcher(notice attention.LogEntry) {
 			}
 			view, bound := d.monitorViewFor(dispatcher)
 			answered := bound && !view.LastModelRequestAt.V.Equal(silent)
-			if !answered && d.store.Get(delegate) != nil {
+			switch {
+			case answered || d.store.Get(delegate) == nil:
+			case notice.Verdict == attention.Finished:
+				d.markFinished(noticedVerdict(notice))
+			default:
 				surface.At = d.clock.Now()
 				d.surfaceAttention(surface)
 			}
@@ -296,6 +306,15 @@ func (d *Daemon) awaitDispatcher(notice attention.LogEntry) {
 		})
 	})
 	a.dispatcherAsks[delegate] = asked
+}
+
+func noticedVerdict(notice attention.LogEntry) attention.LogEntry {
+	verdict := notice
+	verdict.Kind, verdict.To, verdict.SilentSince = attention.LogVerdict, "", time.Time{}
+	if notice.VerdictAt != nil {
+		verdict.At = *notice.VerdictAt
+	}
+	return verdict
 }
 
 func waitCheckText(checkpoint attention.Checkpoint, facts attention.Facts, waited time.Duration, answer string) string {
@@ -331,14 +350,6 @@ func taskName(task attention.Task) string {
 	return fmt.Sprintf("%q (%s)", name, task.ID)
 }
 
-func answerTail(message string) string {
-	answer := []rune(strings.TrimSpace(statemarker.Strip(message)))
-	if len(answer) > answerTailMaxChars {
-		return "…" + string(answer[len(answer)-answerTailMaxChars:])
-	}
-	return string(answer)
-}
-
 func checkpointAge(checkpoint attention.Checkpoint) string {
 	for _, step := range attentionElapsedSteps {
 		if step.checkpoint == checkpoint {
@@ -372,6 +383,7 @@ func (a *attentionCheckpoints) surface(entry attention.LogEntry) {
 func (d *Daemon) decorateSessionAttention(clone *protocol.Session) {
 	clone.Attention = nil
 	if !protocol.Deref(clone.TurnOwed) || clone.TurnOpenedAt == nil {
+		clone.Attention = d.finishedMark(clone.ID)
 		return
 	}
 	d.attention.mu.Lock()

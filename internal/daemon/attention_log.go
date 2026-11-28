@@ -62,6 +62,7 @@ func (d *Daemon) loadAttentionLog() {
 	surfaced := map[protocol.SessionID]attention.LogEntry{}
 	waits := map[protocol.SessionID]*supervisedWait{}
 	dispatcherNotices := map[protocol.SessionID]attention.LogEntry{}
+	finished := map[protocol.SessionID]*finishedAgent{}
 	type verdictID struct {
 		session protocol.SessionID
 		at      time.Time
@@ -85,15 +86,33 @@ func (d *Daemon) loadAttentionLog() {
 		case attention.LogNotice:
 			switch {
 			case d.store.Get(entry.Session) == nil:
-			case entry.To == entry.Session:
-				waits[entry.Session] = &supervisedWait{since: entry.WaitSince, notice: entry.Checkpoint, noticedAt: entry.At, silent: entry.SilentSince}
-			default:
+			case entry.To != entry.Session:
 				dispatcherNotices[entry.Session] = entry
+			case entry.Verdict == attention.Finished && entry.VerdictAt != nil:
+				finished[entry.Session] = &finishedAgent{verdict: noticedVerdict(entry), noticedAt: entry.At, silent: entry.SilentSince}
+			default:
+				waits[entry.Session] = &supervisedWait{since: entry.WaitSince, notice: entry.Checkpoint, noticedAt: entry.At, silent: entry.SilentSince}
 			}
 		case attention.LogWaitEnded:
 			delete(waits, entry.Session)
 		case attention.LogNoticeDeadline:
 			delete(dispatcherNotices, entry.Session)
+		case attention.LogMarked:
+			if entry.VerdictAt != nil && d.store.Get(entry.Session) != nil {
+				mark := sessionAttention(entry, *entry.VerdictAt)
+				agent := finished[entry.Session]
+				if agent == nil {
+					agent = &finishedAgent{}
+					finished[entry.Session] = agent
+				}
+				agent.silent, agent.mark = entry.SilentSince, &mark
+			}
+		case attention.LogUnmarked:
+			if agent := finished[entry.Session]; agent != nil {
+				agent.mark = nil
+			}
+		case attention.LogFinishedEnded:
+			delete(finished, entry.Session)
 		case attention.LogFollowUp:
 			if entry.VerdictAt != nil {
 				delete(pending, verdictID{entry.Session, entry.VerdictAt.UTC()})
@@ -106,6 +125,7 @@ func (d *Daemon) loadAttentionLog() {
 	d.attention.mu.Lock()
 	d.attention.judged = judged
 	d.attention.waits = waits
+	d.attention.finished = finished
 	d.attention.mu.Unlock()
 	for _, entry := range surfaced {
 		d.attention.surface(entry)
@@ -113,6 +133,11 @@ func (d *Daemon) loadAttentionLog() {
 	}
 	for _, notice := range dispatcherNotices {
 		d.awaitDispatcher(notice)
+	}
+	for session, agent := range finished {
+		if agent.mark != nil {
+			d.broadcastSessionStateChanged(session)
+		}
 	}
 	for verdict := range pending {
 		d.appendAttentionLog(attention.LogEntry{Kind: attention.LogFollowUp, At: d.clock.Now(), Session: verdict.session, VerdictAt: &verdict.at, FollowUp: followUpUnknown})

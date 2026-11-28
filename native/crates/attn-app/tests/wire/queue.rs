@@ -5,7 +5,7 @@ use std::time::Duration;
 use attn_app::{Action, Keymap};
 use attn_protocol::{
     AutomationProvenance, Desktop, DesktopPane, InitialStateMessage, Profile,
-    ProfileArrangementChangedMessage, Session, SessionStateChangedMessage,
+    ProfileArrangementChangedMessage, Session, SessionAttention, SessionStateChangedMessage,
     SessionUnregisteredMessage,
 };
 use attn_testkit::{Daemon, Target, WALL_START_MS, World};
@@ -1172,6 +1172,26 @@ fn the_settle_key_goes_home_from_a_settled_agent_when_no_turn_is_owed() {
         Some("current")
     );
     assert!(world.daemon.sent_of("settle_turn").is_empty());
+}
+
+#[test]
+fn the_settle_key_settles_a_finished_agent_on_screen_though_it_owes_no_turn() {
+    let finished = Session {
+        attention: Some(SessionAttention {
+            verdict: "finished".into(),
+            decider: "headless/claude-haiku".into(),
+            reason: "Nothing is left for anyone".into(),
+            label: Some("finished".into()),
+            at: "2026-11-27T21:00:00Z".into(),
+        }),
+        ..session("f", "idle")
+    };
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![finished]))));
+    world.gesture(|app| app.click(Target::key("queue.desktop.1")));
+
+    world.gesture(|app| app.key(chord(Action::SessionSettle)));
+
+    assert_eq!(sent_ids(&world, "settle_turn"), ["f"]);
 }
 
 #[test]

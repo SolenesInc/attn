@@ -50,6 +50,8 @@ func actorName(a who.Actor) string {
 		return "the user"
 	case who.Attn():
 		return "attn"
+	case who.Supervisor():
+		return "the supervisor"
 	}
 	return a.String()
 }

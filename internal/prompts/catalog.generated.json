@@ -6167,9 +6167,32 @@
           }
         },
         {
+          "id": "finished-check",
+          "delivery": "inbox_content",
+          "description": "A supervisor notice to an agent the supervisor judged finished, before attn marks it finished.",
+          "body": {
+            "kind": "text",
+            "id": "attention.finished-check",
+            "source": "content/attention/finished-check.md",
+            "bindings": [
+              {
+                "name": "reason",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "reason",
+                    "kind": "text",
+                    "description": "The verdict's reason."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "delegate-check",
           "delivery": "inbox_content",
-          "description": "A supervisor notice to a live dispatcher whose delegate the supervisor judged open or finished, before attn opens the delegate's turn.",
+          "description": "A supervisor notice to a live dispatcher whose delegate the supervisor judged open or finished, before attn opens the delegate's turn or marks it finished.",
           "body": {
             "kind": "text",
             "id": "attention.delegate-check",
@@ -6230,6 +6253,32 @@
                       "kind": "text",
                       "id": "attention.delegate-open",
                       "source": "content/attention/delegate-open.md"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "unanswered",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "finished",
+                      "kind": "flag",
+                      "description": "The verdict is finished; otherwise open."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "attention.delegate-unanswered-finished",
+                      "source": "content/attention/delegate-unanswered-finished.md"
+                    },
+                    {
+                      "kind": "text",
+                      "id": "attention.delegate-unanswered-open",
+                      "source": "content/attention/delegate-unanswered-open.md"
                     }
                   ]
                 }
@@ -10123,5 +10172,5 @@
       ]
     }
   ],
-  "definitions_hash": "4633654e40a1b9694eda483954c4df89592aba016e044bd8056c3cb2ab82a97d"
+  "definitions_hash": "f4fbea875ff068e1fbe893dd8625bb28ae023e26926537e86757b253232676cd"
 }

@@ -65,6 +65,7 @@ type attentionCheckpoints struct {
 	waits       map[protocol.SessionID]*supervisedWait
 	// dispatcherAsks holds, per delegate, the deadline of the notice that asked its dispatcher about it.
 	dispatcherAsks map[protocol.SessionID]stepclock.Timer
+	finished       map[protocol.SessionID]*finishedAgent
 }
 
 type elapsedCheckpoint struct {
@@ -123,12 +124,7 @@ func (d *Daemon) attentionWatches(session *protocol.Session) bool {
 
 func stoppedWithNoTurn(view sessionmonitor.View, now time.Time) bool {
 	turn := view.Turn.V
-	switch view.State.V.State {
-	case protocol.SessionStateIdle, protocol.SessionStateWaitingInput:
-	default:
-		return false
-	}
-	return !turn.OpenedAt.After(turn.SettledAt) && !turn.SnoozedUntil.After(now)
+	return restingAt(view.State.V.State) && !turn.OpenedAt.After(turn.SettledAt) && !turn.SnoozedUntil.After(now)
 }
 
 func waitsOnBackground(view sessionmonitor.View) bool {
@@ -159,10 +155,12 @@ func (d *Daemon) observeAttention(session protocol.SessionID, previous, view ses
 	if state.Sequence != before.Sequence {
 		if state.State == protocol.SessionStateWorking && before.State != protocol.SessionStateWorking && !view.NotificationRun.V {
 			d.resolveAttentionFollowUps(session, followUpTyped)
+			d.endFinished(session)
 		}
 		d.armAttentionStop(session, view)
 	}
 	d.observeWait(session, previous, view)
+	d.observeFinished(session, previous, view)
 	d.armAttentionElapsed(session, record.Agent, view)
 }
 
@@ -274,6 +272,7 @@ func (d *Daemon) attentionFactChanged(event bus.Event) {
 
 func (d *Daemon) forgetAttention(session protocol.SessionID) {
 	d.resolveAttentionFollowUps(session, followUpClosed)
+	d.forgetFinished(session)
 	a := &d.attention
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -309,6 +308,7 @@ func (d *Daemon) startAttentionCheckpoints() {
 			}
 			view, _ := d.monitorViewFor(session.ID)
 			d.resumeWait(session.ID, view)
+			d.resumeFinished(session.ID, view)
 			d.armAttentionElapsed(session.ID, session.Agent, view)
 			if !stoppedWithNoTurn(view, now) {
 				continue

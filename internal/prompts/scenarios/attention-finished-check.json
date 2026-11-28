@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "attention-finished-check",
+  "description": "An agent the supervisor judged finished, asked before attn marks it.",
+  "recipient": "attention",
+  "event": "finished-check",
+  "values": {
+    "reason": "the plan is handed off and its children are planted; nothing is left here"
+  }
+}

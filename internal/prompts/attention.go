@@ -14,13 +14,22 @@ func waitCheckEvent() Event {
 					Use("attention.wait-check-ask", "content/attention/wait-check-ask.md"))))))
 }
 
+func finishedCheckEvent() Event {
+	return On("finished-check", "inbox_content", "A supervisor notice to an agent the supervisor judged finished, before attn marks it finished.",
+		Use("attention.finished-check", "content/attention/finished-check.md",
+			Bind("reason", Input(TextField("reason", "The verdict's reason.")))))
+}
+
 func delegateCheckEvent() Event {
-	return On("delegate-check", "inbox_content", "A supervisor notice to a live dispatcher whose delegate the supervisor judged open or finished, before attn opens the delegate's turn.",
+	return On("delegate-check", "inbox_content", "A supervisor notice to a live dispatcher whose delegate the supervisor judged open or finished, before attn opens the delegate's turn or marks it finished.",
 		Use("attention.delegate-check", "content/attention/delegate-check.md",
 			Bind("delegate", Input(TextField("delegate", "The delegate's name."))),
 			Bind("session", Input(TextField("session", "The delegate's short session id."))),
 			Bind("reason", Input(TextField("reason", "The verdict's reason."))),
 			Bind("verdict", Choose(Enabled(FlagField("finished", "The verdict is finished; otherwise open.")),
 				Use("attention.delegate-finished", "content/attention/delegate-finished.md"),
-				Use("attention.delegate-open", "content/attention/delegate-open.md")))))
+				Use("attention.delegate-open", "content/attention/delegate-open.md"))),
+			Bind("unanswered", Choose(Enabled(FlagField("finished", "The verdict is finished; otherwise open.")),
+				Use("attention.delegate-unanswered-finished", "content/attention/delegate-unanswered-finished.md"),
+				Use("attention.delegate-unanswered-open", "content/attention/delegate-unanswered-open.md")))))
 }

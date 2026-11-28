@@ -20,7 +20,7 @@ const (
 	Actor
 )
 
-var namedActors = map[string]bool{"user": true, "attn": true}
+var namedActors = map[string]bool{"user": true, "attn": true, "supervisor": true}
 
 type Fields map[string]Field
 

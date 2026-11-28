@@ -284,6 +284,7 @@ type delegateWorld struct {
 	app      *testworld.Peer
 	cli      *client.Client
 	delegate string
+	stake    string
 	agent    *fakeagent.Run
 }
 
@@ -335,7 +336,7 @@ func delegateStopsQuietly(t *testing.T, supervisor bool, role string, answer str
 		t.Fatalf("the delegate's quiet stop opened a turn: %+v", quiet)
 	}
 	w.awaitTimer(daemon.AttentionStopTimer)
-	return &delegateWorld{t: t, w: w, app: app, cli: cli, delegate: delegate, agent: agent}
+	return &delegateWorld{t: t, w: w, app: app, cli: cli, delegate: delegate, stake: delegated.SeedID, agent: agent}
 }
 
 func (d *delegateWorld) judged() {
@@ -347,30 +348,22 @@ func (d *delegateWorld) turnOwed() bool {
 }
 
 func TestTheSupervisorAsksALiveDispatcherBeforeItOpensItsDelegatesTurn(t *testing.T) {
-	for _, tc := range []struct {
-		verdict, answer, says string
-	}{
-		{"open", openDelegateAnswer, "needs the user now. Its reason: the migration landed and only this session reports it"},
-		{"finished", `{"verdict":"FINISHED","label":"finished","reason":"the stake is harvested and the dispatcher has the update"}`, "is finished, with nothing left for it to do. Its reason: the stake is harvested"},
-	} {
-		t.Run(tc.verdict, func(t *testing.T) {
-			d := delegateStopsQuietly(t, true, "", tc.answer)
-			d.judged()
-			notices := supervisorNotices(t, d.cli, "caller")
-			name := queriedSession(t, d.cli, d.delegate).Label
-			if len(notices) != 1 || !strings.Contains(notices[0], "your delegate "+name+" (") || !strings.Contains(notices[0], tc.says) {
-				t.Fatalf("the dispatcher got the notices %q, want one naming %q and saying it %s", notices, name, tc.says)
-			}
-			if d.turnOwed() {
-				t.Fatalf("the %s verdict opened the delegate's turn before its dispatcher answered", tc.verdict)
-			}
-			d.w.awaitTimer(daemon.AttentionNoticeTimer)
-			d.w.advance(noticeAnswerTime)
-			owed := testworld.AwaitSession(d.app, d.delegate, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) && s.Attention != nil })
-			if owed.Attention.Decider != "rule:dispatcher_silent" || !strings.Contains(owed.Attention.Reason, "its dispatcher made no model request") {
-				t.Errorf("5 minutes after the dispatcher's notice the delegate carries %+v, want its turn open by rule:dispatcher_silent", owed.Attention)
-			}
-		})
+	d := delegateStopsQuietly(t, true, "", openDelegateAnswer)
+	d.judged()
+	notices := supervisorNotices(t, d.cli, "caller")
+	name := queriedSession(t, d.cli, d.delegate).Label
+	says := "needs the user now. Its reason: the migration landed and only this session reports it"
+	if len(notices) != 1 || !strings.Contains(notices[0], "your delegate "+name+" (") || !strings.Contains(notices[0], says) {
+		t.Fatalf("the dispatcher got the notices %q, want one naming %q and saying it %s", notices, name, says)
+	}
+	if d.turnOwed() {
+		t.Fatalf("the open verdict opened the delegate's turn before its dispatcher answered")
+	}
+	d.w.awaitTimer(daemon.AttentionNoticeTimer)
+	d.w.advance(noticeAnswerTime)
+	owed := testworld.AwaitSession(d.app, d.delegate, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) && s.Attention != nil })
+	if owed.Attention.Decider != "rule:dispatcher_silent" || !strings.Contains(owed.Attention.Reason, "its dispatcher made no model request") {
+		t.Errorf("5 minutes after the dispatcher's notice the delegate carries %+v, want its turn open by rule:dispatcher_silent", owed.Attention)
 	}
 }
 
@@ -489,6 +482,7 @@ type bubbleDelegation struct {
 	cli        *client.Client
 	dispatcher *bubbleClaude
 	delegate   *bubbleClaude
+	stake      string
 }
 
 func delegateStopsQuietlyInBubble(t *testing.T, w *world) *bubbleDelegation {
@@ -524,7 +518,8 @@ func delegateStopsQuietlyInBubble(t *testing.T, w *world) *bubbleDelegation {
 	w.advance(0)
 	delegate := w.bootBubbleClaude(t, string(accepted.SessionID))
 	delegate.reply("Migrated the first table. <!-- attn:state=idle -->")
-	if _, err := cli.Delegate(request); err != nil {
+	delegated, err := cli.Delegate(request)
+	if err != nil {
 		t.Fatal(err)
 	}
 	dispatcher.reply("Delegated the migration. <!-- attn:state=idle -->")
@@ -546,7 +541,7 @@ func delegateStopsQuietlyInBubble(t *testing.T, w *world) *bubbleDelegation {
 		t.Fatalf("the delegate's quiet stop opened a turn: %+v", quiet)
 	}
 	dispatcher.term.OnSubmit(func(string) {})
-	return &bubbleDelegation{t: t, w: w, app: app, cli: cli, dispatcher: dispatcher, delegate: delegate}
+	return &bubbleDelegation{t: t, w: w, app: app, cli: cli, dispatcher: dispatcher, delegate: delegate, stake: delegated.SeedID}
 }
 
 func (d *bubbleDelegation) noticesTheDispatcher() {

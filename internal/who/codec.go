@@ -16,6 +16,8 @@ func parse(text string) (ref, error) {
 		return ref{kind: user}, nil
 	case "attn":
 		return ref{kind: attn}, nil
+	case "supervisor":
+		return ref{kind: supervisor}, nil
 	}
 	prefix, id, ok := strings.Cut(text, ":")
 	if !ok || id == "" || strings.ContainsFunc(id, unicode.IsSpace) {
@@ -60,7 +62,7 @@ func ParseActor(text string) (Actor, error) {
 
 func ParseAddress(text string) (Address, error) {
 	r, err := parse(text)
-	if err == nil && (r.kind == user || r.kind == attn) {
+	if err == nil && !r.addressable() {
 		err = fmt.Errorf("%q is not an address", text)
 	}
 	if err != nil {
@@ -81,8 +83,14 @@ func (r ref) String() string {
 		return "user"
 	case attn:
 		return "attn"
+	case supervisor:
+		return "supervisor"
 	}
 	return ""
+}
+
+func (r ref) addressable() bool {
+	return r.kind == session || r.kind == member || r.kind == tenderOf
 }
 
 func (p Party) String() string   { return p.party.String() }
@@ -90,7 +98,7 @@ func (a Actor) String() string   { return a.actor.String() }
 func (a Address) String() string { return a.address.String() }
 
 func encode(r ref) ([]byte, error) {
-	if r.kind == 0 || (r.kind != user && r.kind != attn && r.id == "") {
+	if r.kind == 0 || (r.addressable() && r.id == "") {
 		return nil, ErrNobody
 	}
 	text := r.String()

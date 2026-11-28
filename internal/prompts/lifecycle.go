@@ -21,6 +21,7 @@ func lifecycleRecipients() []Recipient {
 				template("attention.supervisor", "content/attention/supervisor.md",
 					TextField("facts", "The agent's facts as JSON."))),
 				waitCheckEvent(),
+				finishedCheckEvent(),
 				delegateCheckEvent()}},
 
 		{ID: "terminal",

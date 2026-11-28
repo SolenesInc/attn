@@ -89,7 +89,8 @@ func (f Facts) Fingerprint() string {
 	return hex.EncodeToString(sum[:12])
 }
 
-// 99% of 4,357 assistant messages across the 300 newest real transcripts fit in 3,575 characters.
+// 99% of 4,357 assistant messages across the 300 newest real transcripts fit in 3,575 characters, and 99% of
+// the 710 answers to attn inbox rings in them fit in 3,044 (scripts on s-vn2wp7).
 const LastMessageMaxChars = 4000
 
 type Age time.Duration
