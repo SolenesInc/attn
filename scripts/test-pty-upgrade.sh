@@ -56,6 +56,12 @@ if [ -z "${ATTN_UPGRADE_ADDRESS_RELEASE_BIN:-}" ]; then
   export ATTN_UPGRADE_ADDRESS_RELEASE_BIN="$test_root/address-release/attn"
   export ATTN_UPGRADE_ADDRESS_RELEASE_HOST="$test_root/address-release/attn-pty-host"
 fi
+if [ -z "${ATTN_UPGRADE_WORKER_RELEASE_BIN:-}" ]; then
+  last_release_with_dedicated_workers=v0.15.0
+  download_release "https://github.com/victorarias/attn/releases/download/$last_release_with_dedicated_workers" "$test_root/worker-release"
+  export ATTN_UPGRADE_WORKER_RELEASE_BIN="$test_root/worker-release/attn"
+  export ATTN_UPGRADE_WORKER_RELEASE_HOST="$test_root/worker-release/attn-pty-host"
+fi
 echo "Previous release under test: $("$ATTN_UPGRADE_RELEASE_BIN" --version)"
 if [ -z "${ATTN_E2E_BIN:-}" ]; then
   mkdir -p "$test_root/current"

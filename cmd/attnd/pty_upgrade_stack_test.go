@@ -206,7 +206,6 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 			t.Parallel()
 			u := startTheRelease(t)
 			app := u.ReleaseApp()
-			turnOnTheSharedHost(t, app)
 			claude, codex := u.spawnAgent(app, fakeagent.Claude), u.spawnAgent(app, fakeagent.Codex)
 			shell := u.spawnShell(app)
 			parents := map[string]string{}
@@ -265,7 +264,6 @@ func TestAnUpdateFromTheReleaseKeepsHostTerminalsAndReloadsThemWithDirectLaunch(
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
-	turnOnTheSharedHost(t, app)
 	onHost := u.spawnAgent(app, fakeagent.Claude)
 	sharedHostOf(t, u.Dir, app.Terminal(onHost.session))
 	shellOnHost := u.spawnShell(app)
@@ -298,7 +296,7 @@ func TestAnUpdateFromTheReleaseKeepsHostTerminalsAndReloadsThemWithDirectLaunch(
 
 func TestAnUpdateFromTheReleaseStopsShowingAWorkerTerminalAndLeavesItsWorkerRunning(t *testing.T) {
 	t.Parallel()
-	u := startTheRelease(t)
+	u := startTheReleaseWithWorkers(t)
 	app := u.ReleaseApp()
 	setSetting(t, app, upgradeSharedHostEnabled, "false")
 	onWorker := u.spawnShell(app)
@@ -337,7 +335,6 @@ func TestAnUpdateFromTheReleaseWhoseNewHostFailsItsCheckShowsTheNoticeAndRefuses
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
-	turnOnTheSharedHost(t, app)
 	shell := u.spawnShell(app)
 	sharedHostOf(t, u.Dir, app.Terminal(shell.session))
 
@@ -421,7 +418,7 @@ func TestATerminalOpenedBeforeTheFirstHostCheckFinishesStartsOnTheHost(t *testin
 
 func TestAnUpdateFromTheReleaseDropsStoredOffSettingsAndMovesAgentsOntoTheHostWithoutANag(t *testing.T) {
 	t.Parallel()
-	u := startTheRelease(t)
+	u := startTheReleaseWithWorkers(t)
 	app := u.ReleaseApp()
 	turnOnTheSharedHost(t, app)
 	live := u.spawnAgent(app, fakeagent.Claude)
@@ -460,7 +457,6 @@ func TestAfterAnUpdateARebootBringsSessionsBackOnTheHostWithDirectLaunchAndTheir
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
-	turnOnTheSharedHost(t, app)
 	fromRelease := u.spawnAgent(app, fakeagent.Claude)
 	u.turn(app, fromRelease, "before-update")
 	u.InstallBuild(u.currentAttn, u.currentHost)
@@ -762,7 +758,6 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 	remote.Vars = append(remote.Vars, "ATTN_WRAPPER_PATH="+ssh.InstallPath(remote))
 	remote.StartRelease()
 	remoteApp := remote.ReleaseApp()
-	turnOnTheSharedHost(t, remoteApp)
 	liveShell := remote.Spawn(remoteApp, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"))
 	pidPath := filepath.Join(remote.Dir, "shell.pid")
 	remoteApp.TypeLine(liveShell, "echo $$ > "+pidPath+"; echo before-$((1+1))")
@@ -910,6 +905,12 @@ type releaseShell struct {
 func startTheRelease(t *testing.T) *releaseUpdate {
 	t.Helper()
 	return startRelease(t, os.Getenv("ATTN_UPGRADE_RELEASE_BIN"), os.Getenv("ATTN_UPGRADE_RELEASE_HOST"))
+}
+
+// startTheReleaseWithWorkers starts the last release that could put a terminal in a dedicated worker and store the retired PTY settings.
+func startTheReleaseWithWorkers(t *testing.T) *releaseUpdate {
+	t.Helper()
+	return startRelease(t, os.Getenv("ATTN_UPGRADE_WORKER_RELEASE_BIN"), os.Getenv("ATTN_UPGRADE_WORKER_RELEASE_HOST"))
 }
 
 func startRelease(t *testing.T, releaseAttn, releaseHost string) *releaseUpdate {
