@@ -15,6 +15,9 @@ profile                 a separate world for the user's work; like a tenant
 ```text
 desktop                 one arrangement of tiles; like a macOS Space or a
                         virtual desktop
+├─ Home desktop (at most 1 per profile)  the desktop of attn's own views:
+│                       attn, Sessions and Pull requests; like a phone's home
+│                       screen. It shows only while views are on
 ├─ tile (0..n)          one rectangle on a desktop; like a tile in a tiling
 │  │                    window manager
 │  ├─ terminal tile     shows 1 terminal
@@ -351,7 +354,8 @@ setting                 a daemon option, read and set with attn settings
 
 ```text
 window (1..n)           one macOS app window
-├─ home screen          the dashboard: what asks for attention, across agents
+├─ home screen          the dashboard: what asks for attention, across agents;
+│                       the Home desktop takes its place while views are on
 ├─ sidebar (1)          its shape follows the profile's flow
 │  ├─ attention queue sidebar  attention queue flow: crew, the oldest
 │  │                    turns, the rest of the agents, automations, desktop chips
